@@ -28,7 +28,7 @@ extern SMS sms;
 
 void sms_init(const uint8_t *rom, int size);
 void sms_run_frame(void);     // one 60 Hz frame
-int sms_load_state(const char *path);   // tools/emu/tobin.js format
+int sms_load_state(const char *path);   // a machine snapshot (--state, for tests)
 void sms_pause(void);         // the console's Pause button (NMI)
 // mix `n` mono samples at `rate` Hz of the sound generated during the last frame
 int sms_audio(int16_t *out, int max);

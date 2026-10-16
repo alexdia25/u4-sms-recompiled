@@ -77,12 +77,6 @@ def rom_palette(rom):
     return [((c & 3) * 85, ((c >> 2) & 3) * 85, ((c >> 4) & 3) * 85) for c in rom[0x7C83:0x7CA3]]
 
 
-def load_palette(state_json):
-    """CRAM from an emulator save state -> 32 RGB tuples."""
-    cram = json.load(open(state_json))['vdp']['cram']
-    return [((c & 3) * 85, ((c >> 2) & 3) * 85, ((c >> 4) & 3) * 85) for c in cram]
-
-
 def map_graphic(rom, g):
     """Map/sprite graphic g (0-255) from banks 6-7: 16x12 pixels, stored as two
     8-pixel columns of 12 rows; each row is a transparency mask byte followed by

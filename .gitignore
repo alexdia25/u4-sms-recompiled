@@ -1,15 +1,17 @@
 # the original ROM stays out of version control
 rom/
 build/
-ghidra/
 explore/
 coverage/*.tmp
-rea/
 __pycache__/
 pc/out/
 # generated from the player's ROM by tools/setup.py (game content: never commit)
 data/
-decomp/
 pc/gen/
 pc/release/
 ram_c.bin
+# local working folders (not part of the project)
+ghidra/
+decomp/
+rea/
+tools/ghidra/

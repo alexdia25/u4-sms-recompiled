@@ -82,7 +82,7 @@ static int headless(int frames, const char *shot, const char *keys) {
 	int random_from = getenv("U4_RANDOM_FROM") ? atoi(getenv("U4_RANDOM_FROM")) : 0;   // after a script
 	FILE *wav = getenv("U4_WAV") ? fopen(getenv("U4_WAV"), "wb") : NULL;
 	for (int f = 0; f < frames; f++) {
-		if (random_seed && f >= random_from) {   // U4_RANDOM=seed: random play like tools/emu/explore.js
+		if (random_seed && f >= random_from) {   // U4_RANDOM=seed: random play
 			static int hold;
 			if (hold-- <= 0) {
 				random_seed = random_seed * 1103515245u + 12345u;

@@ -341,7 +341,7 @@ int snap_compare(const Snap *a, const Snap *b, uint16_t stack_lo, uint16_t stack
 	return diffs;
 }
 
-// Load a save state written by tools/emu/tobin.js (for tests). 0 on success.
+// Load a machine snapshot (--state, for tests). 0 on success.
 int sms_load_state(const char *path) {
 	FILE *f = fopen(path, "rb");
 	if (!f) return -1;

@@ -155,8 +155,8 @@ pc/out/u4_headless.exe build/u4.pak --headless 8632 --keys script.keys
 
 Here `script.keys` holds lines of the form `<frame> <buttons>`, with buttons
 from `UDLR12` or `-` for none. A line `<frame> =C9AB:FF` writes RAM instead.
-`U4_RANDOM=seed` plays random input, and `--state file.bin` starts from a save
-state. `tools/cycles.py` lists original code with its cycle counts.
+`U4_RANDOM=seed` plays random input. `tools/cycles.py` lists original code
+with its cycle counts.
 
 ## Other tools
 
@@ -164,8 +164,9 @@ state. `tools/cycles.py` lists original code with its cycle counts.
 | --- | --- |
 | `python tools/disasm.py build/original.sms src coverage/cov.bin` | regenerates `src/` after editing `tools/hints.txt` (names flow into the source and the generated C) |
 | `python tools/disasm.py build/original.sms out coverage/cov.bin --inline-data` | writes a copy with the data inline, for reading only; never commit it |
-| `node tools/emu/run.js build/original.sms script.txt --cov coverage/cov.bin` | runs a headless JavaScript SMS emulator that plays scripted input and records which bytes run as code (`coverage/cov.bin` drives the disassembler and the generator) |
-| `./ghidra.sh` | builds a Ghidra project and pseudo-C in `decomp/` (needs Ghidra; optional) |
+
+`coverage/cov.bin` records which ROM bytes run as code and which are read as
+data; the disassembler and the C generator are driven by it.
 
 ## Legal
 
