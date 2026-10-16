@@ -127,7 +127,7 @@ alone runs the game.
   - talking to people;
   - every kind of shop;
   - map loading and walking;
-  - the player's turn, moving, and the commands Talk, Get Chest, Ready, Search and Camp;
+  - the player's turn, moving, and the commands Talk, Get Chest, Use, Ready, Search and Camp;
   - combat and karma rules;
   - the task system.
 

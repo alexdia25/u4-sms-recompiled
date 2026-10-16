@@ -232,6 +232,35 @@ def main():
             s.press('2', 60)
             random_presses(s, rnd, 8, menu=False)
         s.write(name)
+    USES = {                           # Use: the item (Downs in its menu) and what the party has
+        'use_torch':   (0, ['C913:03']),
+        'use_gem':     (1, ['C914:02']),
+        'use_key':     (2, ['C915:02', 'D3C4:3A']),   # a locked door east of the party
+        'use_key_none': (2, ['C915:02']),
+        'use_sextant': (3, ['C916:01']),
+        'use_none':    (1, ['C914:00']),
+        'use_stone':   (None, []),
+    }
+    for name, (item, pokes) in USES.items():
+        rnd = random.Random(name)
+        s = Script()
+        for p in pokes:
+            s.poke(p)
+        s.f += 10
+        s.press('2', 40)               # the command menu, Use
+        for _ in range(4):
+            s.press('D', 30)
+        s.press('2', 60)
+        if item is None:
+            s.press('D', 30)           # Stone
+            s.press('2', 60)
+        else:
+            s.press('2', 60)           # Item
+            for _ in range(item):
+                s.press('D', 30)
+            s.press('2', 60)
+        random_presses(s, rnd, 12)
+        s.write(name)
     for seed in range(2):              # anything at all
         rnd = random.Random('play%d' % seed)
         s = Script()

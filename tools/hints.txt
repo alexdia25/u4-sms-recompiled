@@ -347,5 +347,7 @@ native   02:890D native_get_chest
 native   02:8B28 native_ready
 name     02:8B61 search_command
 native   02:8B61 native_search
+name     02:8942 use_command
+native   02:8942 native_use_command
 name     02:9254 camp_menu
 native   02:9254 native_camp_menu

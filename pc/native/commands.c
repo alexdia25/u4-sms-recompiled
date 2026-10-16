@@ -323,3 +323,197 @@ static void search(void) {
 	done();
 }
 Native native_search = { "search", 0x8B61, 2, search, 0, 0, 0, .task = 1 };
+
+// ----------------------------------------------------------------- use --
+// use_command ($8942): Item or Stone. Stones are their own routine ($651E);
+// items are picked from a menu (the sextant only once owned, $C916) and
+// each needs one in the pack ($C913 + item).
+static void use_torch(void);
+static void use_gem(void);
+static void use_key(void);
+static void use_sextant(void);
+
+static void use_command(void) {
+	cpu.cycles += 10;
+	SET_HL(0x95FA);
+	call(0x2E7F);                      // the menu
+	cpu.cycles += 7 + 17;
+	text_char('-');
+	cpu.cycles += 19;
+	mem_write(SLOT + 0x1A, 0);
+	for (;;) {
+		task_frame_tick(0x8951);
+		cpu.cycles += 7 + 10;
+		cpu.c = 2;
+		SET_DE(0x0102);
+		call(0x49F9);
+		cpu.cycles += 7;
+		if (!(cpu.f & FZ)) break;
+		cpu.cycles += 5;
+	}
+	cpu.cycles += 10;
+	if (cpu.f & FC) { native_continue_at(0x8081); return; }
+	cpu.cycles += 10 + 17 + 19 + 91 + 10;   // ld hl,$95F6 / call $806B: its name
+	uint16_t name = rd16(0x95F6 + 2 * mem_read(SLOT + 0x1A));
+	SET_HL(name);
+	text_print(name);
+	newline();
+	cpu.cycles += 20 + 10;
+	if (mem_read(SLOT + 0x1A) & 1) {   // a stone
+		cpu.cycles += 10 + 17;         // $8B22 (it waits for frames: original code)
+		push16(0x8B25);
+		native_continue_at(0x651E);
+		return;
+	}
+	cpu.cycles += 7;
+	cpu.a = 0x0A;
+	call(0x7552);
+	say_inline(0x897C);                // "which: "
+	cpu.cycles += 19;
+	mem_write(SLOT + 0x1A, 0);
+	for (;;) {
+		task_frame_tick(0x8988);
+		cpu.cycles += 7 + 13 + 4 + 7;
+		cpu.c = 3;
+		cpu.a = mem_read(0xC916);      // the sextant, once found
+		op_or(cpu.a);
+		if (cpu.a) { cpu.cycles += 4; cpu.c = 4; }
+		else cpu.cycles += 5;
+		cpu.cycles += 10;
+		SET_DE(0x0202);
+		call(0x49F9);
+		cpu.cycles += 7;
+		if (!(cpu.f & FZ)) break;
+		cpu.cycles += 5;
+	}
+	cpu.cycles += 10;
+	if (cpu.f & FC) { native_continue_at(0x8081); return; }
+	call(0x4324);
+	cpu.cycles += 19 + 11;
+	uint8_t item = mem_read(SLOT + 0x1A);
+	cpu.a = item;
+	push16((uint16_t)(cpu.a << 8 | cpu.f));
+	cpu.cycles += 10 + 91 + 17;        // ld hl,$8AF8 / rst $20 / call print_text_hl
+	name = rd16(0x8AF8 + 2 * item);
+	SET_HL(name);
+	text_print(name);
+	newline();
+	uint16_t af = pop16();
+	cpu.a = af >> 8; cpu.f = (uint8_t)af;
+	cpu.cycles += 10 + 10 + 30 + 7 + 4 + 7;   // ld hl,$C913 / rst $30 / ld a,(hl) / or a / jr nz
+	SET_HL(0xC913 + item);
+	cpu.a = mem_read(HL);
+	op_or(cpu.a);
+	if (!cpu.a) {
+		call(0x40D1);
+		say_inline(0x89BF);            // "...you don't have it."
+		done();
+		return;
+	}
+	cpu.cycles += 5 + 19 + 10 + 10 + 52;   // ld a,(ix+$1A) / ld hl,$89DF / jp $0018
+	cpu.a = item;
+	switch (item) {
+	case 0: use_torch(); break;
+	case 1: use_gem(); break;
+	case 2: use_key(); break;
+	default: use_sextant(); break;
+	}
+}
+Native native_use_command = { "use_command", 0x8942, 2, use_command, 0, 0, 0, .task = 1 };
+
+// is the map mode `mode`? (ld a,(map_mode) / cp mode / jp nz/nc,$8072)
+static uint8_t map_mode(void) {
+	cpu.cycles += 13 + 7 + 10;
+	cpu.a = mem_read(MAP_KIND);
+	return cpu.a;
+}
+
+// $89E7: a torch lights a dungeon for a while
+static void use_torch(void) {
+	if (map_mode() != 2) { native_continue_at(0x8072); return; }
+	cpu.cycles += 10 + 11 + 13 + 7 + 7;
+	mem_write(0xC913, mem_read(0xC913) - 1);
+	unsigned light = mem_read(0xC95B) + 0xC8;
+	if (light > 0xFF) { cpu.cycles += 7; light = 0xFF; }
+	else cpu.cycles += 5;
+	cpu.cycles += 13;
+	cpu.a = (uint8_t)light;
+	mem_write(0xC95B, cpu.a);
+	say_inline(0x8A02);                // "Ignite Torch!"
+	done();
+}
+
+// $8A14: a gem shows the map
+static void use_gem(void) {
+	cpu.cycles += 10 + 11;
+	mem_write(0xC914, mem_read(0xC914) - 1);
+	say_inline(0x8A1B);                // "Peer at a Gem!"
+	cpu.cycles += 17;                  // the map (it waits for frames: original code)
+	push16(0x8A2E);
+	native_continue_at(0x61FC);
+}
+
+// $8A72: a locked door ($3A) at (L, H) on the town map opens ($3B)
+static void unlock(void) {
+	cpu.cycles += 17 + 4 + 7 + 5;
+	if (cpu.l >= 0x20) { cpu.cycles += 6; return; }
+	cpu.cycles += 4 + 7 + 5;
+	if (cpu.h >= 0x20) { cpu.cycles += 6; return; }
+	call(0xB5A4);                      // the map cell
+	cpu.cycles += 7 + 7 + 5;
+	cpu.a = mem_read(HL);
+	op_sub8(0x3A, 0, 0);
+	if (cpu.a != 0x3A) { cpu.cycles += 6; return; }
+	cpu.cycles += 10 + 4 + 10 + 4 + 10;
+	mem_write(HL, 0x3B);
+	cpu.l++;
+	mem_write(HL, 0x00);
+	cpu.c++;
+}
+
+// $8A31: a key opens the locked doors next to the party (towns only)
+static void use_key(void) {
+	if (map_mode() != 1) { native_continue_at(0x8072); return; }
+	cpu.cycles += 7;
+	cpu.c = 1;
+	static const int8_t dx[4] = { 1, -1, 0, 0 }, dy[4] = { 0, 0, 1, -1 };
+	for (int i = 0; i < 4; i++) {
+		cpu.cycles += 16 + 4;
+		SET_HL(rd16(PARTY_XY));
+		cpu.l = (uint8_t)(cpu.l + dx[i]);
+		cpu.h = (uint8_t)(cpu.h + dy[i]);
+		unlock();
+	}
+	cpu.cycles += 4 + 10;
+	if (--cpu.c == 0) { native_continue_at(0x8072); return; }   // no door
+	cpu.cycles += 10 + 11;
+	mem_write(0xC915, mem_read(0xC915) - 1);
+	say_inline(0x8A62);                // "Jimmy lock!"
+	done();
+}
+
+// $8ADB: a coordinate as two letters, A' B"
+static void say_coordinate(uint8_t a) {
+	cpu.cycles += 17 + 11 + 16;
+	cpu.cycles += 17 + 7 + 7 + 10;
+	text_char((uint8_t)('A' + (a >> 4)));
+	cpu.cycles += 7 + 17;
+	text_char('\'');
+	cpu.cycles += 10 + 17 + 7 + 7 + 10;
+	text_char((uint8_t)('A' + (a & 0x0F)));
+	cpu.cycles += 7 + 10;
+	text_char('"');
+}
+
+// $8A88: the sextant tells where the party is (not in dungeons)
+static void use_sextant(void) {
+	if (map_mode() >= 2) { native_continue_at(0x8072); return; }
+	say_inline(0x8A93);                // "Location is ... Latitude: "
+	cpu.cycles += 13;
+	say_coordinate(mem_read(PARTY_XY + 1));
+	say_inline(0x8AC3);                // "Longitude: "
+	cpu.cycles += 13;
+	say_coordinate(mem_read(PARTY_XY));
+	newline();
+	done();
+}
