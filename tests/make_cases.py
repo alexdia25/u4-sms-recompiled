@@ -209,6 +209,29 @@ def main():
             for _ in range(3):
                 s.press('1', 60)
         s.write(name)
+    SEARCHES = {                       # Search where something is to be found (the table at $8C07)
+        'search_town_1':  (False, ['C953:08', 'C985:08', 'C954:06', 'C986:06']),   # Moonglow is 6
+        'search_town_2':  (False, ['C9A0:03', 'C953:06', 'C985:06', 'C954:06', 'C986:06']),
+        'search_world_1': (True, ['C953:B6', 'C954:36', 'C95D:00', 'C95F:00']),
+        'search_world_2': (True, ['C953:E0', 'C954:85']),
+        'search_world_3': (True, ['C953:2D', 'C954:AD']),
+    }
+    for name, (world, pokes) in SEARCHES.items():
+        rnd = random.Random(name)
+        s = Script()
+        if world:
+            for k in 'LLLLLL':
+                s.press(k, 30)         # out through the west gate
+        for p in pokes:
+            s.poke(p)
+        s.f += 10
+        for _ in range(2):
+            s.press('2', 40)           # the command menu, Search
+            for _ in range(6):
+                s.press('D', 30)
+            s.press('2', 60)
+            random_presses(s, rnd, 8, menu=False)
+        s.write(name)
     for seed in range(2):              # anything at all
         rnd = random.Random('play%d' % seed)
         s = Script()

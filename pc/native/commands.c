@@ -276,3 +276,50 @@ lead:                                  // $9349: the Avatar must lead
 	say_inline(0x9352);                // ", you must lead!"
 	done();
 }
+
+// -------------------------------------------------------------- search --
+// search ($8B61): look up the party's place (map, x, y) in the table of
+// things to find ($8C07; in dungeons $8C76; 5 bytes each, ending with $FF)
+// and go to its routine (original code); nothing there: "Nothing here!"
+static void search(void) {
+	call(0x4324);
+	call(0x54CE);
+	call(0x957C);
+	cpu.cycles += 14 + 7;
+	uint16_t iy = 0x8C76;
+	if (!(cpu.f & FZ)) { cpu.cycles += 14; iy = 0x8C07; }
+	else cpu.cycles += 5;
+	cpu.cycles += 10 + 16 + 20;
+	SET_DE(0x0005);
+	SET_HL(rd16(PARTY_XY));
+	SET_BC(rd16(0xC9A0));
+	for (;; iy += 5) {
+		cpu.iy = iy;
+		cpu.cycles += 19 + 7 + 7;
+		cpu.a = mem_read(iy);
+		op_sub8(0xFF, 0, 0);
+		if (cpu.a == 0xFF) break;
+		const uint8_t want[3] = { cpu.c, cpu.l, cpu.h };
+		int k;
+		for (k = 0; k < 3; k++) {
+			if (k) { cpu.cycles += 19; cpu.a = mem_read(iy + k); }
+			cpu.cycles += 4 + 7;
+			op_sub8(want[k], 0, 0);
+			if (cpu.a != want[k]) break;
+		}
+		if (k == 3) {
+			cpu.cycles += 19 + 19 + 4;
+			SET_HL(rd16(iy + 3));
+			native_continue_at(HL);
+			return;
+		}
+		cpu.cycles += 5 + 15 + 12;
+	}
+	cpu.cycles += 5;
+	call(0x40D1);
+	cpu.cycles += 10;
+	SET_HL(0x8E61);                    // "Nothing here!"
+	call(0x5519);
+	done();
+}
+Native native_search = { "search", 0x8B61, 2, search, 0, 0, 0, .task = 1 };
