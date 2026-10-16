@@ -1,0 +1,24 @@
+// Rewritten routines that other rewritten code calls directly (pc/native).
+// Each takes the original's cycles, including its ret, and leaves registers
+// as the original does; a caller adds the cycles of its own call or jp.
+#ifndef U4_GAME_H
+#define U4_GAME_H
+
+#include <stdint.h>
+
+// text.c: the text window. These can wait for frames (scrolling, the
+// "press a button" stop), so only blocking natives and C tasks may call them.
+uint16_t text_print(uint16_t text);   // print_text_hl ($5519): returns HL after the text
+void text_newline(void);              // print_newline ($54CE)
+void text_char(uint8_t ch);           // print_char ($548F)
+
+// math.c: what multiply_8x8 ($2AA1) takes for H * L, with its ret
+int multiply_cycles(uint8_t h, uint8_t l);
+
+// tasks.c: for C tasks (Native.task).
+void frame_tick_work(void);           // what frame_tick ($2FFB) does before it yields
+void task_frame_tick(uint16_t site);  // "call frame_tick" at site: ends the turn
+void task_wait_button(uint16_t site); // "call wait_button" at site: waits for button 1 or 2
+void task_wait_frames(uint16_t site, uint8_t n);   // "ld a,n / call $3046" at site: n turns
+
+#endif

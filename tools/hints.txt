@@ -1,0 +1,331 @@
+# Hand-written knowledge that steers tools/disasm.py.
+#   code <bank>:<addr>                 a code entry point
+#   jumpvec <bank>:<addr> <n>          n consecutive "jp nn" vectors
+#   wordtable <bank>:<addr> <n> [ctx]  n code pointers (ctx = slot-2 bank they assume)
+#   fartable <bank>:<addr> <n>         n entries of (bank byte, code pointer)
+#   name <bank>:<addr> <label>         give a label a real name
+# Addresses are CPU addresses as mapped (bank 0 $0000, bank 1 $4000, others $8000).
+
+# --- main loop -------------------------------------------------------------
+code     00:0CC4                       # warm restart: di / im 1 / reset stack
+name     00:0CC4 warm_restart
+name     00:0CD2 main_loop
+fartable 00:0D55 26                    # game-mode handlers, indexed by ($C600)
+name     00:0D55 game_mode_table
+
+# --- bank entry vectors ------------------------------------------------------
+jumpvec  03:8000 22
+name     03:8000 bank03_vectors
+jumpvec  1F:8000 8
+name     1F:8000 sound_vectors
+name     00:05C7 sound_call_8009
+
+# --- dispatch helpers ----------------------------------------------------------
+switchfn 00:334A                       # ld hl,table / call: (key, handler)... $FF, matches A
+name     00:334A switch_on_a
+
+# --- text ------------------------------------------------------------------------
+inlinestr 01:5510                      # call print_inline / zero-terminated text ($01 = newline)
+name     01:5510 print_inline
+name     01:5519 print_text_hl
+
+# --- system / interrupt -----------------------------------------------------------
+name     00:02C0 irq_handler                # vblank/line interrupt (via $0038)
+name     00:0042 reset
+name     00:0646 read_pad1
+name     00:064C read_pads_both
+name     00:065B update_joypad
+name     00:0621 play_music                 # A = tune; ignored if already playing
+ram      C006 port_dd_prev                  # last read of port $DD (reset button edge)
+ram      C00A vblank_count                  # incremented every interrupt
+ram      C00B frames_this_loop              # copy of vblank_count taken by main_loop
+ram      C00D irq_callback                  # routine the interrupt handler jumps to
+ram      C0AE pad_mode                      # nonzero: combine both pads
+ram      C0AF joy_held                      # buttons down now (1 = pressed, bits UDLR12)
+ram      C0B0 joy_pressed                   # buttons that went down this frame
+ram      C0B1 joy_dir                       # direction code from the D-pad (table $06BD)
+ram      C0B8 music_playing                 # current tune for play_music
+ram      C0C8 main_loop_count               # 16-bit, +1 per main loop pass
+ram      C600 game_mode                     # index into game_mode_table
+ram      DFFF slot2_bank                    # shadow of the $FFFF mapper register
+
+# --- party and world (evidence: RAM diffs while walking / trading) ------------------
+ram      C901 move_count                    # +1 per step (32-bit?)
+ram      C906 food_fraction                 # counts down per step
+ram      C907 food                          # 16-bit, shown as F:
+ram      C909 gold                          # 16-bit, shown as G:
+ram      C90B karma                         # 8 bytes, one per virtue (Honesty..Humility)
+ram      C953 party_x                       # world/town X (PC Ultima IV coordinates)
+ram      C954 party_y
+ram      C96D world_return_x                # where leaving a town puts the party
+ram      C96E world_return_y
+ram      C971 world_x_saved
+ram      C972 world_y_saved
+ram      C985 view_x                        # party position inside the loaded map window
+ram      C986 view_y
+ram      C987 view_chunk_x                  # which 16-tile chunk the window starts at
+ram      C988 view_chunk_y
+name     00:0E22 recenter_map_view          # recompute view_* from party_x/y
+
+# --- maps --------------------------------------------------------------------------
+name     00:0EE8 load_world_chunk           # RLE world chunk (banks 4/5) -> map buffer
+name     00:116B decode_location_map        # RLE town/castle map -> $D000
+name     00:0E6C load_location              # header -> $C651, map via table bank15:$8077
+name     00:2098 map_graphic_address        # graphic number -> bank 6/7 address (128 bytes each)
+ram      C9A0 location                      # 0 = world, 1-17 = settlement (table bank15:$8077)
+ram      C651 location_people               # 256-byte people/object block of the current location
+
+# --- party (records of 29 bytes from $C751, count in party_size; fn_01_4098) -------
+ram      C957 party_size
+ram      C751 party                         # +0 hp, +2 max hp, +4 xp (16-bit each), +6 str, +7 dex, +8 int, +9 mp, +A level, +B weapon, +C armour, +D name
+                                            # +1A sex glyph ($1E/$1F), +1B class (0-7 = home town), +1C status ('G' good, 'D' dead)
+ram      C75E party_name                    # the Avatar's name (party + $0D)
+name     01:4098 party_iter_setup           # iy = party, de = 29, b = party_size
+name     01:5650 print_avatar_name
+name     00:06FF decode_rle                 # hl = source, de = dest; $00 end, n<$80 repeat, $80+n literal
+name     00:06F6 decode_rle_far             # same with bank A paged into slot 2
+name     00:2A5C load_dungeon               # location $12-$19 -> 8 levels of 16x16 at $D000
+name     00:2A6E dungeon_header_address     # -> a = bank, hl = header (table at $2A81)
+
+# --- rewritten in C (pc/native) ------------------------------------------------------
+native   00:06FF native_decode_rle
+native   00:06F6 native_decode_rle_far
+native   00:0E22 native_recenter_map_view
+native   00:0E6C native_load_location
+name     00:0F4B step_east                  # move the party one cell; scroll the map window
+name     00:0F71 step_west
+name     00:0F97 step_south
+name     00:0FBD step_north
+name     00:0FE3 shift_map_buffer_x         # copy the right/left half over the other ($20 rows)
+name     00:1031 shift_map_buffer_y         # copy the lower/upper half over the other
+name     00:0EB3 load_chunk_top_left
+name     00:0EC0 load_chunk_top_right
+name     00:0ECE load_chunk_bottom_left
+name     00:0EDC load_chunk_bottom_right
+name     00:0EE8 load_world_chunk_at        # l = chunk x, h = chunk y, de = destination
+native   00:0F4B native_step_east
+native   00:0F71 native_step_west
+native   00:0F97 native_step_south
+native   00:0FBD native_step_north
+name     00:2BBF random                     # A = next random byte (seed $C0B6, stirred by input)
+name     00:2BEB random_below               # A = random 0..A-1
+name     00:2AA1 multiply_8x8               # HL = H * L
+ram      C0B6 rng_seed
+ram      C0B5 input_noise                   # sum of joypad readings, mixed into random
+native   00:2BBF native_random
+native   00:2BEB native_random_below
+native   00:2AA1 native_multiply_8x8
+name     01:5582 print_message              # A = message number (table in $C0CA bank at $C0CB)
+name     01:548F print_char
+name     01:54CE print_newline
+ram      C0CA message_bank
+ram      C0CB message_table
+name     01:4255 karma_gain                 # C = virtue, A = amount (max 99; 0 = eighth already gained)
+name     01:426F karma_lose                 # C = virtue, A = amount; losing an eighth resets it to 99
+native   01:4255 native_karma_gain
+jumpvec  01:7E00 126                     # far-call vectors used by the other banks
+name     01:7E00 bank01_vectors
+inlinestr 01:7F74                      # vector to print_inline
+name     01:7F74 vec_print_inline
+name     03:A802 monster_hits_member        # B = member, monster in IY; damage from combat_strength
+name     03:A7DA member_at_position         # carry clear: A = party member standing at HL
+name     03:A42A combat_strength_index      # object graphic -> index into combat_strength
+name     03:AC00 combat_strength            # 76 bytes: monster strength, people, weapon damage, armour (data/stats.json)
+name     00:2AFC divide_8                   # L = L / H, H = A = remainder
+name     01:467F member_take_damage         # C = member, HL = damage; carry = died
+name     01:4679 member_hurt                # member_take_damage, then update the status display
+name     01:48B6 member_record              # IY = party + C * 29
+name     01:48D5 member_object              # IY = $C8B9 + C * 5 (figure on screen)
+ram      C8B9 party_objects                 # 5 bytes per member: screen figure (+2/+3 graphic)
+native   00:2AFC native_divide_8
+native   01:467F native_member_take_damage
+name     03:A0D8 combat_attack              # combat menu: Attack
+name     03:A2D4 combat_cast_spell
+name     03:A2DA combat_get_chest
+name     03:A2E3 combat_ready_weapon
+name     03:A2E9 combat_use_item
+name     03:A2EF combat_status
+name     03:A279 target_in_pattern          # carry clear if the target offset is in the (dx,dy) list at HL ($80 ends)
+name     03:A292 weapon_range               # 16 bytes per weapon
+name     00:3ACE combat_strength_index_b0   # same as 03:A42A
+name     00:3CFB combat_strength_b0         # copy of the first $34 bytes of combat_strength
+name     00:36DA cap_9999                   # HL = min(HL, 9999), carry if capped
+name     01:4205 member_gain_xp             # C = member, HL = amount (max 9999)
+name     01:4221 member_heal                # C = member, HL = amount (up to max hp)
+name     00:39B5 damage_monster             # A = damage to the monster in IY; prints wounds/kill, awards XP
+native   00:3ACE native_combat_strength_index
+native   03:A42A native_combat_strength_index_b3
+native   00:36DA native_cap_9999
+native   01:4205 native_member_gain_xp
+native   01:4221 native_member_heal
+name     02:9755 shop_numbers               # 8 types x 16 places -> shop number (1-based)
+name     02:9829 weapon_shop_stock
+name     02:9841 weapon_prices
+name     02:9B37 armour_shop_stock
+name     02:9B4B armour_prices
+name     02:9741 shop_handlers              # by shop type
+ram      C983 shop_number                   # 0-based, of the current shop
+name     00:33EE place_index                # location - 2 (Castle Britannia floors -> 0)
+name     02:9ED8 food_prices
+name     02:A3B7 reagent_prices
+name     00:34DD talk_setup                 # IY = person; loads their dialogue header to $C9A9
+name     00:351D dialogue_tables            # (bank, table) per place
+name     01:6F96 talk_join
+ram      C9A9 talk_question_topic
+ram      C9AB talk_turn_away
+name     00:3578 talk_topics                # unlock keyword topics from the header pairs, build the talk menu
+name     00:355F dialogue_string            # HL = string B (1-based) of the current person
+name     00:360D talk_topic_names
+ram      C580 talk_flags                    # +topic: 1 once asked; $C595/$C596 keyword 1/2 shown
+name     02:88F3 spell_recipes              # reagent bits per spell (Sulfur Ash = $80)
+name     01:5DE1 spell_mp_cost
+name     01:5D72 spell_allowed_by_mode      # per $C99F: 26 flags
+name     01:5DFB spell_routines
+name     01:5B8C cast_spell
+ram      C92F reagents                      # 8 counts
+ram      C937 mixtures                      # 26 counts, max 99
+ram      C99F map_mode                      # 0/1 world, towns; 2 dungeon; 3-5 combat
+name     00:3D82 load_dungeon_room          # room $C9B8 of the current dungeon -> monsters $C839, map $D800
+name     00:3EAA unpack_position            # A = low nibble, A' = high nibble of (hl), hl+1
+ram      C9B8 dungeon_room
+ram      C9B9 entry_direction
+ram      C839 room_monsters                 # 16 x 8 bytes: +0/+1 x,y, +4 hp, +5 graphic
+name     00:377E load_arena                 # A = arena (bank 5 table $A4DF)
+name     00:1204 terrain_substitute         # swap arena tiles for the current terrain
+
+# --- task system (docs/architecture.md) ---------------------------------------------
+name     00:0AE5 run_tasks                  # give each busy task slot its turn
+name     00:0B01 run_task                   # count down +1; at 0 page +4, jump to +2/+3 (IX = slot)
+name     00:0B19 yield                      # resume after the call next frame
+name     00:0B16 sleep                      # A = frames, then yield
+name     00:0B33 spawn_task                 # C = kind, DE = entry -> IY = slot, carry if full
+name     00:0B35 spawn_task_c
+name     00:0B5A end_task                   # clear the current slot
+name     00:0B21 clear_tasks
+name     00:0A82 wait_flag                  # yield until $C0C7 is set
+name     00:0AA5 task_enter_1               # save return address in slot +$24 (yield-safe call)
+name     00:0AAE task_return_1
+name     00:0AB5 task_enter_2
+name     00:0ABE task_return_2
+name     00:0AC5 task_enter_3
+name     00:0ACE task_return_3
+name     00:0AD5 task_enter_4
+name     00:0ADE task_return_4
+name     00:07CE bank_push                  # A = bank for slot 2; old bank kept on the stack
+name     00:07DE bank_pop
+name     00:0465 queue_vram_copy            # A = bank, HL = source, DE = VRAM, BC = length (done in the interrupt)
+name     00:1F56 draw_map_window
+ram      C300 task_slots                    # 10 x 48 bytes
+ram      C0C7 wait_flag_value
+name     00:33AF play_music_later           # A = tune: start a music_later task
+name     00:33D4 music_later                # task: stop music, wait 20 frames, play slot +$1A
+native   00:33D4 native_music_later_start
+native   00:33DC native_music_later_play
+name     00:2FFB frame_tick                 # per-frame work of a waiting task, then yield
+name     00:0843 set_palette_entry          # L = index, H = colour (shadow $C023, dirty flag $C009)
+name     00:3033 wait_button                # frame_tick until button 1 or 2, then a beep
+native   00:2FFB native_frame_tick
+native   00:3033 native_wait_button_start
+native   00:3039 native_wait_button_check
+name     01:5552 text_page_wait             # every 5th printed line: wait for a button
+name     00:041C wait_vblank
+native   01:5552 native_text_page_wait
+name     01:5460 put_glyph                  # draw character A at the text cursor (name table $3800 + RAM copy $CA00)
+ram      C639 text_col
+ram      C63A text_row
+native   01:5460 native_put_glyph
+native   01:5519 native_print_text_hl
+native   01:5510 native_print_inline
+native   01:548F native_print_char
+native   01:54CE native_print_newline
+name     00:11C5 mark_shorelines            # water cells: attribute bits for land neighbours
+native   00:116B native_decode_location_map
+native   00:11C5 native_mark_shorelines
+native   01:6DCE native_talk
+native   00:0B5A native_hook_end_task
+native   00:0B21 native_hook_clear_tasks
+ram      C96B last_karma_time               # moves/16 when karma for giving/answering was last granted ($33F6)
+ram      C91F weapons_owned                 # count per weapon
+native   02:97D5 native_weapon_shop
+native   02:9AE3 native_armour_shop
+native   02:9DE9 native_food_shop
+native   02:9EE2 native_pub
+native   02:A1EB native_reagent_shop
+native   02:A3CF native_healer
+native   02:A647 native_inn
+native   02:A869 native_guild
+native   02:AA14 native_stable
+native   02:AA75 native_seer
+name     00:0499 queue_text_copy
+name     00:2D69 menu_text
+name     00:2D65 menu_text_at
+name     00:2DC4 highlight_off
+name     00:2DE3 highlight_on
+name     00:2E1B menu_window_clear
+name     00:2E54 menu_window_show
+name     00:340F item_name
+native   00:0499 native_queue_text_copy
+native   00:2D69 native_menu_text
+native   00:2D65 native_menu_text_at
+native   00:2DC4 native_highlight_off
+native   00:2DE3 native_highlight_on
+native   00:2E1B native_menu_window_clear
+native   00:2E54 native_menu_window_show
+native   00:340F native_item_name
+name     00:2AC8 multiply_16
+name     00:2B3F divide_16
+name     01:55CF print_number                 # HL in B digits, leading zeros as C
+name     01:5627 print_number_auto
+name     01:43DA show_gold
+name     01:43F6 show_food
+name     01:4412 receive_gold
+name     01:4423 pay                          # carry: not enough gold
+name     01:4439 can_afford                   # carry: not enough gold
+name     01:4445 member_can_act
+name     01:4466 member_able
+native   00:2AC8 native_multiply_16
+native   00:2B3F native_divide_16
+native   01:55CF native_print_number
+native   01:5627 native_print_number_auto
+native   01:43DA native_show_gold
+native   01:43F6 native_show_food
+native   01:4412 native_receive_gold
+native   01:4423 native_pay
+native   01:4439 native_can_afford
+native   01:4445 native_member_can_act
+native   01:4466 native_member_able
+name     01:49D5 cursor_on
+name     01:49E0 cursor_off
+name     01:49F4 menu_step
+name     01:49F9 menu_step_wrap
+native   01:49D5 native_cursor_on
+native   01:49E0 native_cursor_off
+native   01:49F4 native_menu_step
+native   01:49F9 native_menu_step_wrap
+name     00:2E7F menu_draw
+name     01:4B5E yes_no_start
+name     02:AB4B buy_or_sell
+name     02:AB4E two_choices
+native   00:2E7F native_menu_draw
+native   01:4B5E native_yes_no_start
+native   02:AB4B native_buy_or_sell
+native   02:AB4E native_two_choices
+name     01:5582 print_message
+name     01:5516 print_item_name
+name     01:4B69 yes_no_step
+name     01:4A66 number_entry_start
+name     01:4A9F number_entry_step
+name     01:49BD member_name
+name     01:4BD2 member_pick_step
+name     02:AB55 buy_or_sell_step
+native   01:5582 native_print_message
+native   01:5516 native_print_item_name
+native   02:AB85 native_weapon_name
+native   02:AB89 native_armour_name
+native   02:AB8D native_reagent_name
+native   01:4B69 native_yes_no_step
+native   01:4A66 native_number_entry_start
+native   01:4A9F native_number_entry_step
+native   02:AB55 native_buy_or_sell_step
+native   01:49BD native_member_name
+native   01:4BD2 native_member_pick_step

@@ -1,0 +1,21 @@
+# from_bank:from_addr kind to_bank:to_addr
+00:03EF call 1F:8000
+00:05D6 call 1F:8009
+00:05EC call 1F:8003
+00:0600 call 1F:8006
+00:060E call 1F:800C
+00:061C call 1F:800F
+00:0632 call 1F:8003
+00:0638 call 1F:8006
+00:0D31 call 1F:8012
+00:0D4B call 1F:8015
+00:0DF0 call 02:8036
+00:0DFB call 02:8039
+00:0E06 call 02:803C
+00:3BE9 call 02:BACF
+01:5B37 call 02:B5A4
+01:5EAC call 02:B5A4
+01:5F34 call 02:B5A4
+01:6A1B call 02:AF57
+01:6AED call 02:B4EE
+01:6F42 jp 02:8084
