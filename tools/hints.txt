@@ -339,3 +339,11 @@ name     02:8000 command_menu
 native   02:ACB1 native_world_turn
 native   02:AF85 native_town_turn
 native   02:8000 native_command_menu
+name     02:8091 talk_command
+name     02:890D get_chest
+name     02:8B28 ready_command
+native   02:8091 native_talk_command
+native   02:890D native_get_chest
+native   02:8B28 native_ready
+name     02:9254 camp_menu
+native   02:9254 native_camp_menu

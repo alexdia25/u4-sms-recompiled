@@ -146,6 +146,21 @@ def main():
         for _ in range(4):
             s.press('1', 60)
         s.write(name)
+    for name, pokes in (('camp_order_swap', ['C957:03']), ('camp_rest_world', [])):
+        rnd = random.Random(name)    # New Order with a party; Rest out in the world
+        s = Script()
+        for p in pokes:
+            s.poke(p)
+        if name == 'camp_rest_world':
+            for k in 'LLLLLL':
+                s.press(k, 30)
+        s.press('2', 40)
+        for _ in range(7):
+            s.press('D', 30)
+        for k in ('2D22D22' if pokes else '22'):
+            s.press(k, 60)
+        random_presses(s, rnd, 20, menu=False)
+        s.write(name)
     WALKS = {                          # walking: in town, out into the world, riding, sailing
         'walk_town':  ([], 'UDLR', 120),
         'walk_world': ([], 'LLLLLLUDLR', 150),
@@ -162,6 +177,37 @@ def main():
         for _ in range(n):
             r = rnd.random()
             s.press(rnd.choice(dirs[-4:]) if r < 0.85 else '1' if r < 0.95 else '2', rnd.choice((20, 30, 60)))
+        s.write(name)
+    COMMANDS = {                       # each command from the menu: how many Downs, then presses
+        'cmd_talk_nobody': (0, '2U2'),
+        'cmd_attack':      (1, '2U2222'),
+        'cmd_magic':       (2, '2222222'),
+        'cmd_get_chest':   (3, '22222'),
+        'cmd_use':         (4, '2222222'),
+        'cmd_ready_weapon': (5, '22D2222'),
+        'cmd_ready_armour': (5, '2D2D2222'),
+        'cmd_search':      (6, '2222'),
+        'cmd_camp':        (7, '2222222'),
+        'cmd_cancel':      (3, '1'),
+        'camp_rest':       (7, '22'),
+        'camp_order':      (7, '2D2'),
+        'camp_status':     (7, '2DD22222'),
+        'camp_save':       (7, '2DDD2222'),
+    }
+    for name, (downs, presses) in COMMANDS.items():
+        rnd = random.Random(name)
+        s = Script()
+        if name == 'camp_order':
+            s.poke('C957:03')          # three in the party, to swap
+        for _ in range(2):
+            s.press('2', 40)           # the command menu
+            for _ in range(downs):
+                s.press('D', 30)
+            for k in presses:
+                s.press(k, 60)
+            random_presses(s, rnd, 12)
+            for _ in range(3):
+                s.press('1', 60)
         s.write(name)
     for seed in range(2):              # anything at all
         rnd = random.Random('play%d' % seed)

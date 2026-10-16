@@ -315,7 +315,7 @@ static void nat_item_name(void) {
 	uint16_t name = rd16(0x8300 + 2 * cpu.a);
 	for (int i = 0; i < 0x19; i++) mem_write(0xC065 + i, mem_read(name + i));
 	mem_write(0xFFFF, saved);
-	wr16(BANK_SCRATCH, 0xC065 + 0x19);
+	wr16(BANK_SCRATCH, name + 0x19);    // the copy leaves its source end there
 	SET_HL(0xC065);
 	cpu.a = 0x10;
 	cpu.cycles += 1129;
