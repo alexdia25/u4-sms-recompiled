@@ -15,3 +15,5 @@ ghidra/
 decomp/
 rea/
 tools/ghidra/
+tests/results.txt
+tests/cases/

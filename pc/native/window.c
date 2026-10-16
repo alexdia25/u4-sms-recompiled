@@ -273,8 +273,8 @@ static void menu_step(int wrap) {
 }
 static void nat_menu_step(void) { menu_step(0); }
 static void nat_menu_step_wrap(void) { menu_step(1); }
-Native native_menu_step = { "menu_step", 0x49F4, 1, nat_menu_step, OUT_A | OUT_F, 0, 0 };
-Native native_menu_step_wrap = { "menu_step_wrap", 0x49F9, 1, nat_menu_step_wrap, OUT_A | OUT_F, 0, 0 };
+Native native_menu_step = { "menu_step", 0x49F4, 1, nat_menu_step, OUT_A | OUT_F, 0, 0, .long_calls = 1 };
+Native native_menu_step_wrap = { "menu_step_wrap", 0x49F9, 1, nat_menu_step_wrap, OUT_A | OUT_F, 0, 0, .long_calls = 1 };
 
 // ------------------------------------------------------- menu window --
 // menu_window_clear ($2E1B): the empty menu window (16 rows of the 28-byte

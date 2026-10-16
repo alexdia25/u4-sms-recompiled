@@ -1,3 +1,5 @@
+#include <stdio.h>
+#include <stdlib.h>
 // Z80 interpreter. The recompiled code (gen/recomp.c) falls back to this for
 // any address it has no translation for (code in RAM, unexplored code).
 #include "z80.h"
@@ -95,6 +97,9 @@ int z80_interrupt(void) {
 		return 1;
 	}
 	if (cpu.irq_line && cpu.iff1 && !cpu.ei_delay) {
+		static int trace = -1;   // U4_IRQ_TRACE=1: log each interrupt (pc, time)
+		if (trace < 0) trace = getenv("U4_IRQ_TRACE") != NULL;
+		if (trace) fprintf(stderr, "irq %04X %lld\n", cpu.pc, (long long)cpu.cycles);
 		cpu.halted = 0; cpu.iff1 = cpu.iff2 = 0;
 		push16(cpu.pc);
 		cpu.pc = cpu.im == 2 ? rd16((uint16_t)((cpu.i << 8) | 0xFF)) : 0x38;

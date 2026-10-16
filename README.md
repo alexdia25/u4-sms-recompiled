@@ -137,6 +137,20 @@ alone runs the game.
   - `data-formats.md` covers the ROM's data.
   - `rules.md` covers game rules found in the code: combat, karma, talking and shops.
 
+### Tests
+
+```sh
+tests/run.sh             # all cases (about 8 minutes)
+tests/run.sh food_buy    # one case
+```
+
+Each case is a key script that starts from power-on (`tests/start.keys`, which
+plays through creating a character to Moonglow) and then shops, talks to
+townsfolk or plays at random (`tests/make_cases.py` writes them). Every case
+must end in the same state with the C rewrites as without, and in shadow mode
+every call of a rewrite must match the original, time included. It needs only
+`build/u4.pak` from setup.
+
 ### Checking rewrites against the original
 
 | Setting | Effect |

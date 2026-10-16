@@ -49,8 +49,8 @@ static void music_later_play(void) {    // $33DC
 	cpu.cycles += 10 + 1049;             // jp end_task, which clears the slot with ldir
 }
 
-Native native_music_later_start = { "music_later_start", 0x33D4, 0, music_later_start, 0, 0, 0 };
-Native native_music_later_play = { "music_later_play", 0x33DC, 0, music_later_play, 0, 0, 0 };
+Native native_music_later_start = { "music_later_start", 0x33D4, 0, music_later_start, 0, 0, 0, .long_calls = 1 };
+Native native_music_later_play = { "music_later_play", 0x33DC, 0, music_later_play, 0, 0, 0, .long_calls = 1 };
 
 // ----------------------------------------------------------------------------
 // frame_tick ($2FFB): what every waiting task does once per frame, then yield.

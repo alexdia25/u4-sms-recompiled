@@ -12,6 +12,7 @@ static void run_blocking(Native *n);
 static void run_task(Native *n);
 static int jump_set;   // the native chose where to continue (native_continue_at)
 static int declined;   // the native left it to the original (native_decline)
+static Native *skip_once;   // a native on a fiber declined: let the original run this time
 
 // From a native, before it changes anything: let the original run instead
 // (for cases the rewrite doesn't cover)
@@ -79,6 +80,7 @@ int native_call(Native *n) {
 	if (trace == (const char *)-1) trace = getenv("U4_TRACE");
 	if (trace && strstr(trace, n->name)) fprintf(stderr, "enter %s %lld\n", n->name, (long long)cpu.cycles);
 	if (m == MODE_OFF) return 0;
+	if (skip_once == n) { skip_once = NULL; return 0; }
 	if (n->hook) { n->fn(); return 0; }   // looks, and the original runs
 	const char *only = getenv("U4_NATIVE_ONLY");   // test one rewrite at a time
 	if (only && !strstr(only, n->name)) return 0;
@@ -265,6 +267,14 @@ static void to_main(void) {
 static void fiber_body(Fiber *f) {
 	for (;;) {
 		f->n->fn();
+		if (declined) {                  // run the original instead, from its start
+			declined = 0;
+			skip_once = f->n;
+			cpu.pc = f->n->addr;
+			f->n = NULL;
+			to_main();
+			continue;
+		}
 		finish();
 		f->n = NULL;
 		spend_overshoot();
