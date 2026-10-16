@@ -329,3 +329,7 @@ native   01:4A9F native_number_entry_step
 native   02:AB55 native_buy_or_sell_step
 native   01:49BD native_member_name
 native   01:4BD2 native_member_pick_step
+name     02:B08B input_step                   # one frame of the player's turn
+name     02:B263 player_move                  # A = direction (0 W, 1 N, 2 E, 3 S)
+native   02:B08B native_input_step
+native   02:B263 native_player_move

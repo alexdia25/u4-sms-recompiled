@@ -52,6 +52,9 @@ void native_continue_at(uint16_t addr);
 // before changing anything: leave this call to the original routine
 void native_decline(void);
 
+// whether native_continue_at was called (the native will continue there)
+int native_jumped(void);
+
 // For blocking natives: wait for the next vertical blank. While waiting the
 // CPU is parked at PARK_PC.
 #define PARK_PC 0xFFF8

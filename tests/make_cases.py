@@ -146,6 +146,23 @@ def main():
         for _ in range(4):
             s.press('1', 60)
         s.write(name)
+    WALKS = {                          # walking: in town, out into the world, riding, sailing
+        'walk_town':  ([], 'UDLR', 120),
+        'walk_world': ([], 'LLLLLLUDLR', 150),
+        'ride_world': (['C959:14', 'C95A:00'], 'LLLLLLUDLR', 150),
+        'sail':       (['C959:11', 'C95A:00'], 'UDLR', 60),
+    }
+    for name, (pokes, dirs, n) in WALKS.items():
+        rnd = random.Random(name)
+        s = Script()
+        for p in pokes:
+            s.poke(p)
+        for k in dirs[:6] if dirs.startswith('LLLLLL') else '':
+            s.press(k, 30)             # out through the west gate
+        for _ in range(n):
+            r = rnd.random()
+            s.press(rnd.choice(dirs[-4:]) if r < 0.85 else '1' if r < 0.95 else '2', rnd.choice((20, 30, 60)))
+        s.write(name)
     for seed in range(2):              # anything at all
         rnd = random.Random('play%d' % seed)
         s = Script()

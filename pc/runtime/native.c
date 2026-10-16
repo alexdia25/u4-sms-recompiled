@@ -17,6 +17,7 @@ static Native *skip_once;   // a native on a fiber declined: let the original ru
 // From a native, before it changes anything: let the original run instead
 // (for cases the rewrite doesn't cover)
 void native_decline(void) { declined = 1; }
+int native_jumped(void) { return jump_set; }
 
 void native_continue_at(uint16_t addr) { cpu.pc = addr; jump_set = 1; }
 
