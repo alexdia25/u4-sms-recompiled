@@ -333,3 +333,9 @@ name     02:B08B input_step                   # one frame of the player's turn
 name     02:B263 player_move                  # A = direction (0 W, 1 N, 2 E, 3 S)
 native   02:B08B native_input_step
 native   02:B263 native_player_move
+name     02:ACB1 world_turn_loop
+name     02:AF85 town_turn_loop
+name     02:8000 command_menu
+native   02:ACB1 native_world_turn
+native   02:AF85 native_town_turn
+native   02:8000 native_command_menu
