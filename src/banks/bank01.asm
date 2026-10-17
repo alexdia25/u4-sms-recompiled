@@ -16,7 +16,7 @@ loc_01_4011:
 
 sub_01_401B:
 	ld bc,($C97F)	; $401B
-	call fn_01_4466	; $401F
+	call member_able	; $401F
 	ret c	; $4022
 	call fn_01_48CB	; $4023
 	ld (iy+$1C),$53	; $4026
@@ -42,7 +42,7 @@ loc_01_404A:
 	call party_iter_setup	; $404E
 
 loc_01_4051:
-	call fn_01_4466	; $4051
+	call member_able	; $4051
 	jr c,loc_01_4067	; $4054
 	call random	; $4056
 	and $03	; $4059
@@ -67,7 +67,7 @@ loc_01_4071:
 	call party_iter_setup	; $4075
 
 loc_01_4078:
-	call fn_01_4466	; $4078
+	call member_able	; $4078
 	jr c,loc_01_408E	; $407B
 	call random	; $407D
 	and $03	; $4080
@@ -542,7 +542,7 @@ fn_01_4324:
 	ld hl,(text_col)	; $432A
 	push hl	; $432D
 	call fn_00_342B	; $432E
-	call fn_00_2E1B	; $4331
+	call menu_window_clear	; $4331
 	ld iy,party	; $4334
 	ld de,$CA66	; $4338
 	ld a,(party_size)	; $433B
@@ -584,7 +584,7 @@ loc_01_433F:
 	add iy,bc	; $4379
 	pop bc	; $437B
 	djnz loc_01_433F	; $437C
-	call fn_00_2E54	; $437E
+	call menu_window_show	; $437E
 	ld hl,$0014	; $4381
 	ld (text_col),hl	; $4384
 	ld a,$46	; $4387
@@ -593,7 +593,7 @@ loc_01_433F:
 	call print_char	; $438E
 	ld hl,(food)	; $4391
 	ld bc,$0430	; $4394
-	call fn_01_55CF	; $4397
+	call print_number	; $4397
 	ld hl,$000A	; $439A
 	ld (text_col),hl	; $439D
 	ld a,($C959)	; $43A0
@@ -603,7 +603,7 @@ loc_01_433F:
 	call print_text_hl	; $43AA
 	ld hl,($C961)	; $43AD
 	ld bc,$0230	; $43B0
-	call fn_01_55CF	; $43B3
+	call print_number	; $43B3
 	jr loc_01_43C7	; $43B6
 
 loc_01_43B8:
@@ -611,7 +611,7 @@ loc_01_43B8:
 	call print_text_hl	; $43BB
 	ld hl,(gold)	; $43BE
 	ld bc,$0430	; $43C1
-	call fn_01_55CF	; $43C4
+	call print_number	; $43C4
 
 loc_01_43C7:
 	pop hl	; $43C7
@@ -624,7 +624,7 @@ loc_01_43C7:
 	ret	; $43D1
 	.INCBIN "bank01.bin" SKIP $03D2 READ 8	; data, 8 bytes
 
-fn_01_43DA:
+show_gold:
 	push bc	; $43DA
 	push hl	; $43DB
 	ld hl,(text_col)	; $43DC
@@ -633,14 +633,14 @@ fn_01_43DA:
 	ld (text_col),hl	; $43E3
 	ld hl,(gold)	; $43E6
 	ld bc,$0430	; $43E9
-	call fn_01_55CF	; $43EC
+	call print_number	; $43EC
 	pop hl	; $43EF
 	ld (text_col),hl	; $43F0
 	pop hl	; $43F3
 	pop bc	; $43F4
 	ret	; $43F5
 
-loc_01_43F6:
+show_food:
 	push bc	; $43F6
 	push hl	; $43F7
 	ld hl,(text_col)	; $43F8
@@ -649,14 +649,14 @@ loc_01_43F6:
 	ld (text_col),hl	; $43FF
 	ld hl,(food)	; $4402
 	ld bc,$0430	; $4405
-	call fn_01_55CF	; $4408
+	call print_number	; $4408
 	pop hl	; $440B
 	ld (text_col),hl	; $440C
 	pop hl	; $440F
 	pop bc	; $4410
 	ret	; $4411
 
-fn_01_4412:
+receive_gold:
 	push de	; $4412
 	push hl	; $4413
 	ld de,(gold)	; $4414
@@ -665,9 +665,9 @@ fn_01_4412:
 	ld (gold),hl	; $441C
 	pop hl	; $441F
 	pop de	; $4420
-	jr fn_01_43DA	; $4421
+	jr show_gold	; $4421
 
-fn_01_4423:
+pay:
 	push de	; $4423
 	push hl	; $4424
 	ex de,hl	; $4425
@@ -681,11 +681,11 @@ loc_01_4431:
 	pop hl	; $4431
 	pop de	; $4432
 	ret c	; $4433
-	call fn_01_43DA	; $4434
+	call show_gold	; $4434
 	or a	; $4437
 	ret	; $4438
 
-fn_01_4439:
+can_afford:
 	push de	; $4439
 	push hl	; $443A
 	ex de,hl	; $443B
@@ -696,7 +696,7 @@ fn_01_4439:
 	pop de	; $4443
 	ret	; $4444
 
-fn_01_4445:
+member_can_act:
 	push hl	; $4445
 	push iy	; $4446
 	ld a,(party_size)	; $4448
@@ -718,7 +718,7 @@ loc_01_4462:
 	pop hl	; $4464
 	ret	; $4465
 
-fn_01_4466:
+member_able:
 	push hl	; $4466
 	push iy	; $4467
 	ld a,(party_size)	; $4469
@@ -807,7 +807,7 @@ loc_01_4528:
 	ld (iy+$01),a	; $4535
 	add iy,de	; $4538
 	djnz loc_01_4528	; $453A
-	ld hl,$C91F	; $453C
+	ld hl,weapons_owned	; $453C
 	ld bc,$1000	; $453F
 	call fn_00_333B	; $4542
 	ld hl,$C917	; $4545
@@ -847,14 +847,14 @@ fn_01_465D:
 	ld c,$00	; $4662
 
 loc_01_4664:
-	call fn_01_4445	; $4664
+	call member_can_act	; $4664
 	jr nc,loc_01_466F	; $4667
 	inc c	; $4669
 	djnz loc_01_4664	; $466A
 	jp loc_01_4483	; $466C
 
 loc_01_466F:
-	call fn_01_4466	; $466F
+	call member_able	; $466F
 	jr nc,loc_01_4677	; $4672
 	inc c	; $4674
 	djnz loc_01_466F	; $4675
@@ -1103,7 +1103,7 @@ loc_01_480D:
 	ld a,$14	; $480D
 
 loc_01_480F:
-	jp fn_00_340F	; $480F
+	jp item_name	; $480F
 
 fn_01_4812:
 	push bc	; $4812
@@ -1362,7 +1362,7 @@ fn_01_4999:
 	push de	; $499A
 	push hl	; $499B
 	call fn_01_49B3	; $499C
-	call fn_00_2DC4	; $499F
+	call highlight_off	; $499F
 	pop hl	; $49A2
 	pop de	; $49A3
 	pop bc	; $49A4
@@ -1373,7 +1373,7 @@ fn_01_49A6:
 	push de	; $49A7
 	push hl	; $49A8
 	call fn_01_49B3	; $49A9
-	call fn_00_2DE3	; $49AC
+	call highlight_on	; $49AC
 	pop hl	; $49AF
 	pop de	; $49B0
 	pop bc	; $49B1
@@ -1388,7 +1388,7 @@ fn_01_49B3:
 	ld bc,$020E	; $49B9
 	ret	; $49BC
 
-fn_01_49BD:
+member_name:
 	push af	; $49BD
 	push bc	; $49BE
 	push hl	; $49BF
@@ -1405,20 +1405,20 @@ fn_01_49BD:
 	pop af	; $49D3
 	ret	; $49D4
 
-fn_01_49D5:
+cursor_on:
 	push bc	; $49D5
 	push de	; $49D6
 	call fn_01_49EB	; $49D7
-	call fn_00_2DE3	; $49DA
+	call highlight_on	; $49DA
 	pop de	; $49DD
 	pop bc	; $49DE
 	ret	; $49DF
 
-fn_01_49E0:
+cursor_off:
 	push bc	; $49E0
 	push de	; $49E1
 	call fn_01_49EB	; $49E2
-	call fn_00_2DC4	; $49E5
+	call highlight_off	; $49E5
 	pop de	; $49E8
 	pop bc	; $49E9
 	ret	; $49EA
@@ -1430,11 +1430,11 @@ fn_01_49EB:
 	ld bc,$010E	; $49F0
 	ret	; $49F3
 
-fn_01_49F4:
+menu_step:
 	ld hl,$4A0C	; $49F4
 	jr loc_01_49FC	; $49F7
 
-fn_01_49F9:
+menu_step_wrap:
 	ld hl,$4A12	; $49F9
 
 loc_01_49FC:
@@ -1444,12 +1444,12 @@ loc_01_49FC:
 
 loc_01_4A04:
 	call fn_01_4A5C	; $4A04
-	call fn_01_49D5	; $4A07
+	call cursor_on	; $4A07
 	xor a	; $4A0A
 	ret	; $4A0B
 	.INCBIN "bank01.bin" SKIP $0A0C READ 25	; data, 25 bytes
 	call fn_01_4A5C	; $4A25
-	call fn_01_49E0	; $4A28
+	call cursor_off	; $4A28
 	ld a,$FF	; $4A2B
 
 loc_01_4A2D:
@@ -1463,7 +1463,7 @@ loc_01_4A2D:
 	jr loc_01_4A04	; $4A3C
 	.INCBIN "bank01.bin" SKIP $0A3E READ 7	; data, 7 bytes
 	call fn_01_4A5C	; $4A45
-	call fn_01_49E0	; $4A48
+	call cursor_off	; $4A48
 	ld a,$01	; $4A4B
 	jr loc_01_4A2D	; $4A4D
 	call fn_01_40D1	; $4A4F
@@ -1483,7 +1483,7 @@ fn_01_4A5C:
 	add a,d	; $4A64
 	ret	; $4A65
 
-fn_01_4A66:
+number_entry_start:
 	ld (ix+$0E),a	; $4A66
 	ld (ix+$0F),$00	; $4A69
 	ld e,a	; $4A6D
@@ -1508,7 +1508,7 @@ loc_01_4A7C:
 	ret	; $4A97
 	.INCBIN "bank01.bin" SKIP $0A98 READ 7	; data, 7 bytes
 
-fn_01_4A9F:
+number_entry_step:
 	ld a,(joy_pressed)	; $4A9F
 	and $7F	; $4AA2
 	ld hl,$4ABB	; $4AA4
@@ -1630,13 +1630,13 @@ loc_01_4B4F:
 	rst $30	; $4B5B
 	jr loc_01_4B4F	; $4B5C
 
-fn_01_4B5E:
+yes_no_start:
 	ld hl,$4BBF	; $4B5E
-	call fn_00_2E7F	; $4B61
+	call menu_draw	; $4B61
 	ld (ix+$07),$00	; $4B64
 	ret	; $4B68
 
-fn_01_4B69:
+yes_no_step:
 	ld a,(joy_pressed)	; $4B69
 	ld hl,$4B74	; $4B6C
 	call switch_on_a	; $4B6F
@@ -1656,12 +1656,12 @@ tbl_01_4B74:
 loc_01_4B81:
 	call fn_01_40D9	; $4B81
 	call fn_01_4BB5	; $4B84
-	call fn_01_49E0	; $4B87
+	call cursor_off	; $4B87
 	inc (ix+$07)	; $4B8A
 
 loc_01_4B8D:
 	call fn_01_4BB5	; $4B8D
-	call fn_01_49D5	; $4B90
+	call cursor_on	; $4B90
 	scf	; $4B93
 	ret	; $4B94
 
@@ -1697,7 +1697,7 @@ fn_01_4BCB:
 	ld (ix+$08),$00	; $4BCB
 	jp fn_01_4324	; $4BCF
 
-fn_01_4BD2:
+member_pick_step:
 	ld a,(joy_pressed)	; $4BD2
 	and $7F	; $4BD5
 	ld hl,$4BE2	; $4BD7
@@ -1753,7 +1753,7 @@ loc_01_4C12:
 loc_01_4C19:
 	call fn_01_40C9	; $4C19
 	ld c,(ix+$08)	; $4C1C
-	call fn_01_49BD	; $4C1F
+	call member_name	; $4C1F
 	call print_newline	; $4C22
 	xor a	; $4C25
 	dec a	; $4C26
@@ -1915,7 +1915,7 @@ fn_01_4D0A:
 	xor a	; $4D21
 	ld ($C065),a	; $4D22
 	ld hl,$4E41	; $4D25
-	jp fn_00_2E7F	; $4D28
+	jp menu_draw	; $4D28
 
 fn_01_4D2B:
 	ld a,(joy_pressed)	; $4D2B
@@ -3018,8 +3018,8 @@ print_inline:
 	ex (sp),hl	; $5514
 	ret	; $5515
 
-fn_01_5516:
-	call fn_00_340F	; $5516
+print_item_name:
+	call item_name	; $5516
 
 print_text_hl:
 	push bc	; $5519
@@ -3154,7 +3154,7 @@ fn_01_55CA:
 	ld l,l	; $55CD
 	nop	; $55CE
 
-fn_01_55CF:
+print_number:
 	push bc	; $55CF
 	push hl	; $55D0
 	ld a,c	; $55D1
@@ -3214,7 +3214,7 @@ loc_01_5618:
 	ld a,($C0A7)	; $5621
 	jp print_char	; $5624
 
-fn_01_5627:
+print_number_auto:
 	push bc	; $5627
 	push de	; $5628
 	ex de,hl	; $5629
@@ -3238,7 +3238,7 @@ fn_01_5627:
 
 loc_01_5649:
 	ex de,hl	; $5649
-	call fn_01_55CF	; $564A
+	call print_number	; $564A
 	pop de	; $564D
 	pop bc	; $564E
 	ret	; $564F
@@ -3425,12 +3425,12 @@ fn_01_575E:
 	ld l,a	; $5763
 	ld h,$00	; $5764
 	ld bc,$0230	; $5766
-	call fn_01_55CF	; $5769
+	call print_number	; $5769
 	ld a,$3A	; $576C
 	call print_char	; $576E
 	pop af	; $5771
 	add a,$97	; $5772
-	jp fn_01_5516	; $5774
+	jp print_item_name	; $5774
 
 loc_01_5777:
 	call task_enter_1	; $5777
@@ -3499,14 +3499,14 @@ loc_01_57E9:
 
 loc_01_57EC:
 	call frame_tick	; $57EC
-	call fn_01_4BD2	; $57EF
+	call member_pick_step	; $57EF
 	jr z,loc_01_57EC	; $57F2
 	jp c,loc_01_58D0	; $57F4
 
 loc_01_57F7:
 	ld a,$0F	; $57F7
 	call fn_01_7552	; $57F9
-	ld hl,$C91F	; $57FC
+	ld hl,weapons_owned	; $57FC
 	ld b,$0F	; $57FF
 	call fn_01_58D7	; $5801
 	call print_inline	; $5804
@@ -3517,14 +3517,14 @@ loc_01_5814:
 	call frame_tick	; $5814
 	ld c,(ix+$1B)	; $5817
 	ld de,$0001	; $581A
-	call fn_01_49F9	; $581D
+	call menu_step_wrap	; $581D
 	jr z,loc_01_5814	; $5820
 	jp c,loc_01_58D0	; $5822
-	ld hl,$C91F	; $5825
+	ld hl,weapons_owned	; $5825
 	call fn_01_58E5	; $5828
 	ld a,(ix+$1C)	; $582B
 	add a,$25	; $582E
-	call fn_01_5516	; $5830
+	call print_item_name	; $5830
 	call print_newline	; $5833
 	ld hl,$5960	; $5836
 	ld de,$2501	; $5839
@@ -3532,7 +3532,7 @@ loc_01_5814:
 	ld c,(ix+$08)	; $583F
 	call member_record	; $5842
 	ld a,(iy+$0B)	; $5845
-	ld hl,$C91F	; $5848
+	ld hl,weapons_owned	; $5848
 	call fn_01_5949	; $584B
 	ld (iy+$0B),a	; $584E
 	or a	; $5851
@@ -3544,7 +3544,7 @@ fn_01_5855:
 
 loc_01_585B:
 	call frame_tick	; $585B
-	call fn_01_4BD2	; $585E
+	call member_pick_step	; $585E
 	jr z,loc_01_585B	; $5861
 	jp c,loc_01_58D0	; $5863
 	ld a,$10	; $5866
@@ -3560,14 +3560,14 @@ loc_01_5883:
 	call frame_tick	; $5883
 	ld c,(ix+$1B)	; $5886
 	ld de,$0002	; $5889
-	call fn_01_49F9	; $588C
+	call menu_step_wrap	; $588C
 	jr z,loc_01_5883	; $588F
 	jp c,loc_01_58D0	; $5891
 	ld hl,$C917	; $5894
 	call fn_01_58E5	; $5897
 	ld a,(ix+$1C)	; $589A
 	add a,$35	; $589D
-	call fn_01_5516	; $589F
+	call print_item_name	; $589F
 	call print_newline	; $58A2
 	ld hl,$5970	; $58A5
 	ld de,$3500	; $58A8
@@ -3642,7 +3642,7 @@ loc_01_5905:
 	.INCBIN "bank01.bin" SKIP $1913 READ 3	; text, 3 bytes
 	ld a,(iy+$1B)	; $5916
 	add a,$4D	; $5919
-	call fn_01_5516	; $591B
+	call print_item_name	; $591B
 	call print_inline	; $591E
 	.INCBIN "bank01.bin" SKIP $1921 READ 14	; text, 14 bytes
 	dec e	; $592F
@@ -3653,7 +3653,7 @@ loc_01_5905:
 loc_01_5938:
 	ld a,(ix+$1C)	; $5938
 	add a,d	; $593B
-	call fn_01_5516	; $593C
+	call print_item_name	; $593C
 	call wait_button	; $593F
 
 fn_01_5942:
@@ -3735,11 +3735,11 @@ loc_01_59CB:
 	ld l,a	; $59EE
 	ld h,$00	; $59EF
 	push hl	; $59F1
-	call fn_01_5627	; $59F2
+	call print_number_auto	; $59F2
 	call print_inline	; $59F5
 	.INCBIN "bank01.bin" SKIP $19F8 READ 8	; text, 8 bytes
 	pop hl	; $5A00
-	jp fn_01_4412	; $5A01
+	jp receive_gold	; $5A01
 
 loc_01_5A04:
 	call random	; $5A04
@@ -3843,7 +3843,7 @@ loc_01_5ACC:
 	ld a,(iy+$02)	; $5ACF
 	or a	; $5AD2
 	jr z,loc_01_5AEE	; $5AD3
-	call fn_01_4445	; $5AD5
+	call member_can_act	; $5AD5
 	jr c,loc_01_5AEE	; $5AD8
 	call random	; $5ADA
 	and $01	; $5ADD
@@ -3968,13 +3968,13 @@ loc_01_5BBE:
 
 loc_01_5BD4:
 	call frame_tick	; $5BD4
-	call fn_01_4BD2	; $5BD7
+	call member_pick_step	; $5BD7
 	jr z,loc_01_5BD4	; $5BDA
 	jp c,loc_01_5D4D	; $5BDC
 	ld a,(ix+$08)	; $5BDF
 	ld ($C97F),a	; $5BE2
 	ld c,a	; $5BE5
-	call fn_01_4466	; $5BE6
+	call member_able	; $5BE6
 	jr nc,loc_01_5BF1	; $5BE9
 	call fn_01_46D0	; $5BEB
 	jp loc_01_5D50	; $5BEE
@@ -3984,7 +3984,7 @@ loc_01_5BF1:
 	.INCBIN "bank01.bin" SKIP $1BF4 READ 13	; text, 13 bytes
 
 loc_01_5C01:
-	call fn_00_2E1B	; $5C01
+	call menu_window_clear	; $5C01
 	ld de,$CA66	; $5C04
 	ld c,(ix+$1C)	; $5C07
 	dec c	; $5C0A
@@ -4010,7 +4010,7 @@ loc_01_5C0D:
 	push af	; $5C27
 	ld a,c	; $5C28
 	add a,$65	; $5C29
-	call fn_00_340F	; $5C2B
+	call item_name	; $5C2B
 	push de	; $5C2E
 	call fn_00_2D6C	; $5C2F
 	pop de	; $5C32
@@ -4043,7 +4043,7 @@ loc_01_5C0D:
 loc_01_5C5F:
 	ld c,(ix+$1D)	; $5C5F
 	call fn_01_49A6	; $5C62
-	call fn_00_2E54	; $5C65
+	call menu_window_show	; $5C65
 
 loc_01_5C68:
 	call frame_tick	; $5C68
@@ -4116,7 +4116,7 @@ loc_01_5CE8:
 	call fn_01_40C9	; $5CE8
 	ld a,(ix+$1E)	; $5CEB
 	add a,$65	; $5CEE
-	call fn_01_5516	; $5CF0
+	call print_item_name	; $5CF0
 	ld a,$21	; $5CF3
 	call print_char	; $5CF5
 	call print_newline	; $5CF8
@@ -4408,7 +4408,7 @@ loc_01_5F4C:
 
 fn_01_5F65:
 	ld hl,$64CE	; $5F65
-	call fn_00_2E7F	; $5F68
+	call menu_draw	; $5F68
 	call print_inline	; $5F6B
 	.INCBIN "bank01.bin" SKIP $1F6E READ 14	; text, 14 bytes
 	ld (ix+$1A),$00	; $5F7C
@@ -4417,7 +4417,7 @@ loc_01_5F80:
 	call frame_tick	; $5F80
 	ld c,$04	; $5F83
 	ld de,$0102	; $5F85
-	call fn_01_49F9	; $5F88
+	call menu_step_wrap	; $5F88
 	jr z,loc_01_5F80	; $5F8B
 	jp c,loc_01_5D4D	; $5F8D
 	ld a,(ix+$1A)	; $5F90
@@ -4474,7 +4474,7 @@ fn_01_5FF7:
 	jp z,loc_01_5D3A	; $6001
 	call fn_01_6335	; $6004
 	ld hl,$64A5	; $6007
-	call fn_00_2E7F	; $600A
+	call menu_draw	; $600A
 	call print_inline	; $600D
 	.INCBIN "bank01.bin" SKIP $2010 READ 11	; text, 11 bytes
 	ld (ix+$1A),$00	; $601B
@@ -4483,7 +4483,7 @@ loc_01_601F:
 	call frame_tick	; $601F
 	ld c,$08	; $6022
 	ld de,$0102	; $6024
-	call fn_01_49F9	; $6027
+	call menu_step_wrap	; $6027
 	jr z,loc_01_601F	; $602A
 	jp c,loc_01_5D4D	; $602C
 	ld a,(ix+$1A)	; $602F
@@ -4502,7 +4502,7 @@ fn_01_604D:
 	call fn_01_641F	; $604D
 	call fn_01_6304	; $6050
 	ld c,(ix+$08)	; $6053
-	call fn_01_4445	; $6056
+	call member_can_act	; $6056
 	jp c,loc_01_5D3A	; $6059
 	ld a,$19	; $605C
 	call random_below	; $605E
@@ -4997,7 +4997,7 @@ fn_01_641F:
 
 loc_01_642E:
 	call frame_tick	; $642E
-	call fn_01_4BD2	; $6431
+	call member_pick_step	; $6431
 	jr z,loc_01_642E	; $6434
 	jp c,loc_01_5D4D	; $6436
 	jp task_return_3	; $6439
@@ -5544,7 +5544,7 @@ fn_01_6855:
 	ld (ix+$1C),l	; $6855
 	ld (ix+$1D),h	; $6858
 	call task_enter_3	; $685B
-	call fn_00_2E1B	; $685E
+	call menu_window_clear	; $685E
 
 fn_01_6861:
 	ld b,(ix+$1B)	; $6861
@@ -5572,13 +5572,13 @@ fn_01_6874:
 	ex de,hl	; $6880
 	inc c	; $6881
 	djnz loc_01_6869	; $6882
-	call fn_00_2E54	; $6884
+	call menu_window_show	; $6884
 
 loc_01_6887:
 	call frame_tick	; $6887
 	ld c,(ix+$1B)	; $688A
 	ld de,$0102	; $688D
-	call fn_01_49F9	; $6890
+	call menu_step_wrap	; $6890
 	jr z,loc_01_6887	; $6893
 	jr nc,loc_01_689E	; $6895
 	call fn_01_472D	; $6897
@@ -6379,10 +6379,10 @@ loc_01_6E2A:
 	or a	; $6E38
 	jr z,loc_01_6E4C	; $6E39
 	call fn_01_6E24	; $6E3B
-	call fn_01_49E0	; $6E3E
+	call cursor_off	; $6E3E
 	dec (ix+$1D)	; $6E41
 	call fn_01_6E24	; $6E44
-	call fn_01_49D5	; $6E47
+	call cursor_on	; $6E47
 	jr loc_01_6E07	; $6E4A
 
 loc_01_6E4C:
@@ -6400,10 +6400,10 @@ loc_01_6E51:
 	cp $07	; $6E63
 	jr nc,loc_01_6E78	; $6E65
 	call fn_01_6E24	; $6E67
-	call fn_01_49E0	; $6E6A
+	call cursor_off	; $6E6A
 	inc (ix+$1D)	; $6E6D
 	call fn_01_6E24	; $6E70
-	call fn_01_49D5	; $6E73
+	call cursor_on	; $6E73
 	jr loc_01_6E07	; $6E76
 
 loc_01_6E78:
@@ -6656,11 +6656,11 @@ loc_01_704D:
 	ld hl,$72A4	; $704E
 	call print_text_hl	; $7051
 	ld a,$02	; $7054
-	call fn_01_4A66	; $7056
+	call number_entry_start	; $7056
 
 loc_01_7059:
 	call frame_tick	; $7059
-	call fn_01_4A9F	; $705C
+	call number_entry_step	; $705C
 	jr c,loc_01_7059	; $705F
 	ld a,h	; $7061
 	or l	; $7062
@@ -6669,7 +6669,7 @@ loc_01_7059:
 fn_01_7065:
 	ld l,(hl)	; $7065
 	call fn_01_54CB	; $7066
-	call fn_01_4423	; $7069
+	call pay	; $7069
 	jr nc,loc_01_707A	; $706C
 	ld hl,$72AF	; $706E
 	call print_text_hl	; $7071
@@ -6681,9 +6681,9 @@ loc_01_707A:
 	ld hl,$72CD	; $707D
 	call print_text_hl	; $7080
 	call wait_button	; $7083
-	ld hl,($C96B)	; $7086
+	ld hl,(last_karma_time)	; $7086
 	call fn_00_33F6	; $7089
-	ld ($C96B),hl	; $708C
+	ld (last_karma_time),hl	; $708C
 	ld a,$02	; $708F
 	ld c,$01	; $7091
 	call nz,karma_gain	; $7093
@@ -6696,11 +6696,11 @@ loc_01_7099:
 	call wait_button	; $70A1
 	ld hl,$731E	; $70A4
 	call print_text_hl	; $70A7
-	call fn_01_4B5E	; $70AA
+	call yes_no_start	; $70AA
 
 loc_01_70AD:
 	call frame_tick	; $70AD
-	call fn_01_4B69	; $70B0
+	call yes_no_step	; $70B0
 	jr c,loc_01_70AD	; $70B3
 	call print_newline	; $70B5
 	bit 0,(ix+$07)	; $70B8
@@ -6718,7 +6718,7 @@ loc_01_70CF:
 	ld a,($C9AA)	; $70CF
 	or a	; $70D2
 	jr z,loc_01_70E2	; $70D3
-	ld hl,($C96B)	; $70D5
+	ld hl,(last_karma_time)	; $70D5
 	call fn_00_33F6	; $70D8
 	ld a,$0A	; $70DB
 	ld c,$07	; $70DD
@@ -6731,9 +6731,9 @@ loc_01_70E2:
 loc_01_70E6:
 	ld ($C9A7),a	; $70E6
 	call fn_01_6F8D	; $70E9
-	ld hl,($C96B)	; $70EC
+	ld hl,(last_karma_time)	; $70EC
 	call fn_00_33F6	; $70EF
-	ld ($C96B),hl	; $70F2
+	ld (last_karma_time),hl	; $70F2
 	call wait_button	; $70F5
 	ld a,($C9A7)	; $70F8
 	cp $09	; $70FB
@@ -6751,7 +6751,7 @@ loc_01_710C:
 	jp loc_01_6EE2	; $7115
 
 loc_01_7118:
-	call fn_00_2E1B	; $7118
+	call menu_window_clear	; $7118
 	ld a,(iy+$01)	; $711B
 	ld (ix+$1F),a	; $711E
 	ld l,(iy+$02)	; $7121
@@ -6767,12 +6767,12 @@ loc_01_7118:
 
 loc_01_713E:
 	push de	; $713E
-	call fn_00_2D69	; $713F
+	call menu_text	; $713F
 	pop de	; $7142
 	inc d	; $7143
 	inc d	; $7144
 	djnz loc_01_713E	; $7145
-	call fn_00_2E54	; $7147
+	call menu_window_show	; $7147
 	call fn_01_54CB	; $714A
 	ld hl,$732A	; $714D
 	call print_text_hl	; $7150
@@ -6782,7 +6782,7 @@ loc_01_7157:
 	call frame_tick	; $7157
 	ld c,$08	; $715A
 	ld de,$0102	; $715C
-	call fn_01_49F9	; $715F
+	call menu_step_wrap	; $715F
 	jr z,loc_01_7157	; $7162
 	jr c,loc_01_7157	; $7164
 	ld l,(ix+$10)	; $7166
@@ -7451,7 +7451,7 @@ fn_01_7633:
 	add a,$19	; $764B
 	ld e,a	; $764D
 	ld d,$01	; $764E
-	call fn_00_2D69	; $7650
+	call menu_text	; $7650
 	ld de,$CAA6	; $7653
 	ld a,(iy+$1A)	; $7656
 	call fn_00_2D9A	; $7659
@@ -7459,7 +7459,7 @@ fn_01_7633:
 	inc e	; $765D
 	ld a,(iy+$1B)	; $765E
 	add a,$4D	; $7661
-	call fn_00_340F	; $7663
+	call item_name	; $7663
 	call fn_00_2D6C	; $7666
 	ld a,(iy+$1C)	; $7669
 	cp $47	; $766C
@@ -7527,10 +7527,10 @@ loc_01_76CD:
 	add a,$35	; $7704
 	ld d,$10	; $7706
 	call fn_01_78EE	; $7708
-	jp fn_00_2E54	; $770B
+	jp menu_window_show	; $770B
 	ld hl,$796D	; $770E
 	call fn_01_78C2	; $7711
-	ld hl,$C91F	; $7714
+	ld hl,weapons_owned	; $7714
 	ld b,$0F	; $7717
 	call fn_01_78DE	; $7719
 
@@ -7549,7 +7549,7 @@ loc_01_7726:
 	inc iy	; $7732
 	inc c	; $7734
 	djnz loc_01_7726	; $7735
-	jp fn_00_2E54	; $7737
+	jp menu_window_show	; $7737
 	ld hl,$79B8	; $773A
 	call fn_01_78C2	; $773D
 	jr loc_01_771C	; $7740
@@ -7580,7 +7580,7 @@ loc_01_776C:
 	inc iy	; $776D
 	inc c	; $776F
 	djnz loc_01_775A	; $7770
-	jp fn_00_2E54	; $7772
+	jp menu_window_show	; $7772
 	ld hl,$79C0	; $7775
 	call fn_01_78C2	; $7778
 	jr loc_01_7750	; $777B
@@ -7605,7 +7605,7 @@ loc_01_778D:
 	ld a,(iy+$00)	; $77A2
 	or a	; $77A5
 	call nz,fn_01_78FC	; $77A6
-	jp fn_00_2E54	; $77A9
+	jp menu_window_show	; $77A9
 	ld hl,$798B	; $77AC
 	call fn_01_78C2	; $77AF
 	ld de,$CAE6	; $77B2
@@ -7647,7 +7647,7 @@ loc_01_778D:
 	or a	; $7811
 	sbc hl,de	; $7812
 	jp z,loc_01_78E5	; $7814
-	jp fn_00_2E54	; $7817
+	jp menu_window_show	; $7817
 
 fn_01_781A:
 	or a	; $781A
@@ -7715,7 +7715,7 @@ loc_01_7876:
 	inc iy	; $7883
 	inc c	; $7885
 	djnz loc_01_7876	; $7886
-	jp fn_00_2E54	; $7888
+	jp menu_window_show	; $7888
 	ld hl,$79C7	; $788B
 	jr loc_01_7869	; $788E
 	bit 0,c	; $7890
@@ -7745,11 +7745,11 @@ loc_01_78B2:
 	inc iy	; $78BA
 	inc c	; $78BC
 	djnz loc_01_78B2	; $78BD
-	jp fn_00_2E54	; $78BF
+	jp menu_window_show	; $78BF
 
 fn_01_78C2:
-	call fn_00_2E1B	; $78C2
-	jp fn_00_2D65	; $78C5
+	call menu_window_clear	; $78C2
+	jp menu_text_at	; $78C5
 
 fn_01_78C8:
 	ld l,a	; $78C8
@@ -7787,16 +7787,16 @@ loc_01_78DF:
 
 loc_01_78E5:
 	ld hl,$79CD	; $78E5
-	call fn_00_2D65	; $78E8
-	jp fn_00_2E54	; $78EB
+	call menu_text_at	; $78E8
+	jp menu_window_show	; $78EB
 
 fn_01_78EE:
-	call fn_00_340F	; $78EE
+	call item_name	; $78EE
 	call fn_01_78CE	; $78F1
 	neg	; $78F4
 	add a,$1F	; $78F6
 	ld e,a	; $78F8
-	jp fn_00_2D69	; $78F9
+	jp menu_text	; $78F9
 
 fn_01_78FC:
 	ld a,c	; $78FC
@@ -7856,7 +7856,7 @@ fn_01_7E1E:
 	jp loc_00_332D	; $7E1E
 
 fn_01_7E21:
-	jp fn_00_2E1B	; $7E21
+	jp menu_window_clear	; $7E21
 
 fn_01_7E24:
 	jp fn_00_38BD	; $7E24
@@ -7919,7 +7919,7 @@ fn_01_7E5D:
 	jp loc_00_0DE1	; $7E5D
 
 fn_01_7E60:
-	jp fn_00_2E7F	; $7E60
+	jp menu_draw	; $7E60
 
 fn_01_7E63:
 	jp fn_01_4999	; $7E63
@@ -8000,7 +8000,7 @@ fn_01_7EAE:
 	jp fn_00_3255	; $7EAE
 
 fn_01_7EB1:
-	jp fn_01_49F9	; $7EB1
+	jp menu_step_wrap	; $7EB1
 
 fn_01_7EB4:
 	jp loc_00_2DA7	; $7EB4
@@ -8027,13 +8027,13 @@ fn_01_7EC9:
 	jp loc_01_4483	; $7EC9
 
 fn_01_7ECC:
-	jp fn_01_49BD	; $7ECC
+	jp member_name	; $7ECC
 
 fn_01_7ECF:
-	jp fn_01_4466	; $7ECF
+	jp member_able	; $7ECF
 
 fn_01_7ED2:
-	jp fn_01_4445	; $7ED2
+	jp member_can_act	; $7ED2
 
 fn_01_7ED5:
 	jp fn_01_42F3	; $7ED5
@@ -8081,7 +8081,7 @@ fn_01_7EFF:
 	jp loc_00_2E88	; $7EFF
 
 fn_01_7F02:
-	jp fn_00_340F	; $7F02
+	jp item_name	; $7F02
 
 fn_01_7F05:
 	jp loc_00_2E02	; $7F05
@@ -8093,7 +8093,7 @@ fn_01_7F0B:
 	jp fn_00_2D5D	; $7F0B
 
 fn_01_7F0E:
-	jp fn_00_2D69	; $7F0E
+	jp menu_text	; $7F0E
 
 fn_01_7F11:
 	jp fn_01_40D1	; $7F11
@@ -8132,7 +8132,7 @@ fn_01_7F32:
 	jp fn_01_4753	; $7F32
 
 fn_01_7F35:
-	jp fn_01_4423	; $7F35
+	jp pay	; $7F35
 
 fn_01_7F38:
 	jp member_hurt	; $7F38
@@ -8144,7 +8144,7 @@ fn_01_7F3E:
 	jp loc_00_32BE	; $7F3E
 
 fn_01_7F41:
-	jp fn_00_2E54	; $7F41
+	jp menu_window_show	; $7F41
 
 fn_01_7F44:
 	jp fn_01_4117	; $7F44
@@ -8186,7 +8186,7 @@ fn_01_7F68:
 	jp fn_01_55A0	; $7F68
 
 fn_01_7F6B:
-	jp fn_01_5516	; $7F6B
+	jp print_item_name	; $7F6B
 
 fn_01_7F6E:
 	jp print_newline	; $7F6E

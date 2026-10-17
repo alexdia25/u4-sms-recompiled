@@ -128,6 +128,7 @@ alone runs the game.
   - every kind of shop;
   - map loading and walking;
   - the player's turn, moving, and all eight commands (Talk, Attack, Magic with spell mixing, the casting menu and the spells cast outside combat, Get Chest, Use, Ready, Search, Camp);
+  - a party member's turn in combat and the combat menu;
   - combat and karma rules;
   - the task system.
 
@@ -149,7 +150,9 @@ Each case is a key script that starts from power-on (`tests/start.keys`, which
 plays through creating a character to Moonglow) and then shops, talks to
 townsfolk or plays at random (`tests/make_cases.py` writes them). Every case
 must end in the same state with the C rewrites as without, and in shadow mode
-every call of a rewrite must match the original, time included. It needs only
+every call of a rewrite must match the original, time included. The C tasks,
+which shadow mode can't step through, must be entered at the same cycles as
+the original code (`tests/entry_times.py`). It needs only
 `build/u4.pak` from setup.
 
 ### Checking rewrites against the original

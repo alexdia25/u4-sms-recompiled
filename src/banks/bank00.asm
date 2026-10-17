@@ -833,12 +833,12 @@ loc_00_0494:
 	ld (hl),b	; $0497
 	ret	; $0498
 
-fn_00_0499:
+queue_text_copy:
 	ld a,($C063)	; $0499
 	cp $20	; $049C
 	jp c,loc_00_04A7	; $049E
 	call wait_vblank	; $04A1
-	jp fn_00_0499	; $04A4
+	jp queue_text_copy	; $04A4
 
 loc_00_04A7:
 	inc a	; $04A7
@@ -2383,7 +2383,7 @@ load_location:
 	ldir	; $0E7E
 	ld de,$D000	; $0E80
 	call decode_location_map	; $0E83
-	call fn_00_11C5	; $0E86
+	call mark_shorelines	; $0E86
 	ld a,(party_size)	; $0E89
 	dec a	; $0E8C
 	jr z,loc_00_0EB0	; $0E8D
@@ -2933,7 +2933,7 @@ loc_00_11B4:
 	pop bc	; $11C1
 	jp bank_pop	; $11C2
 
-fn_00_11C5:
+mark_shorelines:
 	push bc	; $11C5
 	push de	; $11C6
 	push hl	; $11C7
@@ -6170,7 +6170,7 @@ loc_00_2AC6:
 	pop de	; $2AC6
 	ret	; $2AC7
 
-fn_00_2AC8:
+multiply_16:
 	ld a,l	; $2AC8
 	ex af,af'	; $2AC9
 	ld a,h	; $2ACA
@@ -6299,7 +6299,7 @@ loc_00_2B3D:
 	ld h,a	; $2B3D
 	ret	; $2B3E
 
-fn_00_2B3F:
+divide_16:
 	ld a,d	; $2B3F
 	or e	; $2B40
 	jr z,loc_00_2B56	; $2B41
@@ -6616,7 +6616,7 @@ loc_00_2D31:
 	djnz loc_00_2D31	; $2D40
 	pop de	; $2D42
 	pop bc	; $2D43
-	jp fn_00_0499	; $2D44
+	jp queue_text_copy	; $2D44
 
 loc_00_2D47:
 	ld hl,$0000	; $2D47
@@ -6646,16 +6646,16 @@ fn_00_2D5D:
 	ld a,(hl)	; $2D5D
 	inc a	; $2D5E
 	ret z	; $2D5F
-	call fn_00_2D65	; $2D60
+	call menu_text_at	; $2D60
 	jr fn_00_2D5D	; $2D63
 
-fn_00_2D65:
+menu_text_at:
 	ld e,(hl)	; $2D65
 	inc hl	; $2D66
 	ld d,(hl)	; $2D67
 	inc hl	; $2D68
 
-fn_00_2D69:
+menu_text:
 	call fn_00_2D0C	; $2D69
 
 fn_00_2D6C:
@@ -6730,9 +6730,9 @@ loc_00_2DAD:
 loc_00_2DBE:
 	pop de	; $2DBE
 	ld b,$01	; $2DBF
-	jp fn_00_0499	; $2DC1
+	jp queue_text_copy	; $2DC1
 
-fn_00_2DC4:
+highlight_off:
 	call fn_00_2D0C	; $2DC4
 	push hl	; $2DC7
 	push bc	; $2DC8
@@ -6756,11 +6756,11 @@ loc_00_2DD1:
 	djnz loc_00_2DCE	; $2DDA
 	pop de	; $2DDC
 	pop bc	; $2DDD
-	call fn_00_0499	; $2DDE
+	call queue_text_copy	; $2DDE
 	pop hl	; $2DE1
 	ret	; $2DE2
 
-fn_00_2DE3:
+highlight_on:
 	call fn_00_2D0C	; $2DE3
 	push hl	; $2DE6
 	push bc	; $2DE7
@@ -6784,7 +6784,7 @@ loc_00_2DF0:
 	djnz loc_00_2DED	; $2DF9
 	pop de	; $2DFB
 	pop bc	; $2DFC
-	call fn_00_0499	; $2DFD
+	call queue_text_copy	; $2DFD
 	pop hl	; $2E00
 	ret	; $2E01
 
@@ -6810,9 +6810,9 @@ loc_00_2E09:
 	pop bc	; $2E14
 	djnz loc_00_2E06	; $2E15
 	pop bc	; $2E17
-	jp fn_00_0499	; $2E18
+	jp queue_text_copy	; $2E18
 
-fn_00_2E1B:
+menu_window_clear:
 	push bc	; $2E1B
 	push de	; $2E1C
 	push hl	; $2E1D
@@ -6835,7 +6835,7 @@ loc_00_2E23:
 	ret	; $2E37
 	.INCBIN "bank00.bin" SKIP $2E38 READ 28	; data, 28 bytes
 
-fn_00_2E54:
+menu_window_show:
 	push bc	; $2E54
 	push de	; $2E55
 	push hl	; $2E56
@@ -6865,13 +6865,13 @@ loc_00_2E64:
 	ret	; $2E78
 
 fn_00_2E79:
-	call fn_00_2E1B	; $2E79
+	call menu_window_clear	; $2E79
 	jp fn_00_2D5D	; $2E7C
 
-fn_00_2E7F:
-	call fn_00_2E1B	; $2E7F
+menu_draw:
+	call menu_window_clear	; $2E7F
 	call fn_00_2D5D	; $2E82
-	jp fn_00_2E54	; $2E85
+	jp menu_window_show	; $2E85
 
 loc_00_2E88:
 	call fn_00_2EB8	; $2E88
@@ -7315,7 +7315,7 @@ loc_00_3128:
 	ld (ix+$1A),l	; $3132
 	ld (ix+$1B),h	; $3135
 	ld bc,$0111	; $3138
-	call fn_00_0499	; $313B
+	call queue_text_copy	; $313B
 	ld e,(ix+$1C)	; $313E
 	ld d,(ix+$1D)	; $3141
 	ld hl,$FFC0	; $3144
@@ -7323,7 +7323,7 @@ loc_00_3128:
 	ld (ix+$1C),l	; $3148
 	ld (ix+$1D),h	; $314B
 	ld bc,$0111	; $314E
-	call fn_00_0499	; $3151
+	call queue_text_copy	; $3151
 	call fn_00_305A	; $3154
 	dec (ix+$16)	; $3157
 	jr nz,loc_00_3128	; $315A
@@ -7350,7 +7350,7 @@ loc_00_3181:
 	ld d,(ix+$1B)	; $3184
 	ld c,(ix+$1C)	; $3187
 	ld b,(ix+$1D)	; $318A
-	call fn_00_0499	; $318D
+	call queue_text_copy	; $318D
 	ld hl,$FFBE	; $3190
 	add hl,de	; $3193
 	ld (ix+$1A),l	; $3194
@@ -7382,7 +7382,7 @@ loc_00_31DE:
 	ld e,(ix+$1A)	; $31DE
 	ld d,(ix+$1B)	; $31E1
 	ld bc,$0111	; $31E4
-	call fn_00_0499	; $31E7
+	call queue_text_copy	; $31E7
 	ld hl,$0040	; $31EA
 	add hl,de	; $31ED
 	ld (ix+$1A),l	; $31EE
@@ -7390,7 +7390,7 @@ loc_00_31DE:
 	ld e,(ix+$1C)	; $31F4
 	ld d,(ix+$1D)	; $31F7
 	ld bc,$0111	; $31FA
-	call fn_00_0499	; $31FD
+	call queue_text_copy	; $31FD
 	ld hl,$FFC0	; $3200
 	add hl,de	; $3203
 	ld (ix+$1C),l	; $3204
@@ -7398,7 +7398,7 @@ loc_00_31DE:
 	ld e,(ix+$1E)	; $320A
 	ld d,(ix+$1F)	; $320D
 	ld bc,$1201	; $3210
-	call fn_00_0499	; $3213
+	call queue_text_copy	; $3213
 	inc e	; $3216
 	inc e	; $3217
 	ld (ix+$1E),e	; $3218
@@ -7406,7 +7406,7 @@ loc_00_31DE:
 	ld e,(ix+$20)	; $321E
 	ld d,(ix+$21)	; $3221
 	ld bc,$1201	; $3224
-	call fn_00_0499	; $3227
+	call queue_text_copy	; $3227
 	dec e	; $322A
 	dec e	; $322B
 	ld (ix+$20),e	; $322C
@@ -7424,7 +7424,7 @@ fn_00_323D:
 	call fn_00_3255	; $3243
 	ld de,$CA42	; $3246
 	ld bc,$1211	; $3249
-	call fn_00_0499	; $324C
+	call queue_text_copy	; $324C
 	pop hl	; $324F
 	pop de	; $3250
 	pop bc	; $3251
@@ -7745,7 +7745,7 @@ loc_00_3401:
 	pop bc	; $340D
 	ret	; $340E
 
-fn_00_340F:
+item_name:
 	push bc	; $340F
 	push de	; $3410
 	ld c,a	; $3411
@@ -8002,7 +8002,7 @@ loc_00_35B8:
 	inc (ix+$1B)	; $35C0
 
 loc_00_35C3:
-	call fn_00_2E1B	; $35C3
+	call menu_window_clear	; $35C3
 	ld de,$CAA6	; $35C6
 	ld c,(ix+$1C)	; $35C9
 	ld a,(ix+$1B)	; $35CC
@@ -8039,8 +8039,8 @@ loc_00_35EB:
 	ld a,(ix+$1D)	; $35F8
 	add a,a	; $35FB
 	inc a	; $35FC
-	call fn_01_49D5	; $35FD
-	call fn_00_2E54	; $3600
+	call cursor_on	; $35FD
+	call menu_window_show	; $3600
 	jp bank_pop	; $3603
 	.INCBIN "bank00.bin" SKIP $3606 READ 7	; data, 7 bytes
 
@@ -8137,7 +8137,7 @@ loc_00_369F:
 fn_00_36A3:
 	ld a,$1A	; $36A3
 	call bank_push	; $36A5
-	call fn_00_2E1B	; $36A8
+	call menu_window_clear	; $36A8
 	ld de,$CAA6	; $36AB
 	ld c,(ix+$1B)	; $36AE
 	ld b,$08	; $36B1
@@ -8163,8 +8163,8 @@ loc_00_36CC:
 	ld a,(ix+$1C)	; $36CC
 	add a,a	; $36CF
 	inc a	; $36D0
-	call fn_01_49D5	; $36D1
-	call fn_00_2E54	; $36D4
+	call cursor_on	; $36D1
+	call menu_window_show	; $36D4
 	jp bank_pop	; $36D7
 
 cap_9999:
@@ -8695,7 +8695,7 @@ damage_monster:
 	ld h,$00	; $3A05
 	ld c,b	; $3A07
 	call member_gain_xp	; $3A08
-	call fn_01_5627	; $3A0B
+	call print_number_auto	; $3A0B
 
 loc_00_3A0E:
 	ld (iy+$05),$00	; $3A0E
@@ -9045,7 +9045,7 @@ loc_00_3CA6:
 	ld bc,$0800	; $3CCB
 
 loc_00_3CCE:
-	call fn_01_4445	; $3CCE
+	call member_can_act	; $3CCE
 	jr nc,loc_00_3CD9	; $3CD1
 	ld (iy+$02),$00	; $3CD3
 	jr loc_00_3CE2	; $3CD7
@@ -9155,7 +9155,7 @@ loc_00_3DFF:
 	ld (iy+$00),a	; $3E02
 	ex af,af'	; $3E05
 	ld (iy+$01),a	; $3E06
-	call fn_01_4445	; $3E09
+	call member_can_act	; $3E09
 	ld a,$00	; $3E0C
 	jr c,loc_00_3E13	; $3E0E
 	call fn_01_42F3	; $3E10

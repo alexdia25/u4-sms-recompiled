@@ -49,11 +49,13 @@ BANKS 32
 .DEFINE food                     $C907	; 16-bit, shown as F:
 .DEFINE gold                     $C909	; 16-bit, shown as G:
 .DEFINE karma                    $C90B	; 8 bytes, one per virtue (Honesty..Humility)
+.DEFINE weapons_owned            $C91F	; count per weapon
 .DEFINE reagents                 $C92F	; 8 counts
 .DEFINE mixtures                 $C937	; 26 counts, max 99
 .DEFINE party_x                  $C953	; world/town X (PC Ultima IV coordinates)
 .DEFINE party_y                  $C954
 .DEFINE party_size               $C957
+.DEFINE last_karma_time          $C96B	; moves/16 when karma for giving/answering was last granted ($33F6)
 .DEFINE world_return_x           $C96D	; where leaving a town puts the party
 .DEFINE world_return_y           $C96E
 .DEFINE world_x_saved            $C971

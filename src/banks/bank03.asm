@@ -286,13 +286,13 @@ loc_03_8333:
 	ld d,$CD	; $8333
 	ld e,(ix+$1A)	; $8335
 	ld bc,$0A01	; $8338
-	call fn_00_0499	; $833B
+	call queue_text_copy	; $833B
 	inc e	; $833E
 	inc e	; $833F
 	ld (ix+$1A),e	; $8340
 	ld e,(ix+$1B)	; $8343
 	ld bc,$0A01	; $8346
-	call fn_00_0499	; $8349
+	call queue_text_copy	; $8349
 	dec e	; $834C
 	dec e	; $834D
 	ld (ix+$1B),e	; $834E
@@ -1969,7 +1969,7 @@ loc_03_94D3:
 	ld (ix+$1B),l	; $94DD
 	ld (ix+$1C),h	; $94E0
 	ld bc,$021A	; $94E3
-	call fn_00_0499	; $94E6
+	call queue_text_copy	; $94E6
 	call yield	; $94E9
 	dec (ix+$17)	; $94EC
 	jr nz,loc_03_94D3	; $94EF
@@ -2169,7 +2169,7 @@ loc_03_9658:
 	call fn_03_96B3	; $966C
 	ld de,$CA58	; $966F
 	ld bc,$0E08	; $9672
-	call fn_00_0499	; $9675
+	call queue_text_copy	; $9675
 	call yield	; $9678
 	ld hl,$C636	; $967B
 	inc (hl)	; $967E
@@ -2231,7 +2231,7 @@ loc_03_9703:
 	ld (ix+$1A),l	; $970D
 	ld (ix+$1B),h	; $9710
 	ld bc,$0406	; $9713
-	call fn_00_0499	; $9716
+	call queue_text_copy	; $9716
 	call yield	; $9719
 	dec (ix+$16)	; $971C
 	jr nz,loc_03_9703	; $971F
@@ -2330,7 +2330,7 @@ loc_03_9943:
 	ld (ix+$1B),l	; $994D
 	ld (ix+$1C),h	; $9950
 	ld bc,$0120	; $9953
-	call fn_00_0499	; $9956
+	call queue_text_copy	; $9956
 	call yield	; $9959
 	dec (ix+$17)	; $995C
 	jr nz,loc_03_9943	; $995F
@@ -2695,7 +2695,7 @@ loc_03_9D37:
 	xor a	; $9D37
 	ld ($C97F),a	; $9D38
 
-loc_03_9D3B:
+combat_member_turn:
 	call fn_01_7E8A	; $9D3B
 	ld a,(iy+$02)	; $9D3E
 	or a	; $9D41
@@ -2715,7 +2715,7 @@ loc_03_9D3B:
 	call fn_01_7F6B	; $9D68
 	call fn_01_7F6E	; $9D6B
 
-loc_03_9D6E:
+combat_member_prompt:
 	call fn_01_7E8A	; $9D6E
 	ld l,(iy+$00)	; $9D71
 	ld h,(iy+$01)	; $9D74
@@ -2734,8 +2734,8 @@ loc_03_9D8B:
 	call fn_01_7E18	; $9D94
 	and $20	; $9D97
 	jr z,loc_03_9D8B	; $9D99
-	call fn_03_A073	; $9D9B
-	jr c,loc_03_9D6E	; $9D9E
+	call combat_menu	; $9D9B
+	jr c,combat_member_prompt	; $9D9E
 
 loc_03_9DA0:
 	call fn_03_9DFA	; $9DA0
@@ -2746,7 +2746,7 @@ loc_03_9DA0:
 	ld a,(hl)	; $9DAC
 	ld hl,party_size	; $9DAD
 	cp (hl)	; $9DB0
-	jp c,loc_03_9D3B	; $9DB1
+	jp c,combat_member_turn	; $9DB1
 	call fn_03_A493	; $9DB4
 	call fn_03_9FD8	; $9DB7
 	jr nc,loc_03_9DBF	; $9DBA
@@ -3088,7 +3088,7 @@ fn_03_A029:
 	ret	; $A036
 	.INCBIN "bank03.bin" SKIP $2037 READ 60	; data, 60 bytes
 
-fn_03_A073:
+combat_menu:
 	call task_enter_1	; $A073
 	call fn_01_7F17	; $A076
 	ld hl,$AC70	; $A079
@@ -3206,7 +3206,7 @@ loc_03_A14F:
 	jr nz,loc_03_A172	; $A158
 
 loc_03_A15A:
-	ld hl,$C91F	; $A15A
+	ld hl,weapons_owned	; $A15A
 	rst $30	; $A15D
 	ld a,(hl)	; $A15E
 	or a	; $A15F
@@ -5850,7 +5850,7 @@ loc_03_B749:
 	ld ($CE62),hl	; $B762
 	ld de,$CA42	; $B765
 	ld bc,$1111	; $B768
-	call fn_00_0499	; $B76B
+	call queue_text_copy	; $B76B
 	call yield	; $B76E
 	dec (ix+$17)	; $B771
 	jr nz,loc_03_B741	; $B774

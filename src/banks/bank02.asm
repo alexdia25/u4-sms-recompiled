@@ -3,13 +3,13 @@
 .ORG $0000
 
 
-loc_02_8000:
+command_menu:
 	call task_enter_1	; $8000
 	call fn_01_40C9	; $8003
 	call print_inline	; $8006
 	.INCBIN "bank02.bin" SKIP $0009 READ 9	; text, 9 bytes
 	ld hl,$9592	; $8012
-	call fn_00_2E7F	; $8015
+	call menu_draw	; $8015
 	ld hl,$0B0A	; $8018
 	call fn_00_06DA	; $801B
 	ld (ix+$1A),$00	; $801E
@@ -18,7 +18,7 @@ loc_02_8022:
 	call frame_tick	; $8022
 	ld c,$08	; $8025
 	ld de,$0102	; $8027
-	call fn_01_49F9	; $802A
+	call menu_step_wrap	; $802A
 	jr z,loc_02_8022	; $802D
 	jp c,loc_02_8081	; $802F
 	ld hl,$9582	; $8032
@@ -60,6 +60,8 @@ loc_02_8084:
 	call fn_00_06D4	; $808A
 	or a	; $808D
 	jp task_return_1	; $808E
+
+talk_command:
 	call fn_01_4324	; $8091
 	call print_newline	; $8094
 	call fn_01_4C28	; $8097
@@ -227,10 +229,10 @@ loc_02_81DD:
 	or a	; $81EB
 	jr z,loc_02_81FF	; $81EC
 	call fn_02_840B	; $81EE
-	call fn_01_49E0	; $81F1
+	call cursor_off	; $81F1
 	dec (ix+$1C)	; $81F4
 	call fn_02_840B	; $81F7
-	call fn_01_49D5	; $81FA
+	call cursor_on	; $81FA
 	jr loc_02_81C0	; $81FD
 
 loc_02_81FF:
@@ -249,10 +251,10 @@ loc_02_8204:
 	cp $07	; $8217
 	jr nc,loc_02_822C	; $8219
 	call fn_02_840B	; $821B
-	call fn_01_49E0	; $821E
+	call cursor_off	; $821E
 	inc (ix+$1C)	; $8221
 	call fn_02_840B	; $8224
-	call fn_01_49D5	; $8227
+	call cursor_on	; $8227
 	jr loc_02_81C0	; $822A
 
 loc_02_822C:
@@ -432,11 +434,11 @@ loc_02_8359:
 loc_02_8375:
 	ld a,$28	; $8375
 	call print_message	; $8377
-	call fn_01_4B5E	; $837A
+	call yes_no_start	; $837A
 
 loc_02_837D:
 	call frame_tick	; $837D
-	call fn_01_4B69	; $8380
+	call yes_no_step	; $8380
 	jr c,loc_02_837D	; $8383
 	bit 0,(ix+$07)	; $8385
 	jr nz,loc_02_8392	; $8389
@@ -551,6 +553,8 @@ loc_02_8466:
 	call wait_button	; $8482
 	call fn_01_54CB	; $8485
 	jr loc_02_8466	; $8488
+
+attack_command:
 	call fn_01_4324	; $848A
 	call print_newline	; $848D
 	call fn_02_957C	; $8490
@@ -766,8 +770,10 @@ loc_02_860C:
 	call fn_01_430A	; $8636
 	call nc,fn_02_85EE	; $8639
 	jp loc_00_3B52	; $863C
+
+magic_command:
 	ld hl,$95D9	; $863F
-	call fn_00_2E7F	; $8642
+	call menu_draw	; $8642
 	ld a,$2D	; $8645
 	call print_char	; $8647
 	ld (ix+$1A),$00	; $864A
@@ -776,7 +782,7 @@ loc_02_864E:
 	call frame_tick	; $864E
 	ld c,$02	; $8651
 	ld de,$0102	; $8653
-	call fn_01_49F9	; $8656
+	call menu_step_wrap	; $8656
 	jr z,loc_02_864E	; $8659
 	jp c,loc_02_8081	; $865B
 	ld hl,$95D5	; $865E
@@ -843,7 +849,7 @@ loc_02_86E7:
 loc_02_86E9:
 	ld a,(ix+$1C)	; $86E9
 	add a,$02	; $86EC
-	call fn_01_49E0	; $86EE
+	call cursor_off	; $86EE
 	ld a,(ix+$1C)	; $86F1
 	add a,b	; $86F4
 	ld l,a	; $86F5
@@ -857,7 +863,7 @@ loc_02_86FE:
 loc_02_8701:
 	ld a,(ix+$1C)	; $8701
 	add a,$02	; $8704
-	call fn_01_49D5	; $8706
+	call cursor_on	; $8706
 	jr loc_02_86C0	; $8709
 
 loc_02_870B:
@@ -879,7 +885,7 @@ loc_02_8726:
 	add a,(ix+$1C)	; $8726
 	ld (ix+$1C),a	; $8729
 	add a,$65	; $872C
-	call fn_01_5516	; $872E
+	call print_item_name	; $872E
 	ld (ix+$1E),$00	; $8731
 	ld (ix+$1F),$00	; $8735
 	ld a,$11	; $8739
@@ -914,7 +920,7 @@ loc_02_8761:
 
 loc_02_8763:
 	call fn_02_87B1	; $8763
-	call fn_01_49E0	; $8766
+	call cursor_off	; $8766
 	ld a,(ix+$1E)	; $8769
 	add a,b	; $876C
 	ld l,a	; $876D
@@ -922,7 +928,7 @@ loc_02_8763:
 	call divide_8	; $8770
 	ld (ix+$1E),h	; $8773
 	call fn_02_87B1	; $8776
-	call fn_01_49D5	; $8779
+	call cursor_on	; $8779
 	call fn_01_40D9	; $877C
 	jr loc_02_8740	; $877F
 
@@ -950,7 +956,7 @@ loc_02_879B:
 	pop hl	; $87A4
 	ld (text_col),hl	; $87A5
 	call fn_02_87B1	; $87A8
-	call fn_01_49D5	; $87AB
+	call cursor_on	; $87AB
 	jp loc_02_8740	; $87AE
 
 fn_02_87B1:
@@ -1004,11 +1010,11 @@ loc_02_8801:
 	call print_inline	; $8801
 	.INCBIN "bank02.bin" SKIP $0804 READ 20	; text, 20 bytes
 	ld a,$02	; $8818
-	call fn_01_4A66	; $881A
+	call number_entry_start	; $881A
 
 loc_02_881D:
 	call frame_tick	; $881D
-	call fn_01_4A9F	; $8820
+	call number_entry_step	; $8820
 	jr c,loc_02_881D	; $8823
 	ld (ix+$20),l	; $8825
 	call print_newline	; $8828
@@ -1087,7 +1093,7 @@ loc_02_88BF:
 	.INCBIN "bank02.bin" SKIP $08C2 READ 35	; text, 35 bytes
 	ld l,(ix+$21)	; $88E5
 	ld h,$00	; $88E8
-	call fn_01_5627	; $88EA
+	call print_number_auto	; $88EA
 
 loc_02_88ED:
 	call print_newline	; $88ED
@@ -1095,6 +1101,8 @@ loc_02_88ED:
 
 spell_recipes:
 	.INCBIN "bank02.bin" SKIP $08F3 READ 26	; data, 26 bytes
+
+get_chest:
 	call print_newline	; $890D
 	call fn_02_957C	; $8910
 	jp z,loc_02_8077	; $8913
@@ -1104,16 +1112,18 @@ spell_recipes:
 
 loc_02_8928:
 	call frame_tick	; $8928
-	call fn_01_4BD2	; $892B
+	call member_pick_step	; $892B
 	jr z,loc_02_8928	; $892E
 	jp c,loc_02_8081	; $8930
 	ld c,(ix+$08)	; $8933
-	call fn_01_4466	; $8936
+	call member_able	; $8936
 	jp c,loc_02_807C	; $8939
 	call fn_01_5B13	; $893C
 	jp loc_02_8084	; $893F
+
+use_command:
 	ld hl,$95FA	; $8942
-	call fn_00_2E7F	; $8945
+	call menu_draw	; $8945
 	ld a,$2D	; $8948
 	call print_char	; $894A
 	ld (ix+$1A),$00	; $894D
@@ -1122,7 +1132,7 @@ loc_02_8951:
 	call frame_tick	; $8951
 	ld c,$02	; $8954
 	ld de,$0102	; $8956
-	call fn_01_49F9	; $8959
+	call menu_step_wrap	; $8959
 	jr z,loc_02_8951	; $895C
 	jp c,loc_02_8081	; $895E
 	ld hl,$95F6	; $8961
@@ -1149,7 +1159,7 @@ loc_02_8988:
 
 loc_02_8994:
 	ld de,$0202	; $8994
-	call fn_01_49F9	; $8997
+	call menu_step_wrap	; $8997
 	jr z,loc_02_8988	; $899A
 	jp c,loc_02_8081	; $899C
 	call fn_01_4324	; $899F
@@ -1310,8 +1320,10 @@ fn_02_8B1A:
 loc_02_8B22:
 	call fn_01_651E	; $8B22
 	jp loc_02_8084	; $8B25
+
+ready_command:
 	ld hl,$9613	; $8B28
-	call fn_00_2E7F	; $8B2B
+	call menu_draw	; $8B2B
 	ld a,$2D	; $8B2E
 	call print_char	; $8B30
 	ld (ix+$1A),$00	; $8B33
@@ -1320,7 +1332,7 @@ loc_02_8B37:
 	call frame_tick	; $8B37
 	ld c,$02	; $8B3A
 	ld de,$0102	; $8B3C
-	call fn_01_49F9	; $8B3F
+	call menu_step_wrap	; $8B3F
 	jr z,loc_02_8B37	; $8B42
 	jp c,loc_02_8081	; $8B44
 	ld hl,$960F	; $8B47
@@ -1336,6 +1348,8 @@ loc_02_8B5B:
 
 loc_02_8B5E:
 	jp loc_02_8084	; $8B5E
+
+search_command:
 	call fn_01_4324	; $8B61
 	call print_newline	; $8B64
 	call fn_02_957C	; $8B67
@@ -1514,7 +1528,7 @@ sub_02_8D3B:
 	ld bc,$0800	; $8D47
 	call fn_00_0C49	; $8D4A
 	ld hl,$8E20	; $8D4D
-	call fn_00_2E7F	; $8D50
+	call menu_draw	; $8D50
 	ld (ix+$1A),$00	; $8D53
 	ld (ix+$1B),$00	; $8D57
 
@@ -1529,7 +1543,7 @@ loc_02_8D61:
 	call yield	; $8D6B
 	ld c,$10	; $8D6E
 	ld de,$0001	; $8D70
-	call fn_01_49F9	; $8D73
+	call menu_step_wrap	; $8D73
 	jr z,loc_02_8D61	; $8D76
 	jr c,loc_02_8D94	; $8D78
 	set 0,(ix+$1B)	; $8D7A
@@ -1588,7 +1602,7 @@ sub_02_8DE5:
 	call fn_02_8BD1	; $8DF6
 	pop af	; $8DF9
 	add a,$97	; $8DFA
-	call fn_01_5516	; $8DFC
+	call print_item_name	; $8DFC
 	ld hl,$8FC8	; $8DFF
 	call print_text_hl	; $8E02
 	ld c,$00	; $8E05
@@ -1625,11 +1639,11 @@ loc_02_9002:
 
 loc_02_9031:
 	call frame_tick	; $9031
-	call fn_01_4BD2	; $9034
+	call member_pick_step	; $9034
 	jr z,loc_02_9031	; $9037
 	jp c,loc_02_8081	; $9039
 	ld c,(ix+$08)	; $903C
-	call fn_01_4466	; $903F
+	call member_able	; $903F
 	jp c,loc_02_807C	; $9042
 	call member_record	; $9045
 	ld hl,(party_x)	; $9048
@@ -1683,11 +1697,11 @@ loc_02_90E3:
 
 loc_02_910B:
 	call frame_tick	; $910B
-	call fn_01_4BD2	; $910E
+	call member_pick_step	; $910E
 	jr z,loc_02_910B	; $9111
 	jp c,loc_02_8081	; $9113
 	ld c,(ix+$08)	; $9116
-	call fn_01_4466	; $9119
+	call member_able	; $9119
 	jp c,loc_02_807C	; $911C
 	call member_record	; $911F
 	ld a,($C990)	; $9122
@@ -1768,7 +1782,7 @@ loc_02_91E4:
 	.INCBIN "bank02.bin" SKIP $11F9 READ 14	; text, 14 bytes
 	ld a,(location)	; $9207
 	add a,$8E	; $920A
-	call fn_01_5516	; $920C
+	call print_item_name	; $920C
 	call print_inline	; $920F
 	.INCBIN "bank02.bin" SKIP $1212 READ 9	; text, 9 bytes
 	ld a,$05	; $921B
@@ -1799,8 +1813,10 @@ fn_02_922D:
 	pop de	; $9251
 	pop bc	; $9252
 	ret	; $9253
+
+camp_menu:
 	ld hl,$962E	; $9254
-	call fn_00_2E7F	; $9257
+	call menu_draw	; $9257
 	ld a,$2D	; $925A
 	call print_char	; $925C
 	ld (ix+$1A),$00	; $925F
@@ -1809,7 +1825,7 @@ loc_02_9263:
 	call frame_tick	; $9263
 	ld c,$04	; $9266
 	ld de,$0102	; $9268
-	call fn_01_49F9	; $926B
+	call menu_step_wrap	; $926B
 	jr z,loc_02_9263	; $926E
 	jp c,loc_02_8081	; $9270
 	ld hl,$9626	; $9273
@@ -1864,7 +1880,7 @@ loc_02_92E2:
 
 loc_02_92F3:
 	call frame_tick	; $92F3
-	call fn_01_4BD2	; $92F6
+	call member_pick_step	; $92F6
 	jr z,loc_02_92F3	; $92F9
 	jp c,loc_02_8081	; $92FB
 	ld a,(ix+$08)	; $92FE
@@ -1876,7 +1892,7 @@ loc_02_92F3:
 
 loc_02_9315:
 	call frame_tick	; $9315
-	call fn_01_4BD2	; $9318
+	call member_pick_step	; $9318
 	jr z,loc_02_9315	; $931B
 	jp c,loc_02_8081	; $931D
 	ld a,(ix+$08)	; $9320
@@ -2035,7 +2051,7 @@ fn_02_9498:
 	ld hl,$80C0	; $94B0
 	ld de,$CDA6	; $94B3
 	call fn_02_94BC	; $94B6
-	jp fn_00_2E54	; $94B9
+	jp menu_window_show	; $94B9
 
 fn_02_94BC:
 	push de	; $94BC
@@ -2077,11 +2093,11 @@ fn_02_94BC:
 
 fn_02_950F:
 	call fn_02_951B	; $950F
-	jp fn_00_2DE3	; $9512
+	jp highlight_on	; $9512
 
 fn_02_9515:
 	call fn_02_951B	; $9515
-	jp fn_00_2DC4	; $9518
+	jp highlight_off	; $9518
 
 fn_02_951B:
 	ld a,(ix+$1A)	; $951B
@@ -2200,11 +2216,11 @@ fn_02_97D5:
 	call print_message	; $97F3
 	ld a,$32	; $97F6
 	call print_message	; $97F8
-	call fn_02_AB4B	; $97FB
+	call buy_or_sell	; $97FB
 
 loc_02_97FE:
 	call frame_tick	; $97FE
-	call fn_02_AB55	; $9801
+	call buy_or_sell_step	; $9801
 	jr z,loc_02_97FE	; $9804
 	push af	; $9806
 	ld a,$08	; $9807
@@ -2264,7 +2280,7 @@ loc_02_98A5:
 	call print_newline	; $98A5
 	ld a,$1E	; $98A8
 	call print_message	; $98AA
-	call fn_00_2E1B	; $98AD
+	call menu_window_clear	; $98AD
 	ld (ix+$1A),$00	; $98B0
 	ld b,$04	; $98B4
 	ld de,$0213	; $98B6
@@ -2274,22 +2290,22 @@ loc_02_98B9:
 	push de	; $98BA
 	call fn_02_9999	; $98BB
 	add a,$25	; $98BE
-	call fn_00_340F	; $98C0
-	call fn_00_2D69	; $98C3
+	call item_name	; $98C0
+	call menu_text	; $98C3
 	pop de	; $98C6
 	pop bc	; $98C7
 	inc d	; $98C8
 	inc d	; $98C9
 	inc (ix+$1A)	; $98CA
 	djnz loc_02_98B9	; $98CD
-	call fn_00_2E54	; $98CF
+	call menu_window_show	; $98CF
 	ld (ix+$1A),$00	; $98D2
 
 loc_02_98D6:
 	call frame_tick	; $98D6
 	ld c,$04	; $98D9
 	ld de,$0102	; $98DB
-	call fn_01_49F4	; $98DE
+	call menu_step	; $98DE
 	jr z,loc_02_98D6	; $98E1
 	ld a,$08	; $98E3
 	call fn_01_7552	; $98E5
@@ -2301,7 +2317,7 @@ loc_02_98D6:
 	ld a,(ix+$1B)	; $98F7
 	ld hl,$9841	; $98FA
 	rst $20	; $98FD
-	call fn_01_4439	; $98FE
+	call can_afford	; $98FE
 	ld a,$1F	; $9901
 	jr c,loc_02_9971	; $9903
 	ld a,(ix+$1B)	; $9905
@@ -2312,11 +2328,11 @@ loc_02_98D6:
 	ld a,$20	; $9913
 	call print_message	; $9915
 	ld a,$02	; $9918
-	call fn_01_4A66	; $991A
+	call number_entry_start	; $991A
 
 loc_02_991D:
 	call frame_tick	; $991D
-	call fn_01_4A9F	; $9920
+	call number_entry_step	; $9920
 	jr c,loc_02_991D	; $9923
 	ld (ix+$21),l	; $9925
 	call fn_01_54CB	; $9928
@@ -2338,9 +2354,9 @@ loc_02_9944:
 	jr c,loc_02_9971	; $9946
 	djnz loc_02_9944	; $9948
 	ld (gold),hl	; $994A
-	call fn_01_43DA	; $994D
+	call show_gold	; $994D
 	ld a,(ix+$1B)	; $9950
-	ld hl,$C91F	; $9953
+	ld hl,weapons_owned	; $9953
 	rst $30	; $9956
 	ld a,(hl)	; $9957
 	add a,(ix+$21)	; $9958
@@ -2363,11 +2379,11 @@ loc_02_9971:
 	call fn_01_54CB	; $9977
 	ld a,$22	; $997A
 	call print_message	; $997C
-	call fn_01_4B5E	; $997F
+	call yes_no_start	; $997F
 
 loc_02_9982:
 	call frame_tick	; $9982
-	call fn_01_4B69	; $9985
+	call yes_no_step	; $9985
 	jr c,loc_02_9982	; $9988
 	ld a,$08	; $998A
 	call fn_01_7552	; $998C
@@ -2404,7 +2420,7 @@ loc_02_99C9:
 	call frame_tick	; $99C9
 	ld c,(ix+$1B)	; $99CC
 	ld de,$0101	; $99CF
-	call fn_01_49F4	; $99D2
+	call menu_step	; $99D2
 	jr z,loc_02_99C9	; $99D5
 	ld a,$08	; $99D7
 	call fn_01_7552	; $99D9
@@ -2413,7 +2429,7 @@ loc_02_99C9:
 	inc b	; $99E2
 	xor a	; $99E3
 	ld c,a	; $99E4
-	ld hl,$C91F	; $99E5
+	ld hl,weapons_owned	; $99E5
 
 loc_02_99E8:
 	inc hl	; $99E8
@@ -2441,11 +2457,11 @@ loc_02_99E8:
 	ld a,$27	; $9A1C
 	call print_message	; $9A1E
 	ld a,$02	; $9A21
-	call fn_01_4A66	; $9A23
+	call number_entry_start	; $9A23
 
 loc_02_9A26:
 	call frame_tick	; $9A26
-	call fn_01_4A9F	; $9A29
+	call number_entry_step	; $9A29
 	jr c,loc_02_9A26	; $9A2C
 	ld (ix+$21),l	; $9A2E
 	call fn_01_54CB	; $9A31
@@ -2496,11 +2512,11 @@ loc_02_9A8D:
 	call fn_01_54CB	; $9A90
 	ld a,$2E	; $9A93
 	call print_message	; $9A95
-	call fn_01_4B5E	; $9A98
+	call yes_no_start	; $9A98
 
 loc_02_9A9B:
 	call frame_tick	; $9A9B
-	call fn_01_4B69	; $9A9E
+	call yes_no_step	; $9A9E
 	jr c,loc_02_9A9B	; $9AA1
 	ld a,$08	; $9AA3
 	call fn_01_7552	; $9AA5
@@ -2514,7 +2530,7 @@ loc_02_9A9B:
 	ld (hl),a	; $9ABA
 	ld l,(ix+$1F)	; $9ABB
 	ld h,(ix+$20)	; $9ABE
-	call fn_01_4412	; $9AC1
+	call receive_gold	; $9AC1
 	ld a,$08	; $9AC4
 	call fn_01_7552	; $9AC6
 	ld a,$30	; $9AC9
@@ -2546,11 +2562,11 @@ fn_02_9AE3:
 	call print_message	; $9B01
 	ld a,$2A	; $9B04
 	call print_message	; $9B06
-	call fn_02_AB4B	; $9B09
+	call buy_or_sell	; $9B09
 
 loc_02_9B0C:
 	call frame_tick	; $9B0C
-	call fn_02_AB55	; $9B0F
+	call buy_or_sell_step	; $9B0F
 	jr z,loc_02_9B0C	; $9B12
 	push af	; $9B14
 	ld a,$09	; $9B15
@@ -2613,7 +2629,7 @@ loc_02_9BA0:
 	call print_newline	; $9BA0
 	ld a,$15	; $9BA3
 	call print_message	; $9BA5
-	call fn_00_2E1B	; $9BA8
+	call menu_window_clear	; $9BA8
 	ld (ix+$1A),$00	; $9BAB
 	ld (ix+$1B),$00	; $9BAF
 	ld b,$04	; $9BB3
@@ -2627,8 +2643,8 @@ loc_02_9BB8:
 	jr z,loc_02_9BCB	; $9BBE
 	inc (ix+$1B)	; $9BC0
 	add a,$35	; $9BC3
-	call fn_00_340F	; $9BC5
-	call fn_00_2D69	; $9BC8
+	call item_name	; $9BC5
+	call menu_text	; $9BC8
 
 loc_02_9BCB:
 	pop de	; $9BCB
@@ -2637,14 +2653,14 @@ loc_02_9BCB:
 	inc d	; $9BCE
 	inc (ix+$1A)	; $9BCF
 	djnz loc_02_9BB8	; $9BD2
-	call fn_00_2E54	; $9BD4
+	call menu_window_show	; $9BD4
 	ld (ix+$1A),$00	; $9BD7
 
 loc_02_9BDB:
 	call frame_tick	; $9BDB
 	ld c,(ix+$1B)	; $9BDE
 	ld de,$0102	; $9BE1
-	call fn_01_49F4	; $9BE4
+	call menu_step	; $9BE4
 	jr z,loc_02_9BDB	; $9BE7
 	ld a,$09	; $9BE9
 	call fn_01_7552	; $9BEB
@@ -2656,7 +2672,7 @@ loc_02_9BDB:
 	ld a,(ix+$1B)	; $9BFD
 	ld hl,$9B4B	; $9C00
 	rst $20	; $9C03
-	call fn_01_4439	; $9C04
+	call can_afford	; $9C04
 	ld a,$16	; $9C07
 	jr c,loc_02_9C77	; $9C09
 	ld a,(ix+$1B)	; $9C0B
@@ -2667,11 +2683,11 @@ loc_02_9BDB:
 	ld a,$17	; $9C19
 	call print_message	; $9C1B
 	ld a,$02	; $9C1E
-	call fn_01_4A66	; $9C20
+	call number_entry_start	; $9C20
 
 loc_02_9C23:
 	call frame_tick	; $9C23
-	call fn_01_4A9F	; $9C26
+	call number_entry_step	; $9C26
 	jr c,loc_02_9C23	; $9C29
 	ld (ix+$21),l	; $9C2B
 	call fn_01_54CB	; $9C2E
@@ -2693,7 +2709,7 @@ loc_02_9C4A:
 	jr c,loc_02_9C77	; $9C4C
 	djnz loc_02_9C4A	; $9C4E
 	ld (gold),hl	; $9C50
-	call fn_01_43DA	; $9C53
+	call show_gold	; $9C53
 	ld a,(ix+$1B)	; $9C56
 	ld hl,$C917	; $9C59
 	rst $30	; $9C5C
@@ -2718,11 +2734,11 @@ loc_02_9C77:
 	call fn_01_54CB	; $9C7D
 	ld a,$19	; $9C80
 	call print_message	; $9C82
-	call fn_01_4B5E	; $9C85
+	call yes_no_start	; $9C85
 
 loc_02_9C88:
 	call frame_tick	; $9C88
-	call fn_01_4B69	; $9C8B
+	call yes_no_step	; $9C8B
 	jr c,loc_02_9C88	; $9C8E
 	ld a,$09	; $9C90
 	call fn_01_7552	; $9C92
@@ -2759,7 +2775,7 @@ loc_02_9CCF:
 	call frame_tick	; $9CCF
 	ld c,(ix+$1B)	; $9CD2
 	ld de,$0202	; $9CD5
-	call fn_01_49F4	; $9CD8
+	call menu_step	; $9CD8
 	jr z,loc_02_9CCF	; $9CDB
 	ld a,$09	; $9CDD
 	call fn_01_7552	; $9CDF
@@ -2796,11 +2812,11 @@ loc_02_9CEE:
 	ld a,$1E	; $9D22
 	call print_message	; $9D24
 	ld a,$02	; $9D27
-	call fn_01_4A66	; $9D29
+	call number_entry_start	; $9D29
 
 loc_02_9D2C:
 	call frame_tick	; $9D2C
-	call fn_01_4A9F	; $9D2F
+	call number_entry_step	; $9D2F
 	jr c,loc_02_9D2C	; $9D32
 	ld (ix+$21),l	; $9D34
 	call fn_01_54CB	; $9D37
@@ -2851,11 +2867,11 @@ loc_02_9D93:
 	call fn_01_54CB	; $9D96
 	ld a,$26	; $9D99
 	call print_message	; $9D9B
-	call fn_01_4B5E	; $9D9E
+	call yes_no_start	; $9D9E
 
 loc_02_9DA1:
 	call frame_tick	; $9DA1
-	call fn_01_4B69	; $9DA4
+	call yes_no_step	; $9DA4
 	jr c,loc_02_9DA1	; $9DA7
 	ld a,$09	; $9DA9
 	call fn_01_7552	; $9DAB
@@ -2869,7 +2885,7 @@ loc_02_9DA1:
 	ld (hl),a	; $9DC0
 	ld l,(ix+$1F)	; $9DC1
 	ld h,(ix+$20)	; $9DC4
-	call fn_01_4412	; $9DC7
+	call receive_gold	; $9DC7
 	ld a,$09	; $9DCA
 	call fn_01_7552	; $9DCC
 	ld a,$28	; $9DCF
@@ -2899,11 +2915,11 @@ fn_02_9DE9:
 	call print_message	; $9E02
 	ld a,$0B	; $9E05
 	call print_message	; $9E07
-	call fn_01_4B5E	; $9E0A
+	call yes_no_start	; $9E0A
 
 loc_02_9E0D:
 	call frame_tick	; $9E0D
-	call fn_01_4B69	; $9E10
+	call yes_no_step	; $9E10
 	jr c,loc_02_9E0D	; $9E13
 	call fn_01_4324	; $9E15
 	bit 0,(ix+$07)	; $9E18
@@ -2916,7 +2932,7 @@ loc_02_9E0D:
 	rst $20	; $9E2D
 	ld (ix+$1C),l	; $9E2E
 	ld (ix+$1D),h	; $9E31
-	call fn_01_5627	; $9E34
+	call print_number_auto	; $9E34
 	ld a,$0E	; $9E37
 	call print_message	; $9E39
 	call wait_button	; $9E3C
@@ -2928,11 +2944,11 @@ loc_02_9E42:
 	ld a,$0F	; $9E42
 	call print_message	; $9E44
 	ld a,$03	; $9E47
-	call fn_01_4A66	; $9E49
+	call number_entry_start	; $9E49
 
 loc_02_9E4C:
 	call frame_tick	; $9E4C
-	call fn_01_4A9F	; $9E4F
+	call number_entry_step	; $9E4F
 	jr c,loc_02_9E4C	; $9E52
 	call fn_01_54CB	; $9E54
 	ld (ix+$20),l	; $9E57
@@ -2943,21 +2959,21 @@ loc_02_9E4C:
 	jr z,loc_02_9ECD	; $9E61
 	ld e,(ix+$1C)	; $9E63
 	ld d,(ix+$1D)	; $9E66
-	call fn_00_2AC8	; $9E69
-	call fn_01_4423	; $9E6C
+	call multiply_16	; $9E69
+	call pay	; $9E6C
 	jr c,loc_02_9E9E	; $9E6F
 	ld l,(ix+$20)	; $9E71
 	ld h,(ix+$21)	; $9E74
 	ld de,$0019	; $9E77
-	call fn_00_2AC8	; $9E7A
+	call multiply_16	; $9E7A
 	call fn_02_ABD2	; $9E7D
 	ld a,$14	; $9E80
 	call print_message	; $9E82
-	call fn_01_4B5E	; $9E85
+	call yes_no_start	; $9E85
 
 loc_02_9E88:
 	call frame_tick	; $9E88
-	call fn_01_4B69	; $9E8B
+	call yes_no_step	; $9E8B
 	jr c,loc_02_9E88	; $9E8E
 	call fn_01_4324	; $9E90
 	bit 0,(ix+$07)	; $9E93
@@ -2978,8 +2994,8 @@ loc_02_9E9E:
 	ld hl,(gold)	; $9EB3
 	ld e,(ix+$1C)	; $9EB6
 	ld d,(ix+$1D)	; $9EB9
-	call fn_00_2B3F	; $9EBC
-	call fn_01_5627	; $9EBF
+	call divide_16	; $9EBC
+	call print_number_auto	; $9EBF
 	ld a,$13	; $9EC2
 	call print_message	; $9EC4
 	call wait_button	; $9EC7
@@ -3017,13 +3033,13 @@ loc_02_9F02:
 	ld a,$31	; $9F0D
 	call print_message	; $9F0F
 	ld hl,$9F7A	; $9F12
-	call fn_02_AB4E	; $9F15
+	call two_choices	; $9F15
 
 loc_02_9F18:
 	call frame_tick	; $9F18
 	ld c,$02	; $9F1B
 	ld de,$0102	; $9F1D
-	call fn_01_49F4	; $9F20
+	call menu_step	; $9F20
 	jr z,loc_02_9F18	; $9F23
 	call fn_01_4324	; $9F25
 	jr c,loc_02_9F63	; $9F28
@@ -3044,11 +3060,11 @@ loc_02_9F39:
 
 loc_02_9F44:
 	call print_message	; $9F44
-	call fn_01_4B5E	; $9F47
+	call yes_no_start	; $9F47
 
 loc_02_9F4A:
 	call frame_tick	; $9F4A
-	call fn_01_4B69	; $9F4D
+	call yes_no_step	; $9F4D
 	jr c,loc_02_9F4A	; $9F50
 	call fn_01_4324	; $9F52
 	bit 0,(ix+$07)	; $9F55
@@ -3085,15 +3101,15 @@ loc_02_9F89:
 	ld (ix+$1C),a	; $9FAB
 	ld l,a	; $9FAE
 	ld h,$00	; $9FAF
-	call fn_01_5627	; $9FB1
+	call print_number_auto	; $9FB1
 	ld a,$21	; $9FB4
 	call print_message	; $9FB6
 	ld a,$02	; $9FB9
-	call fn_01_4A66	; $9FBB
+	call number_entry_start	; $9FBB
 
 loc_02_9FBE:
 	call frame_tick	; $9FBE
-	call fn_01_4A9F	; $9FC1
+	call number_entry_step	; $9FC1
 	jr c,loc_02_9FBE	; $9FC4
 	ld (ix+$1D),l	; $9FC6
 	ld a,l	; $9FC9
@@ -3102,7 +3118,7 @@ loc_02_9FBE:
 	call fn_01_54CB	; $9FCE
 	ld h,(ix+$1C)	; $9FD1
 	call multiply_8x8	; $9FD4
-	call fn_01_4423	; $9FD7
+	call pay	; $9FD7
 	jr c,loc_02_9FE7	; $9FDA
 	ld l,(ix+$1D)	; $9FDC
 	ld h,$00	; $9FDF
@@ -3122,9 +3138,9 @@ loc_02_9FE7:
 	ld hl,(gold)	; $9FFC
 	ld e,(ix+$1C)	; $9FFF
 	ld d,$00	; $A002
-	call fn_00_2B3F	; $A004
+	call divide_16	; $A004
 	push hl	; $A007
-	call fn_01_5627	; $A008
+	call print_number_auto	; $A008
 	pop hl	; $A00B
 	dec hl	; $A00C
 	ld a,h	; $A00D
@@ -3157,11 +3173,11 @@ loc_02_A041:
 	ld a,$26	; $A041
 	call print_message	; $A043
 	ld a,$02	; $A046
-	call fn_01_4A66	; $A048
+	call number_entry_start	; $A048
 
 loc_02_A04B:
 	call frame_tick	; $A04B
-	call fn_01_4A9F	; $A04E
+	call number_entry_step	; $A04E
 	jr c,loc_02_A04B	; $A051
 	ld (ix+$21),l	; $A053
 	inc l	; $A056
@@ -3174,7 +3190,7 @@ loc_02_A04B:
 	jp c,loc_02_9F5D	; $A065
 	ld l,(ix+$21)	; $A068
 	ld h,$00	; $A06B
-	call fn_01_4423	; $A06D
+	call pay	; $A06D
 	ld a,$28	; $A070
 	jp c,loc_02_9F5D	; $A072
 	ld a,(ix+$21)	; $A075
@@ -3184,7 +3200,7 @@ loc_02_A04B:
 	jp z,loc_02_9F34	; $A080
 	ld a,$29	; $A083
 	call print_message	; $A085
-	call fn_00_2E1B	; $A088
+	call menu_window_clear	; $A088
 	ld (ix+$1B),$00	; $A08B
 	ld hl,$C9B1	; $A08F
 	ld de,$0213	; $A092
@@ -3201,7 +3217,7 @@ loc_02_A098:
 	ld a,c	; $A0A4
 	rst $20	; $A0A5
 	push de	; $A0A6
-	call fn_00_2D69	; $A0A7
+	call menu_text	; $A0A7
 	pop de	; $A0AA
 	inc d	; $A0AB
 	inc d	; $A0AC
@@ -3212,14 +3228,14 @@ loc_02_A0AD:
 	inc hl	; $A0AF
 	inc c	; $A0B0
 	djnz loc_02_A098	; $A0B1
-	call fn_00_2E54	; $A0B3
+	call menu_window_show	; $A0B3
 	ld (ix+$1A),$00	; $A0B6
 
 loc_02_A0BA:
 	call frame_tick	; $A0BA
 	ld c,(ix+$1B)	; $A0BD
 	ld de,$0102	; $A0C0
-	call fn_01_49F4	; $A0C3
+	call menu_step	; $A0C3
 	jr z,loc_02_A0BA	; $A0C6
 	ld (ix+$1B),$FF	; $A0C8
 	jr c,loc_02_A0EA	; $A0CC
@@ -3265,11 +3281,11 @@ loc_02_A10B:
 	ld a,$2B	; $A113
 	call print_message	; $A115
 	ld a,$02	; $A118
-	call fn_01_4A66	; $A11A
+	call number_entry_start	; $A11A
 
 loc_02_A11D:
 	call frame_tick	; $A11D
-	call fn_01_4A9F	; $A120
+	call number_entry_step	; $A120
 	jr c,loc_02_A11D	; $A123
 	call fn_01_54CB	; $A125
 	ld a,l	; $A128
@@ -3279,7 +3295,7 @@ loc_02_A11D:
 	ld a,l	; $A12F
 	add a,(ix+$21)	; $A130
 	ld (ix+$21),a	; $A133
-	call fn_01_4423	; $A136
+	call pay	; $A136
 	jr nc,loc_02_A10B	; $A139
 	ld a,$2D	; $A13B
 	call print_message	; $A13D
@@ -3424,11 +3440,11 @@ fn_02_A1EB:
 	call print_message	; $A20E
 	ld a,$0A	; $A211
 	call print_message	; $A213
-	call fn_01_4B5E	; $A216
+	call yes_no_start	; $A216
 
 loc_02_A219:
 	call frame_tick	; $A219
-	call fn_01_4B69	; $A21C
+	call yes_no_step	; $A21C
 	jr c,loc_02_A219	; $A21F
 	ld a,$0C	; $A221
 	call fn_01_7552	; $A223
@@ -3448,7 +3464,7 @@ loc_02_A246:
 	call print_newline	; $A246
 	ld a,$0D	; $A249
 	call print_message	; $A24B
-	call fn_00_2E1B	; $A24E
+	call menu_window_clear	; $A24E
 	ld de,$0213	; $A251
 	ld bc,$065D	; $A254
 
@@ -3456,22 +3472,22 @@ loc_02_A257:
 	push bc	; $A257
 	push de	; $A258
 	ld a,c	; $A259
-	call fn_00_340F	; $A25A
-	call fn_00_2D69	; $A25D
+	call item_name	; $A25A
+	call menu_text	; $A25D
 	pop de	; $A260
 	pop bc	; $A261
 	inc d	; $A262
 	inc d	; $A263
 	inc c	; $A264
 	djnz loc_02_A257	; $A265
-	call fn_00_2E54	; $A267
+	call menu_window_show	; $A267
 	ld (ix+$1A),$00	; $A26A
 
 loc_02_A26E:
 	call frame_tick	; $A26E
 	ld c,$06	; $A271
 	ld de,$0102	; $A273
-	call fn_01_49F4	; $A276
+	call menu_step	; $A276
 	jr z,loc_02_A26E	; $A279
 	ld a,$0C	; $A27B
 	call fn_01_7552	; $A27D
@@ -3496,15 +3512,15 @@ loc_02_A26E:
 	ld (ix+$1C),a	; $A2AA
 	ld l,a	; $A2AD
 	ld h,$00	; $A2AE
-	call fn_01_5627	; $A2B0
+	call print_number_auto	; $A2B0
 	ld a,$10	; $A2B3
 	call print_message	; $A2B5
 	ld a,$02	; $A2B8
-	call fn_01_4A66	; $A2BA
+	call number_entry_start	; $A2BA
 
 loc_02_A2BD:
 	call frame_tick	; $A2BD
-	call fn_01_4A9F	; $A2C0
+	call number_entry_step	; $A2C0
 	jr c,loc_02_A2BD	; $A2C3
 	ld (ix+$1D),l	; $A2C5
 	call fn_01_54CB	; $A2C8
@@ -3525,15 +3541,15 @@ loc_02_A2D7:
 	call multiply_8x8	; $A2E2
 	ld (ix+$1E),l	; $A2E5
 	ld (ix+$1F),h	; $A2E8
-	call fn_01_5627	; $A2EB
+	call print_number_auto	; $A2EB
 	ld a,$12	; $A2EE
 	call print_message	; $A2F0
 	ld a,$03	; $A2F3
-	call fn_01_4A66	; $A2F5
+	call number_entry_start	; $A2F5
 
 loc_02_A2F8:
 	call frame_tick	; $A2F8
-	call fn_01_4A9F	; $A2FB
+	call number_entry_step	; $A2FB
 	jr c,loc_02_A2F8	; $A2FE
 	ld (ix+$20),l	; $A300
 	ld (ix+$21),h	; $A303
@@ -3551,7 +3567,7 @@ loc_02_A2F8:
 	or a	; $A31C
 	sbc hl,de	; $A31D
 	ld de,$0003	; $A31F
-	call fn_00_2B3F	; $A322
+	call divide_16	; $A322
 	ld de,$0004	; $A325
 	or a	; $A328
 	sbc hl,de	; $A329
@@ -3574,7 +3590,7 @@ loc_02_A331:
 loc_02_A341:
 	ld l,(ix+$20)	; $A341
 	ld h,(ix+$21)	; $A344
-	call fn_01_4423	; $A347
+	call pay	; $A347
 	jr nc,loc_02_A350	; $A34A
 	ld a,$13	; $A34C
 	jr loc_02_A37A	; $A34E
@@ -3610,11 +3626,11 @@ loc_02_A37A:
 	call print_message	; $A385
 
 loc_02_A388:
-	call fn_01_4B5E	; $A388
+	call yes_no_start	; $A388
 
 loc_02_A38B:
 	call frame_tick	; $A38B
-	call fn_01_4B69	; $A38E
+	call yes_no_step	; $A38E
 	jr c,loc_02_A38B	; $A391
 	ld a,$0C	; $A393
 	call fn_01_7552	; $A395
@@ -3653,11 +3669,11 @@ fn_02_A3CF:
 
 loc_02_A3F1:
 	call print_message	; $A3F1
-	call fn_01_4B5E	; $A3F4
+	call yes_no_start	; $A3F4
 
 loc_02_A3F7:
 	call frame_tick	; $A3F7
-	call fn_01_4B69	; $A3FA
+	call yes_no_step	; $A3FA
 	jr c,loc_02_A3F7	; $A3FD
 	call fn_01_4324	; $A3FF
 	call print_newline	; $A402
@@ -3671,11 +3687,11 @@ loc_02_A40B:
 	jr nc,loc_02_A458	; $A412
 	ld a,$22	; $A414
 	call print_message	; $A416
-	call fn_01_4B5E	; $A419
+	call yes_no_start	; $A419
 
 loc_02_A41C:
 	call frame_tick	; $A41C
-	call fn_01_4B69	; $A41F
+	call yes_no_step	; $A41F
 	jr c,loc_02_A41C	; $A422
 	call fn_01_4324	; $A424
 	call print_newline	; $A427
@@ -3723,13 +3739,13 @@ loc_02_A482:
 	ld a,$27	; $A482
 	call print_message	; $A484
 	ld hl,$A511	; $A487
-	call fn_02_AB4E	; $A48A
+	call two_choices	; $A48A
 
 loc_02_A48D:
 	call frame_tick	; $A48D
 	ld c,$03	; $A490
 	ld de,$0102	; $A492
-	call fn_01_49F4	; $A495
+	call menu_step	; $A495
 	jr z,loc_02_A48D	; $A498
 	call fn_01_4324	; $A49A
 	jr nc,loc_02_A4A5	; $A49D
@@ -3754,7 +3770,7 @@ loc_02_A4A5:
 
 loc_02_A4CA:
 	call frame_tick	; $A4CA
-	call fn_01_4BD2	; $A4CD
+	call member_pick_step	; $A4CD
 	jr z,loc_02_A4CA	; $A4D0
 	push af	; $A4D2
 	jr nc,loc_02_A4DD	; $A4D3
@@ -3835,7 +3851,7 @@ fn_02_A534:
 	call wait_button	; $A549
 	call fn_01_54CB	; $A54C
 	ld hl,$0064	; $A54F
-	call fn_01_4439	; $A552
+	call can_afford	; $A552
 	jr nc,loc_02_A567	; $A555
 	ld a,$1B	; $A557
 	call print_message	; $A559
@@ -3872,7 +3888,7 @@ fn_02_A57F:
 	call wait_button	; $A59E
 	call fn_01_54CB	; $A5A1
 	ld hl,$00C8	; $A5A4
-	call fn_01_4439	; $A5A7
+	call can_afford	; $A5A7
 	ld a,$1F	; $A5AA
 	jp c,$A4F5	; $A5AC
 	call fn_02_A5F8	; $A5AF
@@ -3901,7 +3917,7 @@ fn_02_A5CF:
 	call wait_button	; $A5E4
 	call fn_01_54CB	; $A5E7
 	ld hl,$012C	; $A5EA
-	call fn_01_4439	; $A5ED
+	call can_afford	; $A5ED
 	jp nc,loc_02_A567	; $A5F0
 	ld a,$1F	; $A5F3
 	jp $A4F5	; $A5F5
@@ -3911,10 +3927,10 @@ fn_02_A5F8:
 	ld (ix+$21),h	; $A5FB
 	ld a,$17	; $A5FE
 	call print_message	; $A600
-	jp fn_01_4B5E	; $A603
+	jp yes_no_start	; $A603
 
 fn_02_A606:
-	call fn_01_4B69	; $A606
+	call yes_no_step	; $A606
 	ret c	; $A609
 	call fn_01_4324	; $A60A
 	call print_newline	; $A60D
@@ -3927,7 +3943,7 @@ fn_02_A606:
 loc_02_A61C:
 	ld l,(ix+$20)	; $A61C
 	ld h,(ix+$21)	; $A61F
-	call fn_01_4423	; $A622
+	call pay	; $A622
 	or a	; $A625
 	ret	; $A626
 
@@ -3964,11 +3980,11 @@ fn_02_A647:
 	call fn_01_54CB	; $A672
 	ld a,$1A	; $A675
 	call print_message	; $A677
-	call fn_01_4B5E	; $A67A
+	call yes_no_start	; $A67A
 
 loc_02_A67D:
 	call frame_tick	; $A67D
-	call fn_01_4B69	; $A680
+	call yes_no_step	; $A680
 	jr c,loc_02_A67D	; $A683
 	call fn_01_4324	; $A685
 	call print_newline	; $A688
@@ -3992,13 +4008,13 @@ loc_02_A69E:
 	ld a,$1B	; $A6B3
 	call print_message	; $A6B5
 	ld hl,$A85C	; $A6B8
-	call fn_02_AB4E	; $A6BB
+	call two_choices	; $A6BB
 
 loc_02_A6BE:
 	call frame_tick	; $A6BE
 	ld c,$03	; $A6C1
 	ld de,$0102	; $A6C3
-	call fn_01_49F4	; $A6C6
+	call menu_step	; $A6C6
 	jr z,loc_02_A6BE	; $A6C9
 	call fn_01_4324	; $A6CB
 	jp c,loc_02_96B5	; $A6CE
@@ -4013,11 +4029,11 @@ loc_02_A6BE:
 loc_02_A6E4:
 	ld a,$1C	; $A6E4
 	call print_message	; $A6E6
-	call fn_01_4B5E	; $A6E9
+	call yes_no_start	; $A6E9
 
 loc_02_A6EC:
 	call frame_tick	; $A6EC
-	call fn_01_4B69	; $A6EF
+	call yes_no_step	; $A6EF
 	jr c,loc_02_A6EC	; $A6F2
 	call fn_01_4324	; $A6F4
 	call print_newline	; $A6F7
@@ -4040,7 +4056,7 @@ loc_02_A709:
 	inc hl	; $A716
 	ld l,(hl)	; $A717
 	ld h,$00	; $A718
-	call fn_01_4423	; $A71A
+	call pay	; $A71A
 	ld a,$1E	; $A71D
 	jp c,loc_02_96B2	; $A71F
 	ld a,$1F	; $A722
@@ -4097,7 +4113,7 @@ loc_02_A742:
 	ld c,$00	; $A7A3
 
 loc_02_A7A5:
-	call fn_01_4445	; $A7A5
+	call member_can_act	; $A7A5
 	jr c,loc_02_A7B7	; $A7A8
 	ld a,$32	; $A7AA
 	call random_below	; $A7AC
@@ -4112,7 +4128,7 @@ loc_02_A7B7:
 	call fn_01_4776	; $A7BA
 	call fn_01_4324	; $A7BD
 	ld c,$00	; $A7C0
-	call fn_01_4445	; $A7C2
+	call member_can_act	; $A7C2
 	jr c,loc_02_A7E7	; $A7C5
 	call random	; $A7C7
 	and $07	; $A7CA
@@ -4209,11 +4225,11 @@ fn_02_A869:
 
 loc_02_A8AC:
 	call print_message	; $A8AC
-	call fn_01_4B5E	; $A8AF
+	call yes_no_start	; $A8AF
 
 loc_02_A8B2:
 	call frame_tick	; $A8B2
-	call fn_01_4B69	; $A8B5
+	call yes_no_step	; $A8B5
 	jr c,loc_02_A8B2	; $A8B8
 	ld a,$0A	; $A8BA
 	call fn_01_7552	; $A8BC
@@ -4257,22 +4273,22 @@ loc_02_A909:
 loc_02_A912:
 	ld a,$0F	; $A912
 	call print_message	; $A914
-	call fn_00_2E1B	; $A917
+	call menu_window_clear	; $A917
 	ld hl,$A9E2	; $A91A
 	ld b,(ix+$1B)	; $A91D
 
 loc_02_A920:
 	push bc	; $A920
-	call fn_00_2D65	; $A921
+	call menu_text_at	; $A921
 	pop bc	; $A924
 	djnz loc_02_A920	; $A925
-	call fn_00_2E54	; $A927
+	call menu_window_show	; $A927
 
 loc_02_A92A:
 	call frame_tick	; $A92A
 	ld c,$04	; $A92D
 	ld de,$0102	; $A92F
-	call fn_01_49F4	; $A932
+	call menu_step	; $A932
 	jr z,loc_02_A92A	; $A935
 	ld a,$0A	; $A937
 	call fn_01_7552	; $A939
@@ -4293,11 +4309,11 @@ loc_02_A943:
 	call fn_01_54CB	; $A95B
 	ld a,$10	; $A95E
 	call print_message	; $A960
-	call fn_01_4B5E	; $A963
+	call yes_no_start	; $A963
 
 loc_02_A966:
 	call frame_tick	; $A966
-	call fn_01_4B69	; $A969
+	call yes_no_step	; $A969
 	jr c,loc_02_A966	; $A96C
 	ld a,$0A	; $A96E
 	call fn_01_7552	; $A970
@@ -4314,7 +4330,7 @@ loc_02_A98A:
 	ld a,(ix+$1A)	; $A98A
 	ld hl,$A9CE	; $A98D
 	rst $20	; $A990
-	call fn_01_4423	; $A991
+	call pay	; $A991
 	ld a,$12	; $A994
 	jp c,loc_02_96B2	; $A996
 	ld a,(ix+$1A)	; $A999
@@ -4404,11 +4420,11 @@ fn_02_AA04:
 fn_02_AA14:
 	ld a,$00	; $AA14
 	call print_message	; $AA16
-	call fn_01_4B5E	; $AA19
+	call yes_no_start	; $AA19
 
 loc_02_AA1C:
 	call frame_tick	; $AA1C
-	call fn_01_4B69	; $AA1F
+	call yes_no_step	; $AA1F
 	jr c,loc_02_AA1C	; $AA22
 	call print_newline	; $AA24
 	bit 0,(ix+$07)	; $AA27
@@ -4423,11 +4439,11 @@ loc_02_AA3A:
 	call print_char	; $AA3A
 	ld a,$03	; $AA3D
 	call print_message	; $AA3F
-	call fn_01_4B5E	; $AA42
+	call yes_no_start	; $AA42
 
 loc_02_AA45:
 	call frame_tick	; $AA45
-	call fn_01_4B69	; $AA48
+	call yes_no_step	; $AA48
 	jr c,loc_02_AA45	; $AA4B
 	call print_newline	; $AA4D
 	bit 0,(ix+$07)	; $AA50
@@ -4437,7 +4453,7 @@ loc_02_AA45:
 	ld l,a	; $AA5C
 	ld h,$64	; $AA5D
 	call multiply_8x8	; $AA5F
-	call fn_01_4423	; $AA62
+	call pay	; $AA62
 	ld a,$04	; $AA65
 	jp c,loc_02_96B2	; $AA67
 	ld hl,$8614	; $AA6A
@@ -4447,7 +4463,7 @@ loc_02_AA45:
 
 fn_02_AA75:
 	ld c,$00	; $AA75
-	call fn_01_4466	; $AA77
+	call member_able	; $AA77
 	jr nc,loc_02_AA91	; $AA7A
 	ld a,$28	; $AA7C
 	call print_message	; $AA7E
@@ -4477,7 +4493,7 @@ loc_02_AAAF:
 	call frame_tick	; $AAAF
 	ld c,$08	; $AAB2
 	ld de,$0102	; $AAB4
-	call fn_01_49F4	; $AAB7
+	call menu_step	; $AAB7
 	jr z,loc_02_AAAF	; $AABA
 	jr nc,loc_02_AAE9	; $AABC
 	call fn_01_4324	; $AABE
@@ -4486,7 +4502,7 @@ loc_02_AAAF:
 	call fn_01_54CB	; $AAC6
 	ld hl,($C8FD)	; $AAC9
 	ld de,$0064	; $AACC
-	call fn_00_2B3F	; $AACF
+	call divide_16	; $AACF
 	ex de,hl	; $AAD2
 	ld hl,($C969)	; $AAD3
 	or a	; $AAD6
@@ -4502,7 +4518,7 @@ loc_02_AAAF:
 loc_02_AAE9:
 	ld a,(ix+$1A)	; $AAE9
 	add a,$97	; $AAEC
-	call fn_01_5516	; $AAEE
+	call print_item_name	; $AAEE
 	call fn_01_54CB	; $AAF1
 	ld a,(ix+$1A)	; $AAF4
 	ld hl,karma	; $AAF7
@@ -4552,17 +4568,17 @@ loc_02_AB46:
 	ld a,$2E	; $AB46
 	jp loc_02_AAAC	; $AB48
 
-fn_02_AB4B:
+buy_or_sell:
 	ld hl,$AB77	; $AB4B
 
-fn_02_AB4E:
+two_choices:
 	ld (ix+$1A),$00	; $AB4E
-	jp fn_00_2E7F	; $AB52
+	jp menu_draw	; $AB52
 
-fn_02_AB55:
+buy_or_sell_step:
 	ld c,$02	; $AB55
 	ld de,$0102	; $AB57
-	call fn_01_49F9	; $AB5A
+	call menu_step_wrap	; $AB5A
 	ret z	; $AB5D
 	ret c	; $AB5E
 	bit 0,(ix+$1A)	; $AB5F
@@ -4591,7 +4607,7 @@ fn_02_AB8D:
 	add a,$5D	; $AB8D
 
 loc_02_AB8F:
-	jp fn_01_5516	; $AB8F
+	jp print_item_name	; $AB8F
 
 fn_02_AB92:
 	ld a,(ix+$1B)	; $AB92
@@ -4615,10 +4631,10 @@ loc_02_ABA7:
 	call cap_9999	; $ABAB
 	ld (ix+$1F),l	; $ABAE
 	ld (ix+$20),h	; $ABB1
-	jp fn_01_5627	; $ABB4
+	jp print_number_auto	; $ABB4
 
 fn_02_ABB7:
-	ld hl,$C91F	; $ABB7
+	ld hl,weapons_owned	; $ABB7
 	ld b,$0F	; $ABBA
 	jr loc_02_ABC3	; $ABBC
 
@@ -4653,11 +4669,11 @@ fn_02_ABD2:
 	ld (food_fraction),a	; $ABE1
 
 loc_02_ABE4:
-	jp loc_01_43F6	; $ABE4
+	jp show_food	; $ABE4
 
 fn_02_ABE7:
 	ld (ix+$1A),$00	; $ABE7
-	call fn_00_2E1B	; $ABEB
+	call menu_window_clear	; $ABEB
 	ld de,$0213	; $ABEE
 	ld bc,$0897	; $ABF1
 
@@ -4665,15 +4681,15 @@ loc_02_ABF4:
 	push bc	; $ABF4
 	push de	; $ABF5
 	ld a,c	; $ABF6
-	call fn_00_340F	; $ABF7
-	call fn_00_2D69	; $ABFA
+	call item_name	; $ABF7
+	call menu_text	; $ABFA
 	pop de	; $ABFD
 	pop bc	; $ABFE
 	inc d	; $ABFF
 	inc d	; $AC00
 	inc c	; $AC01
 	djnz loc_02_ABF4	; $AC02
-	jp fn_00_2E54	; $AC04
+	jp menu_window_show	; $AC04
 
 fn_02_AC07:
 	call fn_00_0DC5	; $AC07
@@ -4742,7 +4758,7 @@ fn_02_AC80:
 	ld hl,$0000	; $ACAB
 	ld ($C99C),hl	; $ACAE
 
-loc_02_ACB1:
+world_turn_loop:
 	ld hl,(party_x)	; $ACB1
 	ld (world_x_saved),hl	; $ACB4
 	call fn_00_129D	; $ACB7
@@ -4760,13 +4776,13 @@ loc_02_ACCC:
 	call frame_tick	; $ACCC
 
 loc_02_ACCF:
-	call fn_02_B08B	; $ACCF
+	call input_step	; $ACCF
 	jr c,loc_02_ACCC	; $ACD2
 
 loc_02_ACD4:
 	call fn_00_3F14	; $ACD4
 	call fn_02_B4CA	; $ACD7
-	jr loc_02_ACB1	; $ACDA
+	jr world_turn_loop	; $ACDA
 
 fn_02_ACDC:
 	ld a,($C9A1)	; $ACDC
@@ -4869,7 +4885,7 @@ loc_02_AD89:
 	call fn_02_AE20	; $AD8C
 	ld a,(location)	; $AD8F
 	add a,$7D	; $AD92
-	call fn_01_5516	; $AD94
+	call print_item_name	; $AD94
 	call print_newline	; $AD97
 	ld a,($C959)	; $AD9A
 	cp $1F	; $AD9D
@@ -4890,7 +4906,7 @@ loc_02_ADB5:
 	call fn_02_AE20	; $ADB5
 	call place_index	; $ADB8
 	add a,$7F	; $ADBB
-	call fn_01_5516	; $ADBD
+	call print_item_name	; $ADBD
 	call print_newline	; $ADC0
 	ld a,(location)	; $ADC3
 	cp $06	; $ADC6
@@ -4936,7 +4952,7 @@ loc_02_ADFF:
 	call print_text_hl	; $AE0E
 	ld a,(location)	; $AE11
 	add a,$7D	; $AE14
-	call fn_01_5516	; $AE16
+	call print_item_name	; $AE16
 	call print_newline	; $AE19
 	ld a,$17	; $AE1C
 	jr loc_02_AE39	; $AE1E
@@ -5080,7 +5096,7 @@ loc_02_AF7B:
 	ld hl,$0000	; $AF7F
 	ld ($C99C),hl	; $AF82
 
-loc_02_AF85:
+town_turn_loop:
 	call fn_00_129D	; $AF85
 	call yield	; $AF88
 	call fn_02_AFAA	; $AF8B
@@ -5094,13 +5110,13 @@ loc_02_AF9A:
 	call frame_tick	; $AF9A
 
 loc_02_AF9D:
-	call fn_02_B08B	; $AF9D
+	call input_step	; $AF9D
 	jr c,loc_02_AF9A	; $AFA0
 
 loc_02_AFA2:
 	call fn_00_3F14	; $AFA2
 	call fn_02_B4CA	; $AFA5
-	jr loc_02_AF85	; $AFA8
+	jr town_turn_loop	; $AFA8
 
 fn_02_AFAA:
 	ld a,($C9A1)	; $AFAA
@@ -5183,7 +5199,7 @@ loc_02_B056:
 	call fn_00_3D78	; $B085
 	jp main_loop	; $B088
 
-fn_02_B08B:
+input_step:
 	xor a	; $B08B
 	ld ($C9A1),a	; $B08C
 	ld a,(joy_held)	; $B08F
@@ -5299,16 +5315,16 @@ loc_02_B161:
 	ld ($C99A),hl	; $B164
 	ld a,($C959)	; $B167
 	cp $1F	; $B16A
-	jp nz,loc_02_8000	; $B16C
+	jp nz,command_menu	; $B16C
 	ld hl,(party_x)	; $B16F
 	ld b,$20	; $B172
 	call fn_01_42B7	; $B174
-	jp c,loc_02_8000	; $B177
+	jp c,command_menu	; $B177
 	call fn_01_48F7	; $B17A
 	ld a,(iy+$00)	; $B17D
 	ld hl,$B189	; $B180
 	call switch_on_a	; $B183
-	jp loc_02_8000	; $B186
+	jp command_menu	; $B186
 
 tbl_02_B189:
 	.db $10
@@ -5411,11 +5427,11 @@ loc_02_B253:
 	ld bc,$033E	; $B255
 	ld bc,$003E	; $B258
 	ld bc,$023E	; $B25B
-	call fn_02_B263	; $B25E
+	call player_move	; $B25E
 	or a	; $B261
 	ret	; $B262
 
-fn_02_B263:
+player_move:
 	ld (entry_direction),a	; $B263
 	ld hl,$0100	; $B266
 	ld ($C99A),hl	; $B269
@@ -5836,7 +5852,7 @@ loc_02_B535:
 	ld c,$00	; $B546
 
 loc_02_B548:
-	call fn_01_4445	; $B548
+	call member_can_act	; $B548
 	jr c,loc_02_B553	; $B54B
 	ld hl,$0002	; $B54D
 	call member_take_damage	; $B550

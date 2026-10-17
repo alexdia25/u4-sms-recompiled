@@ -410,7 +410,7 @@ static void use_command(void) {
 		done();
 		return;
 	}
-	cpu.cycles += 5 + 19 + 10 + 10 + 52;   // ld a,(ix+$1A) / ld hl,$89DF / jp $0018
+	cpu.cycles += 5 + 19 + 10 + 10 + 10 + 52;   // ld a,(ix+$1A) / ld hl,$89DF / jp $0018 / jp $0083
 	cpu.a = item;
 	switch (item) {
 	case 0: use_torch(); break;
@@ -1224,7 +1224,7 @@ static void cast_spell(void) {
 	cpu.a = mem_read(cpu.iy + 9);
 	op_sub8(mp, 0, 0);
 	if (!(cpu.f & FC)) {               // M.P. enough: the spell
-		cpu.cycles += 19 + 10 + 10 + 52;
+		cpu.cycles += 19 + 10 + 10 + 10 + 52;   // ld a / ld hl / jp $0018 / jp $0083
 		cpu.a = spell;
 		SET_HL(rd16(0x5DFB + 2 * spell));
 		run_spell(spell);
