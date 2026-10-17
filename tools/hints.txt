@@ -351,5 +351,7 @@ name     02:8942 use_command
 native   02:8942 native_use_command
 name     02:848A attack_command
 native   02:848A native_attack
+name     02:863F magic_command
+native   02:863F native_magic
 name     02:9254 camp_menu
 native   02:9254 native_camp_menu

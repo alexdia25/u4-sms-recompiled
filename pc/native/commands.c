@@ -637,3 +637,365 @@ static void attack(void) {
 	native_continue_at(0x8534);
 }
 Native native_attack = { "attack", 0x848A, 2, attack, 0, 0, 0, .task = 1 };
+
+// --------------------------------------------------------------- magic --
+// magic ($863F): Cast (cast_spell $5B8C, original code: it waits for frames)
+// or Mix: pick a spell (two pages of 13), tick reagents, say how many, and
+// the reagents are used up one mixture at a time. A mixture comes out when
+// the reagents ticked are exactly the spell's recipe ($88F3) and all there.
+#define REAGENTS   0xC92F
+#define MIXTURES   0xC937
+#define TEXT_COL   0xC639
+#define JOY        0xC0B0
+
+// call switch_on_a ($334A) on a table of n keys: the index matched, or -1.
+// Matched, it pops its return address (`back`) into AF.
+static int switch_on(const uint8_t *keys, int n, uint8_t a, uint16_t back) {
+	cpu.cycles += 17;
+	cpu.a = a;
+	for (int i = 0; i < n; i++)
+		if (keys[i] == a) {
+			cpu.cycles += 58 * i + 79;
+			cpu.a = back >> 8;
+			cpu.f = (uint8_t)back;
+			return i;
+		}
+	cpu.cycles += 58 * n + 22;
+	return -1;
+}
+
+static uint8_t reagent_bar(void) {     // $87B1: the cursor line of the reagent picked
+	cpu.cycles += 17 + 19 + 7 + 7;
+	uint8_t r = mem_read(SLOT + 0x1E);
+	if (r >= 8) { cpu.cycles += 4 + 10; cpu.a = 0; }
+	else { cpu.cycles += 5 + 4 + 4 + 10; cpu.a = (uint8_t)(2 * r + 1); }
+	return cpu.a;
+}
+
+static void mix_reagents(void);
+
+static void magic(void) {
+	cpu.cycles += 10;
+	SET_HL(0x95D9);
+	call(0x2E7F);                      // the menu
+	cpu.cycles += 7 + 17;
+	text_char('-');
+	cpu.cycles += 19;
+	mem_write(SLOT + 0x1A, 0);
+	for (;;) {
+		task_frame_tick(0x864E);
+		cpu.cycles += 7 + 10;
+		cpu.c = 2;
+		SET_DE(0x0102);
+		call(0x49F9);
+		cpu.cycles += 7;
+		if (!(cpu.f & FZ)) break;
+		cpu.cycles += 5;
+	}
+	cpu.cycles += 10;
+	if (cpu.f & FC) { native_continue_at(0x8081); return; }
+	cpu.cycles += 10 + 17 + 19 + 91 + 10;   // ld hl,$95D5 / call $806B: its name
+	uint16_t name = rd16(0x95D5 + 2 * mem_read(SLOT + 0x1A));
+	SET_HL(name);
+	text_print(name);
+	newline();
+	cpu.cycles += 20 + 10;
+	if (!(mem_read(SLOT + 0x1A) & 1)) {   // Cast
+		cpu.cycles += 17;
+		push16(0x8671);
+		native_continue_at(0x5B8C);
+		return;
+	}
+	cpu.cycles += 10 + 4 + 7;          // $8674: any reagents at all?
+	uint8_t any = 0;
+	for (int i = 0; i < 8; i++) {
+		any |= mem_read(REAGENTS + i);
+		cpu.cycles += 7 + 6 + (i < 7 ? 13 : 8);
+	}
+	cpu.a = any;
+	op_or(any);
+	SET_HL(REAGENTS + 8);
+	cpu.b = 0;
+	cpu.cycles += 7;
+	if (!any) {
+		say_inline(0x8683);            // "You have no reagents!"
+		done();
+		return;
+	}
+	cpu.cycles += 5;
+	say_inline(0x86A0);                // "For what spell: "
+	cpu.cycles += 19 + 19 + 7;
+	mem_write(SLOT + 0x1C, 0);         // the spell on the page
+	mem_write(SLOT + 0x1D, 0);         // the page
+	cpu.a = 0x0D;
+	call(0x7552);                      // the first page of spells
+	cpu.cycles += 12;
+	static const uint8_t spell_keys[6] = { 0x01, 0x02, 0x04, 0x08, 0x10, 0x20 };
+	for (;;) {
+		cpu.cycles += 19 + 7;          // $8701: the cursor on the spell
+		cpu.a = (uint8_t)(mem_read(SLOT + 0x1C) + 2);
+		call(0x49D5);
+		cpu.cycles += 12;
+		int k;
+		do {                           // $86C0: wait for a key
+			task_frame_tick(0x86C0);
+			cpu.cycles += 13 + 7 + 10;
+			uint8_t a = mem_read(JOY) & 0x7F;
+			SET_HL(0x86D0);
+			k = switch_on(spell_keys, 6, a, 0x86CE);
+			if (k < 0) cpu.cycles += 12;
+		} while (k < 0);
+		if (k == 4) { native_continue_at(0x8081); return; }   // button 1
+		if (k == 5) break;             // button 2: this spell
+		if (k < 2) {                   // up / down, around the page of 13
+			cpu.cycles += 7 + (k == 0 ? 12 : 0);
+			cpu.b = k == 0 ? 0x0C : 0x0E;
+			cpu.cycles += 19 + 7;
+			cpu.a = (uint8_t)(mem_read(SLOT + 0x1C) + 2);
+			call(0x49E0);
+			cpu.cycles += 19 + 4 + 4 + 7;
+			cpu.l = (uint8_t)(mem_read(SLOT + 0x1C) + cpu.b);
+			cpu.a = cpu.l;
+			cpu.h = 0x0D;
+			call(0x2AFC);              // divide_8: H = the remainder
+			cpu.cycles += 19;
+			mem_write(SLOT + 0x1C, cpu.h);
+		} else {                       // left / right: the other page
+			cpu.cycles += 19 + 7 + 19 + 7;
+			uint8_t page = mem_read(SLOT + 0x1D) ^ 1;
+			mem_write(SLOT + 0x1D, page);
+			cpu.a = (uint8_t)(page + 0x0D);
+			call(0x7552);
+			cpu.cycles += 12;
+		}
+		call(0x40D9);                  // $86FE: beep
+	}
+	call(0x40C9);                      // $871A: click
+	cpu.cycles += 4 + 20 + 7;
+	uint8_t spell = 0;
+	if (mem_read(SLOT + 0x1D) & 1) { cpu.cycles += 7; spell = 0x0D; }
+	else cpu.cycles += 5;
+	cpu.cycles += 19 + 19 + 7;
+	spell = (uint8_t)(spell + mem_read(SLOT + 0x1C));
+	mem_write(SLOT + 0x1C, spell);     // the spell, 0-25
+	cpu.a = (uint8_t)(spell + 0x65);
+	cpu.cycles += 17 + 17;             // call print_item_name / its call item_name
+	call_original(0x340F);
+	text_print(HL);
+	cpu.cycles += 19 + 19 + 7;
+	mem_write(SLOT + 0x1E, 0);         // the reagent picked
+	mem_write(SLOT + 0x1F, 0);         // the reagents ticked, one bit each
+	cpu.a = 0x11;
+	call(0x7552);                      // the reagents
+	cpu.cycles += 12;
+	mix_reagents();
+}
+Native native_magic = { "magic", 0x863F, 2, magic, 0, 0, 0, .task = 1 };
+
+static void mix_reagents(void) {
+	static const uint8_t reagent_keys[4] = { 0x01, 0x02, 0x10, 0x20 };
+	for (;;) {
+		// $8781: a mark by each reagent, ticked ($40) or not ($3A)
+		cpu.cycles += 16 + 11 + 10 + 16 + 10 + 10;
+		uint16_t col = rd16(TEXT_COL);
+		push16(col);
+		wr16(TEXT_COL, 0x021C);
+		SET_HL(TEXT_COL + 1);
+		cpu.b = 8;
+		cpu.c = 0x80;
+		do {
+			cpu.cycles += 19 + 4 + 7 + 7;
+			int ticked = mem_read(SLOT + 0x1F) & cpu.c;
+			cpu.a = 0x3A;
+			if (ticked) { cpu.cycles += 7; cpu.a = 0x40; }
+			else cpu.cycles += 5;
+			cpu.cycles += 17;
+			call_original(0x5460);     // put_glyph
+			cpu.cycles += 11 + 11 + 8;
+			mem_write(HL, (uint8_t)(mem_read(HL) + 2));
+			cpu.c = (uint8_t)(cpu.c >> 1 | cpu.c << 7);
+			cpu.cycles += --cpu.b ? 13 : 8;
+		} while (cpu.b);
+		cpu.cycles += 10 + 16;
+		col = pop16();
+		wr16(TEXT_COL, col);
+		SET_HL(col);
+		reagent_bar();
+		call(0x49D5);                  // the cursor on it
+		cpu.cycles += 10;
+		for (;;) {                     // $8740: wait for a key
+			int k;
+			do {
+				task_frame_tick(0x8740);
+				cpu.cycles += 13 + 7 + 10;
+				uint8_t a = mem_read(JOY) & 0x7F;
+				SET_HL(0x8750);
+				k = switch_on(reagent_keys, 4, a, 0x874E);
+				if (k < 0) cpu.cycles += 12;
+			} while (k < 0);
+			if (k == 2) { native_continue_at(0x8081); return; }   // button 1
+			if (k < 2) {               // up / down, around the 8 reagents and Done
+				cpu.cycles += 7 + (k == 0 ? 12 : 0);
+				cpu.b = k == 0 ? 0x08 : 0x0A;
+				reagent_bar();
+				call(0x49E0);
+				cpu.cycles += 19 + 4 + 4 + 7;
+				cpu.l = (uint8_t)(mem_read(SLOT + 0x1E) + cpu.b);
+				cpu.a = cpu.l;
+				cpu.h = 0x09;
+				call(0x2AFC);          // divide_8
+				cpu.cycles += 19;
+				mem_write(SLOT + 0x1E, cpu.h);
+				reagent_bar();
+				call(0x49D5);
+				call(0x40D9);
+				cpu.cycles += 12;
+				continue;
+			}
+			// button 2 ($87BD): tick or untick the reagent, or Done
+			cpu.cycles += 19 + 7 + 7;
+			uint8_t r = mem_read(SLOT + 0x1E);
+			if (r == 8) { cpu.cycles += 5; goto chosen; }
+			cpu.cycles += 10 + 48 + 4 + 10;
+			SET_HL(REAGENTS + r);
+			cpu.a = mem_read(HL);
+			op_or(cpu.a);
+			if (!cpu.a) continue;      // none of it
+			cpu.cycles += 19 + 4 + 7;
+			uint8_t bit = 1;
+			for (int i = 0; i <= r; i++) {
+				bit = (uint8_t)(bit >> 1 | bit << 7);
+				cpu.cycles += 4 + (i < r ? 13 : 8);
+			}
+			cpu.cycles += 4 + 19 + 19 + 4 + 11;
+			cpu.b = bit;
+			uint8_t ticks = mem_read(SLOT + 0x1F) ^ bit;
+			mem_write(SLOT + 0x1F, ticks);
+			cpu.a = ticks;
+			op_and(bit);
+			uint8_t a = cpu.a, f = cpu.f;
+			if (a) { cpu.cycles += 17; call_original(0x40C9); }   // ticked: click
+			else cpu.cycles += 10;
+			cpu.cycles += 10;
+			cpu.a = a; cpu.f = f;
+			if (!a) { cpu.cycles += 17; call_original(0x40D1); }  // unticked
+			else cpu.cycles += 10;
+			cpu.cycles += 10;
+			break;                     // jp $8781
+		}
+	}
+chosen:                                // $87E8: Done
+	call(0x40C9);
+	newline();
+	cpu.cycles += 19 + 4 + 7;
+	uint8_t ticks = mem_read(SLOT + 0x1F);
+	cpu.a = ticks;
+	op_or(ticks);
+	if (!ticks) {
+		say_inline(0x87F7);            // "None!"
+		done();
+		return;
+	}
+	cpu.cycles += 5;
+	say_inline(0x8804);                // "How many mixtures? "
+	cpu.cycles += 7;
+	cpu.a = 2;
+	call(0x4A66);                      // number_entry_start
+	for (;;) {
+		task_frame_tick(0x881D);
+		call(0x4A9F);                  // number_entry_step
+		cpu.cycles += 7;
+		if (!(cpu.f & FC)) break;
+		cpu.cycles += 5;
+	}
+	cpu.cycles += 19;
+	uint8_t want = cpu.l;
+	mem_write(SLOT + 0x20, want);
+	newline();
+	cpu.cycles += 4 + 4 + 10;
+	if (!want) { native_continue_at(0x8084); return; }
+	say_inline(0x8833);                // "Mixing"
+	cpu.cycles += 19;
+	mem_write(SLOT + 0x1A, 3);
+	for (;;) {                         // "..." a dot every 10 turns
+		task_wait_frames(0x8840, 10);
+		cpu.cycles += 7 + 17;
+		text_char('.');
+		cpu.cycles += 23 + 7;
+		uint8_t left = (uint8_t)(mem_read(SLOT + 0x1A) - 1);
+		mem_write(SLOT + 0x1A, left);
+		if (!left) break;
+		cpu.cycles += 5;
+	}
+	newline();
+	cpu.cycles += 19 + 19 + 19;
+	mem_write(SLOT + 0x16, want);
+	mem_write(SLOT + 0x21, 0);         // how many came out
+	uint8_t spell = mem_read(SLOT + 0x1C);
+	for (;;) {                         // $885A: one mixture
+		cpu.cycles += 10 + 19 + 10;
+		uint8_t d = ticks;
+		uint8_t missing = 1;
+		for (int i = 0; i < 8; i++) {
+			cpu.cycles += 8 + 7;
+			int on = d & 0x80;
+			d = (uint8_t)(d << 1 | d >> 7);
+			if (on) {
+				cpu.cycles += 4 + 7 + 4 + 7;
+				missing++;
+				uint8_t have = mem_read(REAGENTS + i);
+				cpu.a = have;
+				if (have) { cpu.cycles += 4 + 11; missing--; mem_write(REAGENTS + i, have - 1); }
+				else cpu.cycles += 5;
+			} else cpu.cycles += 5;
+			cpu.cycles += 6 + (i < 7 ? 13 : 8);
+		}
+		cpu.d = d;
+		cpu.b = 0;
+		SET_HL(REAGENTS + 8);
+		cpu.cycles += 4 + 7;
+		cpu.c = (uint8_t)(missing - 1);
+		if (missing == 1) {            // everything ticked was there
+			cpu.cycles += 19 + 10 + 48 + 19 + 7;
+			cpu.a = mem_read(0x88F3 + spell);
+			if (cpu.a == ticks) {      // the spell's recipe
+				cpu.cycles += 23 + 19 + 10 + 30 + 7 + 7 + 7;
+				mem_write(SLOT + 0x21, mem_read(SLOT + 0x21) + 1);
+				SET_HL(MIXTURES + spell);
+				uint8_t n = mem_read(HL);
+				cpu.a = n;
+				if (n < 0x63) { cpu.cycles += 11; mem_write(HL, n + 1); }
+				else cpu.cycles += 5;
+			} else {
+				cpu.cycles += 5;
+				SET_HL(0x88F3 + spell);
+			}
+		} else cpu.cycles += 5;
+		cpu.cycles += 23 + 7;          // dec (ix+$16) / jr nz
+		uint8_t left = (uint8_t)(mem_read(SLOT + 0x16) - 1);
+		mem_write(SLOT + 0x16, left);
+		if (!left) break;
+		cpu.cycles += 5;
+	}
+	cpu.cycles += 19 + 4 + 7;
+	uint8_t made = mem_read(SLOT + 0x21);
+	cpu.a = made;
+	if (!made) {
+		say_inline(0x889E);            // "It fizzles!"
+		cpu.cycles += 12;
+	} else {
+		cpu.cycles += 5 + 19 + 7;
+		if (made == want) {
+			say_inline(0x88B4);        // "Success!"
+			cpu.cycles += 12;
+		} else {
+			cpu.cycles += 5;
+			say_inline(0x88C2);        // "You have only enough reagents for "
+			cpu.cycles += 19 + 7 + 17;
+			SET_HL(made);
+			call_original(0x5627);     // print_number_auto
+		}
+	}
+	newline();
+	done();
+}

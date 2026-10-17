@@ -294,6 +294,33 @@ def main():
         for _ in range(4):             # out of any menu, so the run doesn't end inside one
             s.press('1', 60)
         s.write(name)
+    FIVE = ['%04X:05' % (0xC92F + i) for i in range(8)]   # five of each reagent
+    MIXES = {                          # Magic, Mix: RAM writes, presses from the spell list on
+        'mix_awaken':  (FIVE, '2' + 'D2D2UUU2' + 'U2'),          # spell 0: reagents 1 and 2
+        'mix_three':   (FIVE, '2' + 'D2D2UUU2' + 'UUU2'),        # three of them
+        'mix_wrong':   (FIVE, '2' + '2D2UU2' + 'U2'),            # reagents 0 and 1: fizzles
+        'mix_page2':   (FIVE, 'R2' + '2DD2DDDDD2D2' + 'U2'),      # spell 13: reagents 0, 2, 7
+        'mix_short':   (['C930:01', 'C931:01'], '2' + 'D2D2UUU2' + 'UUU2'),   # only enough for one
+        'mix_nothing': (FIVE, '2' + 'UUU2'),                     # Done with nothing ticked
+        'mix_none':    (['%04X:00' % (0xC92F + i) for i in range(8)], ''),   # no reagents
+        'mix_random':  (FIVE, ''),
+    }
+    for name, (pokes, keys) in MIXES.items():
+        rnd = random.Random(name)
+        s = Script()
+        for p in pokes:
+            s.poke(p)
+        s.f += 10
+        for k in '2DD2D2':             # command menu, Magic, Mix
+            s.press(k, 30)
+        s.f += 30
+        for k in keys:
+            s.press(k, 30)
+        s.f += 600                     # the mixing takes 30 turns
+        random_presses(s, rnd, 20)
+        for _ in range(4):
+            s.press('1', 60)
+        s.write(name)
     for seed in range(2):              # anything at all
         rnd = random.Random('play%d' % seed)
         s = Script()
