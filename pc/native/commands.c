@@ -1240,9 +1240,8 @@ static void cast_spell(void) {
 Native native_cast_spell = { "cast_spell", 0x5B8C, 1, cast_spell, 0, 0, 0, .task = 1 };
 
 // -------------------------------------------------------------- spells --
-// The spells cast outside combat ($5DFB table). Each ends at $5D49 (done),
-// or $5D3A ("Failed!") - both reached by jp, here cast_end / spell_failed.
-// The others (combat, dungeon) are still original code.
+// The spells ($5DFB table). Each ends at $5D49 (done), or $5D3A ("Failed!")
+// - both reached by jp, here cast_end / spell_failed.
 #define VIEW_XY    0xC985
 #define EFFECT     0xC976               // a timed effect in combat; $4E = negated
 
@@ -1508,7 +1507,494 @@ static void winds(void) {
 	spell_done();
 }
 
-// the spell's routine: C where rewritten, else the original's
+// ------------------------------------------------- combat and dungeon spells --
+#define FOE_RECORDS 0xC839              // 16 foes, 8 bytes: +4 hp, +5 graphic, +7 asleep
+#define LEVEL       0xC970              // the dungeon level
+
+static int only_combat(void) { return only_here(mem_read(MAP_KIND) >= 3, 0x6359); }
+static int only_dungeon(void) { return only_here(mem_read(MAP_KIND) == 2, 0x6372); }
+
+// call an original routine that may wait for frames, from `site`
+static void tcall(uint16_t addr, uint16_t site) {
+	cpu.cycles += 17;
+	task_call(addr, (uint16_t)(site + 3));
+}
+
+static void yield_at(uint16_t site) {  // "call yield" at site
+	cpu.cycles += 17 + 58;
+	SET_HL((uint16_t)(site + 3));
+	task_wait_turn((uint16_t)(site + 3));
+}
+
+// $645C: "Direction:" in combat, diagonals too ($4C8F); the step in
+// (ix+$0E), (ix+$10)
+static int combat_direction(uint16_t back) {
+	cpu.cycles += 17 + 17 + 77;
+	wr16(SLOT + 0x28, back);
+	call(0x4C28);
+	for (;;) {
+		task_frame_tick(0x6462);
+		call(0x4C8F);
+		cpu.cycles += 7;
+		if (!(cpu.f & FZ)) break;
+		cpu.cycles += 5;
+	}
+	cpu.cycles += 12 + 10;             // jr $644A / jp c,$5D4D
+	if (cpu.f & FC) { cast_cancel(); return 0; }
+	cpu.cycles += 19 + 17 + 100 + 19 + 19;
+	cpu.a = mem_read(SLOT + 0x1A);
+	SET_HL(rd16(0x40BF + 2 * cpu.a));
+	mem_write(SLOT + 0x0E, cpu.l);
+	mem_write(SLOT + 0x10, cpu.h);
+	cpu.cycles += 10 + 42;
+	SET_HL(back);
+	return 1;
+}
+
+// $640B: Jinx, Negate, Protection, Quickness: an effect for 10 rounds
+static void timed_effect(uint8_t effect) {
+	cpu.cycles += 7 + 10 + 19;         // ld a,n / jp $640B / ld (ix+$1B),a
+	mem_write(SLOT + 0x1B, effect);
+	if (!spend_mp()) return;
+	cpu.cycles += 19 + 13 + 7 + 13;
+	mem_write(EFFECT, effect);
+	mem_write(EFFECT + 1, 10);
+	cpu.a = 10;
+	spell_done();
+}
+
+// $64F4: carry, after "Nothing to Attack!", when no foe is left
+static int no_targets(void) {
+	cpu.cycles += 17 + 10 + 10 + 7 + 4;
+	uint8_t any = 0;
+	for (int i = 0; i < 16; i++) {
+		any |= mem_read(FOE_RECORDS + 5 + 8 * i);
+		cpu.cycles += 7 + 11 + (i < 15 ? 13 : 8);
+	}
+	SET_HL(FOE_RECORDS + 5 + 0x80);
+	SET_DE(0x0008);
+	cpu.b = 0;
+	cpu.a = any;
+	op_or(any);
+	if (any) { cpu.cycles += 11; return 0; }
+	cpu.cycles += 5;
+	call(0x40D1);
+	say_inline(0x6508);
+	cpu.cycles += 4 + 10;
+	cpu.f |= FC;
+	return 1;
+}
+
+// $6383: Fireball, Iceball, Kill, Magic Missile: a missile (graphic c) at
+// a foe; its damage by kind b
+static void missile_spell(uint8_t graphic, uint8_t kind) {
+	cpu.cycles += 10 + 10 + 19 + 19;   // ld bc / jp $6383 / ld (ix+$22),c / ld (ix+$23),b
+	SET_BC((uint16_t)(kind << 8 | graphic));
+	mem_write(SLOT + 0x22, graphic);
+	mem_write(SLOT + 0x23, kind);
+	if (!only_combat()) return;
+	if (no_targets()) { cpu.cycles += 10; cast_end(0); return; }
+	cpu.cycles += 10;
+	tcall(0x37DD, 0x6392);             // "Aim:"
+	cpu.cycles += 10;
+	if (cpu.f & FC) { cast_cancel(); return; }
+	if (!spend_mp()) return;
+	call(0x48E1);                      // IY = the caster's figure
+	cpu.cycles += 19 * 5;
+	SET_HL(rd16(cpu.iy));
+	SET_DE(rd16(SLOT + 0x20));
+	cpu.a = mem_read(SLOT + 0x22);
+	tcall(0x38FC, 0x63AD);
+	for (;;) {                         // $63B0: it flies
+		tcall(0x392F, 0x63B0);
+		tcall(0x38BD, 0x63B3);         // carry clear: a foe there
+		cpu.cycles += 7;
+		if (!(cpu.f & FC)) { cpu.cycles += 5; break; }
+		tcall(0x38EB, 0x63B8);
+		tcall(0x3974, 0x63BB);         // carry: it hit something else
+		cpu.cycles += 7;
+		if (cpu.f & FC) { cpu.cycles += 10; spell_failed(); return; }
+		cpu.cycles += 5;
+	}
+	cpu.cycles += 19;
+	mem_write(SLOT + 0x08, cpu.a);     // the foe
+	tcall(0x3A91, 0x63C6);
+	cpu.cycles += 19 + 10 + 17;        // ld a,(ix+$23) / ld hl / call switch_on_a
+	static const uint8_t kinds[3] = { 0x4D, 0x4E, 0x4F };
+	static const uint8_t range[3] = { 0x40, 0xE0, 0x80 }, base[3] = { 0x10, 0x20, 0x18 };
+	int i;
+	for (i = 0; i < 3 && kinds[i] != kind; i++) {}
+	if (i == 3) { cpu.cycles += 58 * 3 + 22 + 7; cpu.a = 0xE8; }   // Kill
+	else {
+		cpu.cycles += 58 * i + 79 + 7;
+		cpu.a = range[i];
+		call(0x2BEB);                  // random_below
+		cpu.cycles += 7 + 12;
+		op_or(base[i]);
+	}
+	cpu.cycles += 11 + 13 + 4 + 19 + 10;
+	cpu.b = mem_read(CASTER);
+	cpu.c = mem_read(SLOT + 0x08);
+	tcall(0x39B5, 0x63DD);             // damage_monster
+	newline();
+	spell_done();
+}
+
+// Sleep ($60F2): foes may fall asleep, by their hit points
+static void sleep_spell(void) {
+	if (!only_combat() || !spend_mp()) return;
+	cpu.cycles += 14 + 10 + 7;
+	SET_DE(0x0008);
+	cpu.b = 0x10;
+	for (uint16_t f = FOE_RECORDS; ; f += 8) {
+		cpu.iy = f;
+		cpu.cycles += 19 + 4 + 7;
+		cpu.a = mem_read(f + 5);
+		op_or(cpu.a);
+		if (!cpu.a) { cpu.cycles += 5; goto next; }
+		call(0x62F8);                  // Z: can't sleep (undead and such)
+		cpu.cycles += 7;
+		if (cpu.f & FZ) { cpu.cycles += 5; goto next; }
+		cpu.cycles += 7 + 7;
+		if (cpu.a == 0xFC) { cpu.cycles += 5; goto next; }
+		call(0x2BBF);                  // random
+		cpu.cycles += 19 + 7;
+		op_sub8(mem_read(f + 4), 0, 0);
+		if (cpu.f & FC) { cpu.cycles += 5; goto next; }
+		cpu.cycles += 7;
+		if (cpu.f & FZ) { cpu.cycles += 5; goto next; }
+		cpu.cycles += 19;
+		mem_write(f + 7, 1);
+	next:
+		cpu.cycles += 15;
+		if (--cpu.b == 0) { cpu.cycles += 8; break; }
+		cpu.cycles += 13;
+	}
+	spell_done();
+}
+
+// Undead ($61BB): the undead may be weakened to 23 hit points
+static void undead_spell(void) {
+	if (!only_combat() || !spend_mp()) return;
+	cpu.cycles += 14 + 10 + 7;
+	SET_DE(0x0008);
+	cpu.b = 0x10;
+	for (uint16_t f = FOE_RECORDS; ; f += 8) {
+		cpu.iy = f;
+		cpu.cycles += 19;
+		cpu.a = mem_read(f + 5);
+		call(0x62F8);                  // Z: undead
+		cpu.cycles += 7;
+		if (!(cpu.f & FZ)) { cpu.cycles += 5; goto next; }
+		call(0x2BBF);
+		cpu.cycles += 7 + 7;
+		op_and(1);
+		if (!cpu.a) { cpu.cycles += 5; goto next; }
+		cpu.cycles += 19 + 7 + 7;
+		cpu.a = mem_read(f + 4);
+		op_sub8(0x17, 0, 0);
+		if (cpu.f & FC) { cpu.cycles += 5; goto next; }
+		cpu.cycles += 19;
+		mem_write(f + 4, 0x17);
+	next:
+		cpu.cycles += 15;
+		if (--cpu.b == 0) { cpu.cycles += 8; break; }
+		cpu.cycles += 13;
+	}
+	spell_done();
+}
+
+// $61AF: a quake mark at the foe, shown for a frame
+static void quake_mark(uint8_t a, uint16_t site) {
+	cpu.cycles += 7;
+	cpu.a = a;
+	cpu.cycles += 17 + 19 + 19;
+	cpu.e = mem_read(SLOT + 0x0B);
+	cpu.d = mem_read(SLOT + 0x0D);
+	call(0x3082);
+	cpu.cycles += 10;                  // jp yield
+	cpu.cycles += 58;
+	SET_HL((uint16_t)(site + 3));
+	task_wait_turn((uint16_t)(site + 3));
+}
+
+// Tremor ($6125): the ground shakes; each foe may be hurt badly or swallowed
+static void tremor(void) {
+	if (!only_combat() || !spend_mp()) return;
+	cpu.cycles += 7;
+	cpu.a = 0x16;
+	call(0x05F1);
+	tcall(0x4117, 0x6130);             // the screen shakes
+	cpu.cycles += 19 + 19;
+	mem_write(SLOT + 0x08, 0);
+	mem_write(SLOT + 0x16, 0x10);
+	do {
+		cpu.cycles += 19;              // $613B
+		cpu.c = mem_read(SLOT + 0x08);
+		call(0x48EB);                  // IY = the foe
+		cpu.cycles += 19 + 4 + 7;
+		cpu.a = mem_read(cpu.iy + 5);
+		op_or(cpu.a);
+		if (!cpu.a) { cpu.cycles += 5; goto next; }
+		cpu.cycles += 19 + 7 + 7;
+		cpu.a = mem_read(cpu.iy + 4);
+		op_sub8(0xC0, 0, 0);
+		if (!(cpu.f & FC)) { cpu.cycles += 5; goto next; }
+		call(0x2BBF);
+		cpu.cycles += 7 + 7;
+		op_and(1);
+		if (cpu.a) {                   // weakened, half the time
+			call(0x2BBF);
+			cpu.cycles += 7 + 7;
+			op_and(1);
+			if (!cpu.a) { cpu.cycles += 5; goto next; }
+			cpu.cycles += 19 + 7 + 7;
+			cpu.a = mem_read(cpu.iy + 4);
+			op_sub8(0x17, 0, 0);
+			if (cpu.f & FC) { cpu.cycles += 5; goto next; }
+			cpu.cycles += 19 + 12;
+			mem_write(cpu.iy + 4, 0x17);
+			goto next;
+		}
+		cpu.cycles += 5 + 19;          // $6169: swallowed
+		cpu.a = mem_read(cpu.iy + 0);
+		call(0x36F7);
+		cpu.cycles += 19 + 19;
+		mem_write(SLOT + 0x0B, cpu.a);
+		cpu.a = mem_read(cpu.iy + 1);
+		call(0x36F7);
+		cpu.cycles += 19 + 7;
+		mem_write(SLOT + 0x0D, cpu.a);
+		cpu.a = 0x14;
+		call(0x05F1);
+		quake_mark(4, 0x6182);
+		quake_mark(5, 0x6187);
+		quake_mark(6, 0x618C);
+		cpu.cycles += 13 + 4 + 19 + 7;
+		cpu.b = mem_read(CASTER);
+		cpu.c = mem_read(SLOT + 0x08);
+		cpu.a = 0xFF;
+		tcall(0x39B5, 0x6198);         // damage_monster
+		newline();
+		call(0x129D);
+		yield_at(0x61A1);
+	next:
+		cpu.cycles += 23 + 23 + 7;     // $61A4
+		mem_write(SLOT + 0x08, mem_read(SLOT + 0x08) + 1);
+		mem_write(SLOT + 0x16, mem_read(SLOT + 0x16) - 1);
+		if (!mem_read(SLOT + 0x16)) break;
+		cpu.cycles += 5;
+	} while (1);
+	spell_done();
+}
+
+// $5F3B: a field (tiles $44-$47) at HL goes, the ground DE back
+static void clear_field(void) {
+	cpu.cycles += 7 + 7 + 10;
+	cpu.a = mem_read(HL);
+	if (cpu.a < 0x44) { spell_failed(); return; }
+	cpu.cycles += 7 + 10;
+	if (cpu.a >= 0x48) { spell_failed(); return; }
+	cpu.cycles += 7 + 4 + 7;
+	mem_write(HL, cpu.e);
+	cpu.l++;
+	mem_write(HL, cpu.d);
+	spell_done();
+}
+
+// Dispel ($5EE7): a field goes; in the world nothing is there to dispel
+static void dispel(void) {
+	cpu.cycles += 13 + 10 + 17;
+	uint8_t mode = mem_read(MAP_KIND);
+	cpu.a = mode;
+	if (mode < 3) {
+		cpu.cycles += 58 * mode + 79;
+		cpu.a = 0x5E; cpu.f = 0xF0;    // (the switch pops its return address)
+		if (mode == 0) {               // $5F1F
+			if (!spell_direction(0x5F22) || !spend_mp()) return;
+			cpu.cycles += 10;
+			spell_failed();
+			return;
+		}
+		if (mode == 1) {               // $5F28: in towns
+			if (!spell_direction(0x5F2B) || !spend_mp()) return;
+			call(0x646C);              // HL = the cell that way; carry if on the map
+			cpu.cycles += 10;
+			if (!(cpu.f & FC)) { spell_failed(); return; }
+			call(0xB5A4);
+			cpu.cycles += 20;
+			SET_DE(rd16(0xC9BB));      // the ground
+			clear_field();
+			return;
+		}
+		if (!spell_direction(0x5F4F) || !spend_mp()) return;   // $5F4C: dungeons
+		call(0x6480);
+		call(0x6DC0);
+		cpu.cycles += 7 + 7 + 7 + 10;
+		cpu.a = mem_read(HL) & 0xF0;
+		if (cpu.a != 0xA0) { spell_failed(); return; }
+		cpu.cycles += 10;
+		mem_write(HL, 0);
+		spell_done();
+		return;
+	}
+	cpu.cycles += 58 * 3 + 22;         // combat
+	if (!combat_direction(0x5EF3) || !spend_mp()) return;
+	call(0x48E1);
+	cpu.cycles += 19 + 19;
+	SET_HL(rd16(cpu.iy));
+	call(0x38F2);                      // HL = the member's cell
+	cpu.cycles += 7 + 4 + 7 + 4 + 7 + 7;
+	cpu.e = mem_read(HL);
+	cpu.l++;
+	cpu.d = mem_read(HL);
+	cpu.a = cpu.e;
+	if (cpu.e == 0x3C) { cpu.cycles += 10; SET_DE(0x0016); }
+	else cpu.cycles += 5;
+	call(0x6493);                      // HL = the cell that way
+	call(0x38F2);
+	cpu.cycles += 12;
+	clear_field();
+}
+
+// Energy Field ($5F65): a field of fire, lightning, poison or sleep that
+// way, in dungeons and in combat
+static void energy_field(void) {
+	cpu.cycles += 10;
+	SET_HL(0x64CE);
+	call(0x2E7F);
+	say_inline(0x5F6E);                // "Energy type? "
+	cpu.cycles += 19;
+	mem_write(SLOT + 0x1A, 0);
+	for (;;) {
+		task_frame_tick(0x5F80);
+		cpu.cycles += 7 + 10;
+		cpu.c = 4;
+		SET_DE(0x0102);
+		call(0x49F9);
+		cpu.cycles += 7;
+		if (!(cpu.f & FZ)) break;
+		cpu.cycles += 5;
+	}
+	cpu.cycles += 10;
+	if (cpu.f & FC) { cast_cancel(); return; }
+	cpu.cycles += 19 + 19 + 10 + 91 + 17;
+	uint8_t type = mem_read(SLOT + 0x1A);
+	mem_write(SLOT + 0x07, type);
+	SET_HL(rd16(0x64C6 + 2 * type));
+	text_print(HL);
+	newline();
+	cpu.cycles += 13 + 7 + 7;
+	uint8_t mode = mem_read(MAP_KIND);
+	if (mode < 3) {
+		cpu.cycles += 7 + 10;
+		if (mode != 2) { spell_failed(); return; }
+		if (!spell_direction(0x5FAF) || !spend_mp()) return;
+		call(0x6480);
+		call(0x6DC0);
+		cpu.cycles += 7 + 7 + 10;
+		if (mem_read(HL)) { spell_failed(); return; }
+		cpu.cycles += 19 + 7 + 7;
+		cpu.a = (uint8_t)(type | 0xA0);
+		mem_write(HL, cpu.a);
+		spell_done();
+		return;
+	}
+	cpu.cycles += 5;
+	if (!combat_direction(0x5FCA) || !spend_mp()) return;
+	call(0x6493);
+	call(0x38F2);
+	cpu.cycles += 7;
+	cpu.a = mem_read(HL);
+	call(0x3EB7);                      // carry: nothing can stand there
+	cpu.cycles += 10;
+	if (cpu.f & FC) { spell_failed(); return; }
+	cpu.cycles += 4 + 19 + 10 + 91 + 4 + 7 + 4 + 7;
+	uint16_t tile = rd16(0x5FE9 + 2 * type);
+	SET_DE(tile);
+	mem_write(HL, (uint8_t)tile);
+	cpu.l++;
+	mem_write(HL, tile >> 8);
+	spell_done();
+}
+
+// Light ($607D): light in the dungeon for a while
+static void light(void) {
+	if (!only_dungeon() || !spend_mp()) return;
+	cpu.cycles += 13 + 7 + 7;
+	unsigned l = mem_read(0xC95B) + 0xC8;
+	if (l > 0xFF) { cpu.cycles += 7; l = 0xFF; }
+	else cpu.cycles += 5;
+	cpu.cycles += 13;
+	cpu.a = (uint8_t)l;
+	mem_write(0xC95B, cpu.a);
+	spell_done();
+}
+
+// X-it ($6275): out of the dungeon
+static void x_it(void) {
+	if (!only_dungeon() || !spend_mp()) return;
+	cpu.cycles += 7 + 13;
+	cpu.a = 0xFF;
+	mem_write(LEVEL, 0xFF);
+	spell_done();
+}
+
+// $62E4: a random spot of the level; Z when it's empty floor
+static void random_spot(void) {
+	cpu.cycles += 17;
+	call(0x2BBF);
+	cpu.cycles += 7 + 4;
+	cpu.l = cpu.a & 0x0F;
+	call(0x2BBF);
+	cpu.cycles += 7 + 4 + 11;
+	cpu.h = cpu.a & 0x0F;
+	uint16_t at = HL;
+	call(0x6DC0);
+	cpu.cycles += 7 + 10 + 4 + 10;
+	cpu.a = mem_read(HL);
+	SET_HL(at);
+	op_or(cpu.a);
+}
+
+// Y-up / Z-down ($6283 / $62B1): a level up or down, to a random empty spot
+static void change_level(int up) {
+	if (!only_dungeon() || !spend_mp()) return;
+	cpu.cycles += 13 + 7 + 10;
+	if (mem_read(0xC9A0) == 0x19) { spell_failed(); return; }   // not in the Abyss
+	if (up) {
+		cpu.cycles += 10 + 11 + 10;
+		uint8_t lv = (uint8_t)(mem_read(LEVEL) - 1);
+		mem_write(LEVEL, lv);
+		if (lv & 0x80) { spell_done(); return; }   // up from the top: out
+	} else {
+		cpu.cycles += 13 + 7 + 10;
+		uint8_t lv = mem_read(LEVEL);
+		if (lv == 7) { spell_failed(); return; }
+		cpu.cycles += 4 + 13;
+		mem_write(LEVEL, lv + 1);
+	}
+	cpu.cycles += 7;
+	cpu.b = 0x20;
+	for (;;) {
+		random_spot();
+		cpu.cycles += 7;
+		if (cpu.f & FZ) { cpu.cycles += 5; break; }
+		if (--cpu.b == 0) {
+			cpu.cycles += 8 + 10 + 11 + 10;   // no room there: back
+			mem_write(LEVEL, (uint8_t)(mem_read(LEVEL) + (up ? 1 : -1)));
+			spell_failed();
+			return;
+		}
+		cpu.cycles += 13;
+	}
+	cpu.cycles += 16;
+	wr16(0xC953, HL);
+	call(0x129D);
+	spell_done();
+}
+
+// the spell's routine
 static void run_spell(uint8_t spell) {
 	switch (spell) {
 	case 0: restore_status(0x5E32, 'S'); break;   // Awaken
@@ -1522,8 +2008,24 @@ static void run_spell(uint8_t spell) {
 		if (mem_read(MAP_KIND) >= 3) { spell_failed(); break; }
 		restore_status(0x60DA, 'D');
 		break;
+	case 3: dispel(); break;
+	case 4: energy_field(); break;
+	case 5: missile_spell(0x08, 0x4F); break;     // Fireball
+	case 8: missile_spell(0x09, 0x4E); break;     // Iceball
+	case 9: timed_effect(0x4A); break;            // Jinx
+	case 10: missile_spell(0x0A, 0x8C); break;    // Kill
+	case 11: light(); break;
+	case 12: missile_spell(0x07, 0x4D); break;    // Magic Missile
+	case 13: timed_effect(0x4E); break;           // Negate
+	case 15: timed_effect(0x50); break;           // Protection
+	case 16: timed_effect(0x51); break;           // Quickness
+	case 18: sleep_spell(); break;
+	case 19: tremor(); break;
+	case 20: undead_spell(); break;
 	case 21: view(); break;
 	case 22: winds(); break;
-	default: native_continue_at(rd16(0x5DFB + 2 * spell)); break;
+	case 23: x_it(); break;
+	case 24: change_level(1); break;              // Y-up
+	default: change_level(0); break;              // Z-down
 	}
 }

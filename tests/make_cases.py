@@ -388,6 +388,11 @@ def main():
         for _ in range(4):
             s.press('1', 60)
         s.write(name)
+    STEER = {'fight_flee': 'LLLLLLLLLLLLLLLLLLLLLLLL', 'fight_blocked': 'UUUUUURRRRRRDDDDDDLLLLLL'}
+    for _n in ('fight_dagger', 'fight_oil', 'fight_halberd', 'fight_axe', 'fight_wand'):
+        STEER[_n] = '2222' * 6              # menu, Attack, aim, (next member)
+    STEER['fight_commands'] = ('2DD2' + '2DDD22' + '2DDDD2D22' + '2DDDDD22' + '2DDDDD2' + '1' + '2DDD2D2')
+    STEER['fight_cast'] = '2D22' + '2D2D2' + '2D2DD2' + '2D2U2' + '2D2DDD22'
     FIGHTS = {                         # combat: attack someone, then fight at random
         'fight_1':       ('p15', [], 1, 120),
         'fight_2':       ('p28', [], 2, 120),
@@ -404,13 +409,12 @@ def main():
         'fight_commands': ('p15', ['C957:02', 'C914:02'], 13, 30), # each command from the combat menu
         'fight_cast':    ('p28', MAGIC, 14, 30),                   # spells in combat
     }
+    COMBAT_SPELLS = 'ACDEFHIJKMNOPQSTU'      # the spell list in combat
+    for i, sp in enumerate(COMBAT_SPELLS):
+        FIGHTS['cspell_' + sp.lower()] = (('p15', 'p28', 'p19')[i % 3], MAGIC + ['C957:02', 'C76D:50', 'C78A:53'], 40 + i, 20)
+        STEER['cspell_' + sp.lower()] = '2D2' + 'D' * i + '2' + '2' + 'U2' + '2'
     for i, g in enumerate((0x90, 0xA4, 0xB0, 0xC0, 0xD0, 0xDC, 0xE0, 0xE8, 0xEC, 0xF0, 0xF8, 0xFC)):
         FIGHTS['foe_%02x' % g] = (('p15', 'p28', 'p19')[i % 3], ['C957:04', 'person+3:%02X' % g], 20 + i, 120)
-    STEER = {'fight_flee': 'LLLLLLLLLLLLLLLLLLLLLLLL', 'fight_blocked': 'UUUUUURRRRRRDDDDDDLLLLLL'}
-    for _n in ('fight_dagger', 'fight_oil', 'fight_halberd', 'fight_axe', 'fight_wand'):
-        STEER[_n] = '2222' * 6              # menu, Attack, aim, (next member)
-    STEER['fight_commands'] = ('2DD2' + '2DDD22' + '2DDDD2D22' + '2DDDDD22' + '2DDDDD2' + '1' + '2DDD2D2')
-    STEER['fight_cast'] = '2D22' + '2D2D2' + '2D2DD2' + '2D2U2' + '2D2DDD22'
     for name, (who, pokes, seed, n) in FIGHTS.items():
         rnd = random.Random(name)
         x, y, d, moves, rec = PEOPLE[who]
