@@ -394,7 +394,10 @@ def main():
         'fight_party':   ('p19', ['C957:03'], 3, 150),     # three in the party
         'fight_magic':   ('p31', ['C957:02'] + MAGIC, 4, 150),
         'fight_long':    ('p13', ['C957:04'], 5, 300),
+        'fight_flee':    ('p15', ['C957:02'], 6, 0),       # walk off the field
+        'fight_blocked': ('p28', [], 7, 0),                 # into the trees and the foe
     }
+    STEER = {'fight_flee': 'LLLLLLLLLLLLLLLLLLLLLLLL', 'fight_blocked': 'UUUUUURRRRRRDDDDDDLLLLLL'}
     for name, (who, pokes, seed, n) in FIGHTS.items():
         rnd = random.Random(name)
         x, y, d, moves, rec = PEOPLE[who]
@@ -409,6 +412,8 @@ def main():
         s.press(d, 30)
         s.press('2', 30)
         s.f += 200                     # the battlefield is set up
+        for k in STEER.get(name, ''):
+            s.press(k, 40)
         for _ in range(n):
             r = rnd.random()
             k = rnd.choice('UDLR') if r < 0.45 else '2' if r < 0.9 else '1'
