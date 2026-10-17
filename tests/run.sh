@@ -6,7 +6,7 @@
 # Needs build/u4.pak (tools/setup.py) and builds pc/out/u4_headless.exe if
 # it is missing. For every case (tests/cases/*.keys, from tests/make_cases.py):
 #   1. the game runs with every rewrite on and with none (U4_NATIVE=off); the
-#      state-hash printed at the end must be the same
+#      state at the end must be the same (tests/same_state.py)
 #   2. it runs in shadow mode with exact timing (U4_NATIVE=shadow,
 #      U4_SHADOW_CYCLES=1): each call of a rewrite is compared with the
 #      original on the same machine state; there must be no mismatch
@@ -20,20 +20,22 @@ EXE=pc/out/u4_headless.exe
 [ -d tests/cases ] || python tests/make_cases.py
 frames() { tail -1 "$1" | cut -d' ' -f1; }
 TASKS=$(grep -h '\.task = 1' pc/native/*.c | sed 's/.*{ "\([a-z0-9_]*\)".*/\1/' | paste -sd, -)
-# hash frames keys trace-file: the state-hash; the C tasks' entries go to the file
-hash() { U4_TRACE=$TASKS "$EXE" build/u4.pak --headless "$1" --keys "$2" 2>"$3" | tail -1 | sed 's/.*state-hash \([0-9A-F]*\).*/\1/'; }
+# run frames keys out trace: the end state (and a few frames after it) to
+# out, the C tasks' entries to trace
+run() { U4_SETTLE=30 U4_TRACE=$TASKS "$EXE" build/u4.pak --headless "$1" --keys "$2" >"$3" 2>"$4"; }
 
 check() {
 	k=tests/cases/$1.keys
 	n=$(frames "$k")
 	t=$(mktemp -d)
-	on=$(hash "$n" "$k" "$t/on")
-	off=$(U4_NATIVE=off hash "$n" "$k" "$t/off")
+	run "$n" "$k" "$t/on.out" "$t/on"
+	U4_NATIVE=off run "$n" "$k" "$t/off.out" "$t/off"
+	state=$(python tests/same_state.py "$t/off.out" "$t/on.out" 2>&1 | tail -1)
 	bad=$(U4_NATIVE=shadow U4_SHADOW_CYCLES=1 "$EXE" build/u4.pak --headless "$n" --keys "$k" 2>&1 | grep -c "differs")
 	late=$(python tests/entry_times.py "$t/off" "$t/on" 2>&1 | tail -1)
 	rm -rf "$t"
-	if [ "$on" = "$off" ] && [ "$bad" = 0 ] && [ -z "$late" ]; then echo "ok    $1"
-	else echo "FAIL  $1 (state $on vs original $off, $bad shadow mismatches${late:+; $late})"; fi
+	if [ -z "$state" ] && [ "$bad" = 0 ] && [ -z "$late" ]; then echo "ok    $1"
+	else echo "FAIL  $1 (${state:+$state, }$bad shadow mismatches${late:+; $late})"; fi
 }
 
 if [ -n "$1" ]; then check "$1"; exit; fi

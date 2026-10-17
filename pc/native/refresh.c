@@ -250,6 +250,311 @@ static int view_cell(void) {
 	return in;
 }
 
+// ------------------------------------------------------------ line of sight --
+// $1691: what the party can see of the 11 x 11 view ($D800, two bytes a
+// cell), into $D900: hidden cells become $7E (darkness). In the world, rays
+// go out in 8 directions from the party and stop at what blocks the view
+// (tiles $06, $08, $49, $7E, $7F); in towns a flood fill from the party
+// over open cells (also stopped by doors $3A $3B and $70).
+
+static int blocks_view(uint8_t t) {    // the world's
+	return t == 0x06 || t == 0x08 || t == 0x49 || t == 0x7E || t == 0x7F;
+}
+
+// cp $06 / jr z ... cp $7E / jr z (7 + 7 each, +5 when one matches); then
+// the last one (cp $7F) as `last_cycles` gives it
+static int blocks_counted(uint8_t t, int last_jp) {
+	static const uint8_t tiles[5] = { 0x06, 0x08, 0x49, 0x7E, 0x7F };
+	for (int i = 0; i < 5; i++) {
+		if (i == 4 && last_jp) {       // cp $7F / jp nz (10 either way)
+			cpu.cycles += 7 + 10;
+			return t == 0x7F;
+		}
+		cpu.cycles += 7 + 7;
+		if (t == tiles[i]) { cpu.cycles += 5; return 1; }
+	}
+	return 0;
+}
+
+// copy one cell (2 bytes) from IX to IY after stepping both by de
+static uint8_t ray_cell(uint16_t *ix, uint16_t *iy, uint16_t de) {
+	cpu.cycles += 15 + 15 + 19 + 19 + 19 + 19;
+	*ix = (uint16_t)(*ix + de);
+	*iy = (uint16_t)(*iy + de);
+	mem_write(*iy + 1, mem_read(*ix + 1));
+	uint8_t t = mem_read(*ix);
+	mem_write(*iy, t);
+	return t;
+}
+
+// $165F: from the current cell, on along de for up to b cells
+static void ray_side(uint16_t ix, uint16_t iy, uint8_t b, uint16_t de) {
+	cpu.cycles += 17 + 15 + 15 + 4;
+	uint8_t c = b;
+	for (;;) {
+		uint8_t t = ray_cell(&ix, &iy, de);
+		cpu.a = t;
+		cpu.cycles += 4 + 7;
+		if (--c == 0) { cpu.cycles += 5; break; }
+		if (blocks_counted(t, 1)) break;
+	}
+	cpu.c = 0;                         // (C is the count left; only its last value)
+	cpu.cycles += 14 + 14 + 10;
+}
+
+// $16DB: the eight rays out from the party ($D878)
+static void rays(void) {
+	cpu.cycles += 15 + 10 + 16 + 10 + 10 + 17;
+	wr16(0xD900, 0x007E);
+	for (int i = 0; i < 242; i++) mem_write(0xD902 + i, mem_read(0xD900 + i));   // $169D: all dark
+	cpu.cycles += 10 + 11 * (22 * 16 + 10) + 10;
+	cpu.cycles += 16 + 16;
+	wr16(0xD978, rd16(0xD878));        // the party's own cell
+	static const int16_t step[8] = { -22, 22, -2, 2, -24, -20, 20, 24 };
+	static const int16_t side[8][2] = {
+		{ -24, -20 }, { 20, 24 }, { -24, 20 }, { -20, 24 },
+		{ -2, -22 }, { 2, -22 }, { -2, 22 }, { 2, 22 } };
+	uint16_t ix = 0, iy = 0;
+	for (int r = 0; r < 8; r++) {
+		native_sync();
+		cpu.cycles += 14 + 14 + 7;
+		ix = 0xD878; iy = 0xD978;
+		uint8_t b = 5;
+		for (;;) {
+			cpu.cycles += 10;
+			uint8_t t = ray_cell(&ix, &iy, (uint16_t)step[r]);
+			cpu.a = t;
+			cpu.cycles += 4 + 7;
+			if (--b == 0) { cpu.cycles += 5; break; }
+			if (blocks_counted(t, 0)) break;
+			cpu.cycles += 10;
+			ray_side(ix, iy, b, (uint16_t)side[r][0]);
+			cpu.cycles += 10;
+			ray_side(ix, iy, b, (uint16_t)side[r][1]);
+			cpu.cycles += 10;          // jp back
+		}
+	}
+	cpu.iy = iy;
+	cpu.b = 0;
+	cpu.cycles += 14 + 10;             // pop ix / ret
+}
+
+// $1931: the towns' flood fill over a 13 x 13 grid at $DC00 (bit 0: blocks,
+// bit 1: seen), then the seen cells copied, the rest dark
+static uint8_t grid_l;                 // L within page $DC
+static uint8_t grid_at(uint8_t l) { return mem_read(0xDC00 | l); }
+static void grid_set(uint8_t l, uint8_t v) { mem_write(0xDC00 | l, v); }
+
+static int town_blocks(uint8_t t) {    // the chain of cp / jr z
+	static const uint8_t tiles[8] = { 0x06, 0x08, 0x49, 0x7E, 0x7F, 0x3A, 0x3B, 0x70 };
+	for (int i = 0; i < 8; i++) {
+		cpu.cycles += 7 + 7;
+		if (t == tiles[i]) { cpu.cycles += 5; return 1; }
+	}
+	cpu.cycles += 4;                   // scf
+	return 0;
+}
+
+// $19EA / $1A30: fill a run of open cells, pushing the runs above and below
+static uint8_t fill_c;                 // C: carried from one fill into the next
+static void fill(uint8_t l, int at_1a30) {
+	uint8_t e = 0xA9;                  // the stack of runs, at $DCA9 up
+	uint8_t a = l, c = fill_c;
+	const uint8_t b = 3;
+	if (at_1a30) goto check;
+	for (;;) {
+		// $19EA: back to the run's start
+		do {
+			cpu.cycles += 4 + 12 + 7;
+			l--;
+			if (grid_at(l) & 1) break;
+			cpu.cycles += 5;
+		} while (1);
+		cpu.cycles += 4 + 7 + 7 + 4 + 15 + 7 + 4 + 15 + 7 + 4 + 7;
+		a = l;
+		grid_set(l, b);
+		a = (uint8_t)(a + 0x0D); l = a;
+		grid_set(l, grid_at(l) | 2);
+		a = (uint8_t)(a + 0xE6); l = a;
+		grid_set(l, grid_at(l) | 2);
+		a = (uint8_t)(a + 0x0E); l = a;
+		c = 0;
+		for (;;) {
+			// $1A00: this cell; the ones below and above
+			cpu.cycles += 7 + 7 + 4 + 12 + 7;
+			grid_set(l, b);
+			a = (uint8_t)(a + 0x0D); l = a;
+			if (grid_at(l) & 1) {
+				cpu.cycles += 8 + 15 + 10;
+				c &= ~1;
+				grid_set(l, grid_at(l) | 2);
+			} else {
+				cpu.cycles += 5 + 8 + 7;
+				if (c & 1) cpu.cycles += 5;
+				else { cpu.cycles += 8 + 7 + 4; c |= 1; mem_write(0xDC00 | e, a); e++; }
+			}
+			cpu.cycles += 7 + 4 + 12 + 7;   // $1A17
+			a = (uint8_t)(a + 0xE6); l = a;
+			if (grid_at(l) & 1) {
+				cpu.cycles += 8 + 15 + 10;
+				c &= ~2;
+				grid_set(l, grid_at(l) | 2);
+			} else {
+				cpu.cycles += 5 + 8 + 7;
+				if (c & 2) cpu.cycles += 5;
+				else { cpu.cycles += 8 + 7 + 4; c |= 2; mem_write(0xDC00 | e, a); e++; }
+			}
+			cpu.cycles += 7 + 4;       // $1A2D
+			a = (uint8_t)(a + 0x0E); l = a;
+		check:                         // $1A30
+			cpu.cycles += 12 + 10;
+			if (!(grid_at(l) & 1)) continue;
+			break;
+		}
+		// the run ends at a blocking cell: it and the ones above and below are seen
+		cpu.cycles += 15 + 7 + 4 + 15 + 7 + 4 + 15 + 4 + 7;
+		grid_set(l, grid_at(l) | 2);
+		a = (uint8_t)(a + 0x0D); l = a;
+		grid_set(l, grid_at(l) | 2);
+		a = (uint8_t)(a + 0xE6); l = a;
+		grid_set(l, grid_at(l) | 2);
+		if (e == 0xA9) { cpu.cycles += 11; break; }
+		cpu.cycles += 5 + 4 + 7 + 4 + 10;
+		e--;
+		a = mem_read(0xDC00 | e);
+		l = a;
+	}
+	cpu.a = 0xA9;                      // (ld a,e / cp $A9: equal)
+	cpu.e = e; cpu.d = 0xDC;
+	cpu.l = l; cpu.h = 0xDC;
+	cpu.c = c; cpu.b = b;
+	cpu.f = (uint8_t)((cpu.f & ~FC) | FZ);
+	grid_l = l;
+	fill_c = c;
+}
+
+static void town_sight(void) {
+	cpu.cycles += 10 + 10 + 7 + 7;
+	uint8_t e = 0x00;
+	for (int i = 0; i < 13; i++) { grid_set(e++, 1); cpu.cycles += 7 + 4 + (i < 12 ? 13 : 8); }
+	cpu.cycles += 7;
+	uint16_t src = 0xD800;
+	for (int row = 0; row < 11; row++) {
+		native_sync();
+		cpu.cycles += 7 + 4 + 7;
+		grid_set(e++, 1);
+		for (int col = 0; col < 11; col++) {
+			cpu.cycles += 7 + 4 + 4;
+			uint8_t t = mem_read(src);
+			src += 2;
+			int bl = town_blocks(t);
+			cpu.cycles += 4 + 4 + 7 + 4 + (col < 10 ? 13 : 8);
+			grid_set(e++, (uint8_t)(bl ? 1 : 0));
+		}
+		cpu.cycles += 7 + 7 + 4 + 4 + 10;
+		grid_set(e++, 1);
+	}
+	cpu.cycles += 7;
+	for (int i = 0; i < 13; i++) { grid_set(e++, 1); cpu.cycles += 7 + 4 + (i < 12 ? 13 : 8); }
+	// doors ($70) right next to the party don't block
+	static const uint16_t near[4] = { 0xD862, 0xD876, 0xD87A, 0xD88E };
+	static const uint8_t cell[4] = { 0x47, 0x53, 0x55, 0x61 };
+	cpu.cycles += 7;
+	for (int i = 0; i < 4; i++) {
+		cpu.cycles += 13 + 4 + 7;
+		if (mem_read(near[i]) == 0x70) { cpu.cycles += 4 + 13; grid_set(cell[i], 0); }
+		else cpu.cycles += 5;
+	}
+	native_sync();
+	cpu.cycles += 10 + 10 + 7 + 17;    // the fill from the party's left ($DC54)
+	fill(0x54, 0);
+	cpu.cycles += 10 + 10 + 4 + 17;    // and from the party ($DC55)
+	fill(0x55, 1);
+	native_sync();
+	// $19BC: the seen cells, the rest dark
+	cpu.cycles += 10 + 10 + 4 + 10 + 7;
+	uint8_t b_ = cpu.b_, c_ = cpu.c_, d_ = cpu.d_, e_ = cpu.e_, h_ = cpu.h_, l_ = cpu.l_;
+	uint16_t bc_alt = (uint16_t)(cpu.b << 8 | cpu.c), de_alt = DE;   // exx: the main set goes aside
+	uint16_t s = 0xD800, d = 0xD900;
+	uint16_t bc = bc_alt;
+	uint8_t g = 0x0E, a_val = 0xA9;
+	for (int row = 0; row < 11; row++) {
+		cpu.cycles += 7;
+		for (int col = 0; col < 11; col++) {
+			cpu.cycles += 12 + 4 + 7;
+			if (grid_at(g) & 2) {
+				cpu.cycles += 16 + 16 + 10;
+				mem_write(d, mem_read(s)); mem_write(d + 1, mem_read(s + 1));
+				s += 2; d += 2; bc -= 2;
+			} else {
+				cpu.cycles += 5 + 7 + 7 + 4 + 4 + 7 + 4 + 4 + 4;
+				mem_write(d, 0x7E); mem_write(d + 1, 0);
+				d += 2; s += 2;
+				a_val = 0;
+			}
+			cpu.cycles += 4 + 4 + (col < 10 ? 13 : 8);
+			g++;
+		}
+		cpu.cycles += 4 + 4 + 4 + 10;
+		g += 2;
+	}
+	cpu.cycles += 10;
+	// the registers as the original leaves them: the grid's in the main set,
+	// the copy's in the other
+	cpu.h = 0xDC; cpu.l = g; cpu.b = 0; cpu.c = 0;
+	cpu.d = d_; cpu.e = e_;            // (the main DE is the other set's from before)
+	cpu.b_ = (uint8_t)(bc >> 8); cpu.c_ = (uint8_t)bc;
+	cpu.d_ = (uint8_t)(d >> 8); cpu.e_ = (uint8_t)d;
+	cpu.h_ = (uint8_t)(s >> 8); cpu.l_ = (uint8_t)s;
+	cpu.a = a_val;
+	(void)b_; (void)c_; (void)h_; (void)l_; (void)de_alt;
+}
+
+// world: the shrine at ($DD, $E0) shows as seen-through ($08) for the rays
+static void world_sight(void) {
+	cpu.cycles += 10 + 17;
+	SET_HL(0xE0DD);
+	uint16_t de = DE;
+	int in = view_cell();
+	SET_DE(de);
+	cpu.cycles += 7 + 10 + 10;
+	cpu.h = 0xD8;
+	if (!in) { rays(); return; }
+	uint16_t at = HL;
+	cpu.cycles += 7 + 10 + 4 + 7 + 10 + 11 + 11 + 17;
+	uint8_t e = mem_read(at), dd = mem_read(at + 1);
+	mem_write(at, 0x08);
+	mem_write(at + 1, 0x00);
+	rays();
+	cpu.cycles += 10 + 10 + 7 + 4 + 7 + 7 + 7 + 7;
+	mem_write(at + 1, dd);
+	mem_write(at, e);
+	SET_HL(0xD900 | (at & 0xFF));
+	SET_DE((uint16_t)(dd << 8 | e));
+	cpu.a = mem_read(HL);
+	if (cpu.a == 0x7E) { cpu.cycles += 11; return; }
+	cpu.cycles += 5 + 7 + 4 + 7 + 10;
+	mem_write(HL, e);
+	cpu.l++;
+	mem_write(HL, dd);
+}
+
+static void line_of_sight(void) {      // $1691
+	cpu.cycles += 13 + 4 + 7;
+	if (!mem_read(0xC98F)) {           // nothing hidden: copied as it is
+		cpu.cycles += 10 + 10 + 10 + 11 * (22 * 16 + 10) + 10;
+		for (int i = 0; i < 242; i++) mem_write(0xD900 + i, mem_read(0xD800 + i));
+		SET_HL(0xD800 + 242); SET_DE(0xD900 + 242); SET_BC(0);
+		return;
+	}
+	cpu.cycles += 5 + 13 + 4 + 10;
+	uint8_t mode = mem_read(MAP_KIND);
+	if (mode == 0) { world_sight(); return; }
+	cpu.cycles += 4 + 10;
+	if (mode == 1) { town_sight(); return; }
+	rays();
+}
+
 // $15E4: the moongate, the line of sight, the creatures on the view; what
 // is underfoot and around; then queued for the screen ($1A7C)
 static void compose(void) {
@@ -273,7 +578,8 @@ static void compose(void) {
 			mem_write(HL, 0);
 		} else cpu.cycles += 5;
 	} else cpu.cycles += 5;
-	call(0x1691);                      // the view buffer: what can be seen
+	cpu.cycles += 17;                  // call $1691: the view buffer: what can be seen
+	line_of_sight();
 	cpu.cycles += 14 + 10 + 7;
 	cpu.iy = 0xC749;                   // the people, last first
 	SET_DE(0xFFF8);

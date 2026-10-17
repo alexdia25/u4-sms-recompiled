@@ -73,6 +73,16 @@ static void log_fallback(uint16_t pc) {
 	if (b >= 0 && b < 32) fallback_seen[b][pc & 0x3FFF] = 1;
 }
 
+// the RAM without the stack ($DE00-$DFEF): it holds stale return addresses
+// that depend on exact timing and on how rewritten routines call the
+// original ones; equal state-hashes mean the game is in the same state
+static uint32_t state_hash(void) {
+	uint32_t g = 2166136261u;
+	for (int i = 0; i < 0x2000; i++)
+		if (i < 0x1E00 || i >= 0x1FF0) g = (g ^ sms.ram[i]) * 16777619u;
+	return g;
+}
+
 static int headless(int frames, const char *shot, const char *keys) {
 	FILE *k = keys ? fopen(keys, "r") : NULL;
 	int next_frame = -1;
@@ -136,14 +146,18 @@ static int headless(int frames, const char *shot, const char *keys) {
 	if (shot) write_ppm(shot);
 	uint32_t h = 2166136261u;
 	for (int i = 0; i < 0x2000; i++) h = (h ^ sms.ram[i]) * 16777619u;
-	// the same without the stack ($DE00-$DFEF): it holds stale return addresses
-	// that depend on exact timing and on how rewritten routines call the
-	// original ones; equal state-hashes mean the game is in the same state
-	uint32_t g = 2166136261u;
-	for (int i = 0; i < 0x2000; i++)
-		if (i < 0x1E00 || i >= 0x1FF0) g = (g ^ sms.ram[i]) * 16777619u;
-	printf("frames %d pc %04X ram-hash %08X state-hash %08X interpreted %llu\n", frames, cpu.pc, h, g,
-		(unsigned long long)recomp_fallbacks);
+	printf("frames %d pc %04X ram-hash %08X state-hash %08X interpreted %llu\n", frames, cpu.pc, h,
+		state_hash(), (unsigned long long)recomp_fallbacks);
+	// U4_SETTLE=n: n more frames with no input, each one's pc and state-hash.
+	// A frame can end in the middle of a rewritten routine's work (the CPU
+	// parked at PARK_PC) while the original is half way through it: tests
+	// compare the two at the first frame where both are at the same place.
+	int settle = getenv("U4_SETTLE") ? atoi(getenv("U4_SETTLE")) : 0;
+	for (int f = 0; f < settle; f++) {
+		sms.pad1 = 0;
+		sms_run_frame();
+		printf("settle %d pc %04X state-hash %08X\n", frames + f + 1, cpu.pc, state_hash());
+	}
 	return 0;
 }
 
