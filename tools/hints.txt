@@ -364,3 +364,5 @@ native   03:9D6E native_combat_prompt
 name     03:A493 foes_turn
 native   03:A493 native_foes_turn
 name     03:A5BC foe_acts
+name     01:6A0F dungeon_turn
+native   01:6A0F native_dungeon_turn

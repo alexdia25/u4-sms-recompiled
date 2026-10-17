@@ -127,6 +127,7 @@ alone runs the game.
   - talking to people;
   - every kind of shop;
   - map loading and walking;
+  - the party's turn in a dungeon;
   - the player's turn, moving, and all eight commands (Talk, Attack, Magic with spell mixing, casting and every spell, Get Chest, Use, Ready, Search, Camp);
   - combat: a member's turn (moving, fleeing, passing, the menu and its commands) and the foes' turn;
   - combat and karma rules;

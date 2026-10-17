@@ -452,6 +452,8 @@ def main():
         DUNGEONS['dungeon_dark_' + d] = (d, ['C913:00'], '', 60)
     for sp in 'DELXYZ':
         DUNGEONS['dspell_' + sp.lower()] = ('despise', MAGIC, '2DD222' + 'D' * DUNGEON_SPELLS.index(sp) + '2U2', 20)
+    DUNGEONS['dungeon_climb'] = ('despise', ['C95B:FF'], 'L', 20)          # the ladder up, next to the way in
+    DUNGEONS['dungeon_room'] = ('despise', ['C95B:FF'], 'RRDRR', 60)       # through a door into a room
     DUNGEONS['dspell_y_top'] = ('wrong', MAGIC, '2DD222' + 'D' * DUNGEON_SPELLS.index('Y') + '2', 20)
     for name, (d, pokes, steer, n) in DUNGEONS.items():
         rnd = random.Random(name)
