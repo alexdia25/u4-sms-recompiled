@@ -396,8 +396,15 @@ def main():
         'fight_long':    ('p13', ['C957:04'], 5, 300),
         'fight_flee':    ('p15', ['C957:02'], 6, 0),       # walk off the field
         'fight_blocked': ('p28', [], 7, 0),                 # into the trees and the foe
+        'fight_dagger':  ('p15', ['C75C:02', 'C921:01'], 8, 40),   # thrown: one spare, then the last
+        'fight_oil':     ('p28', ['C75C:09', 'C928:00'], 9, 40),   # flaming oil, the last one
+        'fight_halberd': ('p19', ['C75C:0A'], 10, 40),
+        'fight_axe':     ('p31', ['C75C:0B'], 11, 40),             # the magic axe comes back
+        'fight_wand':    ('p13', ['C75C:0E', 'C757:10'], 12, 40),  # low dexterity
     }
     STEER = {'fight_flee': 'LLLLLLLLLLLLLLLLLLLLLLLL', 'fight_blocked': 'UUUUUURRRRRRDDDDDDLLLLLL'}
+    for _n in ('fight_dagger', 'fight_oil', 'fight_halberd', 'fight_axe', 'fight_wand'):
+        STEER[_n] = '2222' * 6              # menu, Attack, aim, (next member)
     for name, (who, pokes, seed, n) in FIGHTS.items():
         rnd = random.Random(name)
         x, y, d, moves, rec = PEOPLE[who]

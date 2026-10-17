@@ -128,7 +128,7 @@ alone runs the game.
   - every kind of shop;
   - map loading and walking;
   - the player's turn, moving, and all eight commands (Talk, Attack, Magic with spell mixing, the casting menu and the spells cast outside combat, Get Chest, Use, Ready, Search, Camp);
-  - a party member's turn in combat: moving, fleeing, passing and the combat menu;
+  - a party member's turn in combat: moving, fleeing, passing, the combat menu and Attack;
   - combat and karma rules;
   - the task system.
 

@@ -46,6 +46,54 @@ static void frame_tick_v(uint16_t site) {
 }
 
 static void prompt(void);
+static void combat_attack(void);
+
+// call an original routine that may wait for frames, from `site`
+static void tcall(uint16_t addr, uint16_t site) {
+	cpu.cycles += 17;
+	task_call(addr, (uint16_t)(site + 3));
+}
+
+// "call vec_print_inline" with the text after it
+static void say_inline_v(uint16_t text) {
+	uint16_t hl = HL;
+	cpu.cycles += 17 + 10 + 19 + 17;
+	text_print(text);
+	cpu.cycles += 19 + 10;
+	SET_HL(hl);
+}
+
+// a command's end: $A0C0 "Aborted!", $A0C6 cancelled (carry), $A0C9 a new
+// line, $A0CC done; then back in the turn at $9D9E: cancelled, the prompt
+// again, else the turn is over
+enum { END_ABORTED, END_CANCELLED, END_NEWLINE, END_DONE };
+static void command_end(int how) {
+	if (how == END_ABORTED) {
+		cpu.cycles += 10;
+		SET_HL(0xAC79);
+		call(0x7F62);                  // "Aborted!"
+	}
+	if (how <= END_CANCELLED) {
+		cpu.cycles += 4 + 12;          // scf / jr $A0CD
+		cpu.f |= FC;
+	} else {
+		if (how == END_NEWLINE) call(0x7F6E);
+		cpu.cycles += 4;               // or a
+		op_or(cpu.a);
+	}
+	cpu.cycles += 11;                  // push af
+	uint8_t a = cpu.a, f = cpu.f;
+	push16((uint16_t)(a << 8 | f));
+	call(0x06D4);
+	show_member();
+	pop16();
+	cpu.a = a; cpu.f = f;
+	cpu.cycles += 10 + 10 + 42;        // pop af / jp task_return_1
+	SET_HL(rd16(SLOT + 0x24));
+	cpu.cycles += 7;                   // $9D9E: jr c,$9D6E
+	if (f & FC) { cpu.cycles += 5; prompt(); }
+	else native_continue_at(TURN_OVER);
+}
 
 // ------------------------------------------------------------- moving --
 // The battlefield is 11 x 11; its tiles are at $D900 + 2 * (11 * y + x).
@@ -263,21 +311,8 @@ static void combat_menu(uint16_t back) {
 	}
 	cpu.cycles += 7;
 	if (cpu.f & FC) {                  // $A0C0: cancelled
-		cpu.cycles += 5 + 10;
-		SET_HL(0xAC79);
-		call(0x7F62);                  // "Aborted!"
-		cpu.cycles += 4 + 12 + 11;     // scf / jr $A0CD / push af
-		cpu.f |= FC;
-		uint8_t a = cpu.a, f = cpu.f;
-		push16((uint16_t)(a << 8 | f));
-		call(0x06D4);
-		show_member();
-		pop16();
-		cpu.a = a; cpu.f = f;
-		cpu.cycles += 10 + 10 + 42;    // pop af / jp task_return_1
-		SET_HL(back);
-		cpu.cycles += 7 + 5;           // $9D9E: jr c,$9D6E
-		prompt();
+		cpu.cycles += 5;
+		command_end(END_ABORTED);
 		return;
 	}
 	cpu.cycles += 19 + 10 + 91;        // the command's name
@@ -288,7 +323,8 @@ static void combat_menu(uint16_t back) {
 	cpu.cycles += 19 + 10 + 10 + 10 + 52;   // ld a / ld hl / jp $0018 / jp $0083: the command (original)
 	cpu.a = cmd;
 	SET_HL(rd16(0xA0B4 + 2 * cmd));
-	native_continue_at(HL);
+	if (cmd == 0) combat_attack();
+	else native_continue_at(HL);
 }
 
 // $9D6E: ">" and wait: a direction moves, button 1 passes (original code),
@@ -370,3 +406,211 @@ static void member_turn(void) {
 
 Native native_combat_turn = { "combat_turn", 0x9D3B, 3, member_turn, 0, 0, 0, .task = 1 };
 Native native_combat_prompt = { "combat_prompt", 0x9D6E, 3, prompt, 0, 0, 0, .task = 1 };
+
+// ------------------------------------------------------------- attack --
+#define FOES        0xC83E          // 16 foes, 8 bytes each: +0 the graphic (0 = none)
+#define WEAPON      (SLOT + 0x07)
+#define RANGE       (SLOT + 0x1B)
+#define TARGET      (SLOT + 0x08)
+
+// $A24F: carry, after "Nothing to Attack!", when no foe is left
+static int no_foes(void) {
+	cpu.cycles += 17 + 10 + 10 + 7 + 4;
+	uint8_t any = 0;
+	for (int i = 0; i < 16; i++) {
+		any |= mem_read(FOES + 8 * i);
+		cpu.cycles += 7 + 11 + (i < 15 ? 13 : 8);
+	}
+	SET_HL(FOES + 0x80);
+	SET_DE(0x0008);
+	cpu.b = 0;
+	cpu.a = any;
+	op_or(any);
+	if (any) { cpu.cycles += 11; return 0; }
+	cpu.cycles += 5;
+	call(0x7F11);
+	say_inline_v(0xA263);              // "Nothing to Attack!"
+	cpu.cycles += 4 + 10;
+	cpu.f |= FC;
+	return 1;
+}
+
+static void miss(uint16_t then, uint16_t site) {   // "Miss", then $A219 or $A21C
+	cpu.cycles += 10;
+	SET_HL(0xACA8);
+	call(0x7F62);
+	tcall(then, site);
+	cpu.cycles += 10;                  // jp $A0C9
+	command_end(END_NEWLINE);
+}
+
+// combat_attack ($A0D8): aim at a foe; hand weapons strike next to the
+// member (the pattern at $A2A2, or $A2B3 for the halberd), the others fly
+// up to their range. A hit: dexterity decides, then damage by weapon and
+// strength.
+static void combat_attack(void) {
+	if (no_foes()) { cpu.cycles += 10; command_end(END_CANCELLED); return; }
+	cpu.cycles += 10;
+	tcall(0x7E06, 0xA0DE);             // "Aim:" at a foe
+	cpu.cycles += 10;
+	if (cpu.f & FC) { command_end(END_ABORTED); return; }
+	cpu.cycles += 19 + 10 + 48 + 19 + 4 + 7;
+	uint8_t weapon = mem_read(WEAPON);
+	SET_HL(0xA292 + weapon);
+	uint8_t range = mem_read(HL);
+	mem_write(RANGE, range);
+	cpu.a = range;
+	op_or(range);
+	int thrown = 0;
+	if (range) {
+		cpu.cycles += 19 + 7 + 7;
+		cpu.a = weapon;
+		op_sub8(2, 0, 0);
+		if (weapon != 2) { cpu.cycles += 5; thrown = 1; }
+		else {                         // a dagger: thrown unless the foe is next to the member
+			cpu.cycles += 10;
+			SET_HL(0xA2A2);
+			call(0xA279);              // target_in_pattern
+			cpu.cycles += 7;
+			if (cpu.f & FC) { cpu.cycles += 5; thrown = 1; }
+		}
+	} else cpu.cycles += 5;
+	if (!thrown) {                     // $A100: next to the member?
+		cpu.cycles += 19 + 7 + 10 + 7;
+		cpu.a = weapon;
+		op_sub8(0x0A, 0, 0);
+		SET_HL(0xA2A2);
+		if (weapon == 0x0A) { cpu.cycles += 10; SET_HL(0xA2B3); }
+		else cpu.cycles += 5;
+		call(0xA279);
+		cpu.cycles += 7;
+		if (cpu.f & FC) {              // too far
+			cpu.cycles += 7;
+			cpu.a = 0x19;
+			call(0x05F1);
+			cpu.cycles += 10;
+			SET_HL(0xACA8);
+			call(0x7F62);              // "Miss"
+			cpu.cycles += 10;
+			command_end(END_NEWLINE);
+			return;
+		}
+		cpu.cycles += 5 + 7;           // $A120: the blow
+		cpu.a = 6;
+		tcall(0x7EF6, 0xA122);
+		cpu.cycles += 19 + 19 + 19;
+		mem_write(SLOT + 0x09, 8);
+		cpu.l = mem_read(SLOT + 0x20);
+		cpu.h = mem_read(SLOT + 0x21);
+		call(0xA477);
+		cpu.cycles += 19 + 19 + 7;
+		mem_write(SLOT + 0x0B, cpu.l);
+		mem_write(SLOT + 0x0D, cpu.h);
+		cpu.a = 0x18;
+		call(0x05F1);
+		cpu.cycles += 19;
+		mem_write(SLOT + 0x16, 5);
+		for (;;) {
+			tcall(0xA482, 0xA141);
+			tcall(0x7F59, 0xA144);
+			cpu.cycles += 23 + 7;
+			uint8_t left = (uint8_t)(mem_read(SLOT + 0x16) - 1);
+			mem_write(SLOT + 0x16, left);
+			if (!left) break;
+			cpu.cycles += 5;
+		}
+		cpu.cycles += 10;              // jp $A1BA
+	} else {
+		cpu.cycles += 19 + 7 + 7;      // $A14F: daggers and oil are used up
+		cpu.a = weapon;
+		if (weapon == 2) cpu.cycles += 5;
+		else cpu.cycles += 7 + 7 + (weapon == 9 ? 0 : 5);
+		if (weapon == 2 || weapon == 9) {
+			cpu.cycles += 10 + 30 + 7 + 4 + 7;
+			SET_HL(0xC91F + weapon);
+			uint8_t spare = mem_read(HL);
+			cpu.a = spare;
+			op_or(spare);
+			if (spare) { cpu.cycles += 11 + 12; mem_write(HL, spare - 1); }
+			else {                     // the last one: the hands are empty
+				cpu.cycles += 5;
+				member_record_iy();
+				cpu.cycles += 19 + 10;
+				mem_write(cpu.iy + 0x0B, 0);
+				SET_HL(0xAC9D);
+				call(0x7F62);          // "Last one! "
+			}
+		}
+		cpu.cycles += 19 + 7 + 7 + 7;  // $A172: the missile's graphic
+		cpu.a = 6;
+		if (mem_read(WEAPON) == 0x0E) { cpu.cycles += 7; cpu.a = 9; }
+		else cpu.cycles += 5;
+		cpu.cycles += 19 + 19 + 19 + 19;
+		SET_HL(rd16(SLOT + 0x1E));
+		SET_DE(rd16(SLOT + 0x20));
+		tcall(0x7EBD, 0xA189);
+		cpu.cycles += 19;
+		mem_write(SLOT + 0x16, 0);
+		for (;;) {                     // $A190: it flies
+			cpu.cycles += 23;
+			mem_write(SLOT + 0x16, mem_read(SLOT + 0x16) + 1);
+			tcall(0x7EBA, 0xA193);
+			tcall(0x7E24, 0xA196);     // carry clear: a foe there
+			cpu.cycles += 7;
+			if (!(cpu.f & FC)) { cpu.cycles += 5; break; }
+			tcall(0xA460, 0xA19B);
+			tcall(0x7EB7, 0xA19E);     // carry: it hits something
+			cpu.cycles += 7;
+			if (!(cpu.f & FC)) {
+				cpu.cycles += 19 + 19 + 7;
+				cpu.a = mem_read(SLOT + 0x16);
+				op_sub8(mem_read(RANGE), 0, 0);
+				if (cpu.f & FC) { cpu.cycles += 5; continue; }
+			} else cpu.cycles += 5;
+			miss(0xA219, 0xA1B1);      // $A1AB
+			return;
+		}
+		cpu.cycles += 19;              // $A1B7: the foe it reached
+		mem_write(TARGET, cpu.a);
+	}
+	cpu.cycles += 13 + 7 + 7;          // $A1BA: in the Abyss only magic weapons
+	if (mem_read(0xC9A0) == 0x19) {
+		cpu.cycles += 19 + 7 + 7;
+		cpu.a = mem_read(WEAPON);
+		op_sub8(0x0B, 0, 0);
+		if (cpu.f & FC) { cpu.cycles += 5; miss(0xA21C, 0xA213); return; }
+	} else cpu.cycles += 5;
+	member_record_iy();                // $A1C8: dexterity
+	cpu.cycles += 19 + 7 + 7;
+	uint8_t dex = mem_read(cpu.iy + 7);
+	cpu.a = dex;
+	op_sub8(0x28, 0, 0);
+	if (dex < 0x28) {
+		cpu.cycles += 7 + 4;
+		cpu.b = (uint8_t)(dex + 0x80);
+		call(0x7ED8);                  // random
+		cpu.cycles += 4 + 7;
+		op_sub8(cpu.b, 0, 0);
+		if (!(cpu.f & FC)) { cpu.cycles += 5; miss(0xA21C, 0xA213); return; }
+	} else cpu.cycles += 5;
+	cpu.cycles += 10;                  // $A1DB: a hit
+	SET_HL(0xACAD);
+	call(0x7F62);                      // "Hit"
+	tcall(0x7F1A, 0xA1E1);
+	member_record_iy();
+	cpu.cycles += 19 + 10 + 48 + 19 + 7;
+	SET_HL(0xAC34 + mem_read(cpu.iy + 0x0B));
+	unsigned dmg = mem_read(HL) + mem_read(cpu.iy + 6);   // the weapon's damage + strength
+	if (dmg > 0xFF) { cpu.cycles += 7; dmg = 0xFF; }
+	else cpu.cycles += 5;
+	cpu.cycles += 11 + 13 + 4 + 19 + 10;
+	cpu.b = mem_read(MEMBER);
+	cpu.c = mem_read(TARGET);
+	cpu.a = (uint8_t)dmg;
+	call(0x7EDB);                      // random_below
+	tcall(0x7E36, 0xA201);             // damage_monster
+	tcall(0x7F4D, 0xA204);
+	tcall(0xA221, 0xA207);
+	cpu.cycles += 10;
+	command_end(END_NEWLINE);
+}

@@ -64,6 +64,7 @@ int native_parked(void);
 // For C tasks: end this turn (like yield, the slot resuming at `resume`) and
 // continue on the task's next one.
 void task_wait_turn(uint16_t resume);
+void task_call(uint16_t addr, uint16_t back);   // an original routine that may yield, called from back
 
 // the dispatcher calls this at PARK_PC, or anywhere while a C task waits;
 // 1 = handled (the CPU has moved on)

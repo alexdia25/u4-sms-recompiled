@@ -220,8 +220,9 @@ void native_report(void) {
 //   waits for its next turn (task_wait_turn), its slot gets the resume
 //   address the original would have left there and the CPU goes back to
 //   run_tasks; when run_tasks jumps to that address with IX on that slot,
-//   the dispatcher resumes the fiber instead. A C task must not call an
-//   original routine that yields (its stack would be left behind).
+//   the dispatcher resumes the fiber instead. An original routine that
+//   yields is called with task_call: the fiber waits the same way, for the
+//   routine to return to the call's return address.
 // Fibers can park inside each other (a C task calls an original routine that
 // uses a blocking native), so parked fibers are kept on a stack.
 #define POOL   8
@@ -231,6 +232,7 @@ void native_report(void) {
 typedef struct Fiber {
 	Native *n;               // what runs on it; NULL when free
 	uint16_t wait_pc;        // a C task waiting for its turn: where its slot resumes
+	uint16_t wait_sp;        // ... or for an original routine to return there (task_call)
 #ifdef _WIN32
 	void *h;
 #else
@@ -371,8 +373,21 @@ static void run_task(Native *n) {
 void task_wait_turn(uint16_t resume) {
 	wr16(cpu.ix + 2, resume);
 	current->wait_pc = resume;
+	current->wait_sp = 0;
 	native_tasks_waiting++;
 	cpu.pc = pop16();          // back to run_tasks
+	to_main();
+}
+
+// From a C task: call an original routine that may wait for frames (yield)
+// as "call addr" would from `back`, and come back here when it returns there
+// with IX on this slot. Meanwhile the machine runs it as usual.
+void task_call(uint16_t addr, uint16_t back) {
+	push16(back);
+	cpu.pc = addr;
+	current->wait_pc = back;
+	current->wait_sp = cpu.sp + 2;
+	native_tasks_waiting++;
 	to_main();
 }
 
@@ -399,7 +414,7 @@ int native_special(void) {
 		int off = cpu.ix - TASK_SLOTS;
 		if (off >= 0 && off % 0x30 == 0 && off / 0x30 < SLOTS) {
 			Fiber *f = &task_fiber[off / 0x30];
-			if (f->n && f->wait_pc && f->wait_pc == cpu.pc) {
+			if (f->n && f->wait_pc && f->wait_pc == cpu.pc && (!f->wait_sp || f->wait_sp == cpu.sp)) {
 				f->wait_pc = 0;
 				native_tasks_waiting--;
 				switch_to(f);
