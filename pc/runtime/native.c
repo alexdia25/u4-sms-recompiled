@@ -76,6 +76,7 @@ static int reg_ok(unsigned before, unsigned orig, unsigned nat, int is_output) {
 }
 
 static int task_in_call(void);
+void native_sync(void);
 
 int native_call(Native *n) {
 	int m = get_mode();
@@ -386,6 +387,7 @@ void task_wait_turn(uint16_t resume) {
 	// the caller has counted yield's own time; yield itself runs on the
 	// machine, so that an interrupt due meanwhile comes at the same place
 	cpu.cycles -= 58;
+	native_sync();
 	push16(resume);
 	cpu.pc = 0x0B19;
 	current->wait_pc = resume;
@@ -398,6 +400,7 @@ void task_wait_turn(uint16_t resume) {
 // as "call addr" would from `back`, and come back here when it returns there
 // with IX on this slot. Meanwhile the machine runs it as usual.
 void task_call(uint16_t addr, uint16_t back) {
+	native_sync();
 	push16(back);
 	cpu.pc = addr;
 	current->wait_pc = back;
@@ -440,12 +443,27 @@ int native_special(void) {
 	return 0;
 }
 
+// From rewritten code on a fiber: if the C has run past the end of the
+// current line, let the machine catch up first: the cycles go back to the
+// line's end, the line's events (interrupts) happen, and the rest is spent at
+// PARK_PC before the fiber goes on - as the time sink does for other natives.
+void native_sync(void) {
+	if (!current || cpu.cycles <= cpu.budget) return;
+	sink_left = cpu.cycles - cpu.budget;
+	cpu.cycles = cpu.budget;
+	sink_pc = PARK_PC;
+	cpu.pc = PARK_PC;
+	sinking = 1;
+	park();
+}
+
 // Run an original routine from C and come back when it returns. Used by
 // rewritten code that still relies on parts not rewritten yet. From a fiber
 // it runs in the machine as usual, interrupts included; otherwise on the
 // interpreter with interrupts held off until it returns.
 void call_original(uint16_t addr) {
 	if (current) {
+		native_sync();             // interrupts due during the C first
 		push16(PARK_PC);
 		cpu.pc = addr;
 		park();

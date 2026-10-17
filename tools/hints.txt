@@ -373,3 +373,4 @@ native   02:8FCB native_dungeon_search
 name     02:B5B3 creatures_move
 name     02:BB17 creatures_appear
 name     02:B5E2 creature_blocked
+native   00:129D native_refresh

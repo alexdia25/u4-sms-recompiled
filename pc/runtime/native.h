@@ -76,4 +76,7 @@ extern int native_tasks_waiting;
 // the interpreter with interrupts held until it returns.
 void call_original(uint16_t addr);
 
+// on a fiber: let interrupts due during the C so far happen (native.c)
+void native_sync(void);
+
 #endif
