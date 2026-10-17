@@ -1142,3 +1142,128 @@ static void foes_turn(void) {
 	native_continue_at(HL);
 }
 Native native_foes_turn = { "foes_turn", 0xA493, 3, foes_turn, 0, 0, 0, .task = 1 };
+
+// ------------------------------------------------------------ the round --
+// After each member's turn ($9DA0): their statuses, whether the fight goes
+// on, the next member - or the foes' turn and a new round ($9D37). The end
+// ($9DBF): the outcome, and back to the game mode the fight came from.
+
+// $9FD8: carry while the fight goes on (members on the field, and foes -
+// in a dungeon room until the party leaves it)
+static int fight_goes_on(void) {
+	cpu.cycles += 17 + 10 + 10 + 7 + 4;
+	uint8_t any = 0;
+	for (int i = 0; i < 8; i++) { any |= mem_read(0xC8BB + 5 * i); cpu.cycles += 7 + 11 + (i < 7 ? 13 : 8); }
+	SET_HL(0xC8BB + 40); SET_DE(0x0005); cpu.b = 0;
+	cpu.a = any;
+	op_or(any);
+	if (!any) { cpu.cycles += 11; return 0; }
+	cpu.cycles += 5 + 13 + 7 + 4;
+	cpu.a = mem_read(MAP_MODE);
+	op_sub8(5, 0, 0);
+	cpu.f |= FC;
+	if (cpu.a == 5) { cpu.cycles += 11; return 1; }
+	cpu.cycles += 5 + 10 + 10 + 7 + 4;
+	any = 0;
+	for (int i = 0; i < 16; i++) { any |= mem_read(FOES + 8 * i); cpu.cycles += 7 + 11 + (i < 15 ? 13 : 8); }
+	SET_HL(FOES + 0x80); SET_DE(0x0008);
+	cpu.a = any;
+	op_or(any);
+	if (!any) { cpu.cycles += 11; return 0; }
+	cpu.cycles += 5 + 4 + 10;
+	cpu.f |= FC;
+	return 1;
+}
+
+// $9DFA: a member's statuses after their turn: what is underfoot, falling
+// down, quickness (another turn), waking up
+static void member_after(void) {
+	cpu.cycles += 17;
+	call(0x7E8A);                      // IY = the figure
+	cpu.cycles += 19 + 4;
+	if (!mem_read(cpu.iy + 2)) { cpu.cycles += 11; return; }
+	cpu.cycles += 5 + 20;
+	SET_BC(rd16(MEMBER));
+	call(0x7ECF);                      // member_able: carry if not
+	if (!(cpu.f & FC)) tcall(0x7E54, 0x9E09);   // the ground's hazards
+	else cpu.cycles += 10;
+	cpu.cycles += 20;
+	SET_BC(rd16(MEMBER));
+	call(0x7ED2);                      // member_can_act
+	cpu.cycles += 7;
+	if (cpu.f & FC) {                  // down: off the field
+		call(0x7E8A);
+		cpu.cycles += 19 + 10;
+		mem_write(cpu.iy + 2, 0);
+		return;
+	}
+	cpu.cycles += 5 + 20;              // $9E1D
+	SET_BC(rd16(MEMBER));
+	call(0x7ECF);
+	cpu.cycles += 7;
+	if (!(cpu.f & FC)) {
+		cpu.cycles += 13 + 7 + 7;
+		if (mem_read(0xC976) == 0x51) {   // quickness: half the time, the same member again
+			random_v();
+			cpu.cycles += 7 + 7;
+			if (cpu.a & 1) {
+				cpu.cycles += 10 + 11 + 10;
+				mem_write(MEMBER, mem_read(MEMBER) - 1);
+				SET_HL(MEMBER);
+				return;
+			}
+			cpu.cycles += 5;
+		} else cpu.cycles += 5;
+	} else cpu.cycles += 5;
+	member_record_iy();                // $9E39: asleep: wakes 1 time in 8
+	cpu.cycles += 19 + 7 + 7;
+	if (mem_read(cpu.iy + 0x1C) == 'S') {
+		random_v();
+		cpu.cycles += 7 + 7;
+		if (!(cpu.a & 7)) {
+			cpu.cycles += 19;
+			mem_write(cpu.iy + 0x1C, 'G');
+			call(0x7E8A);
+			cpu.cycles += 20;
+			SET_BC(rd16(MEMBER));
+			call(0x7ED5);              // their figure, standing
+			cpu.cycles += 19 + 19;
+			mem_write(cpu.iy + 2, cpu.a);
+			mem_write(cpu.iy + 3, cpu.a);
+			call(0x7F29);
+		} else cpu.cycles += 5;
+	} else cpu.cycles += 5;
+	cpu.cycles += 7 + 10;              // ld a,1 / jp $7F32
+	cpu.a = 1;
+	task_call(0x7F32, 0x9DA3);
+}
+
+static void combat_over(void) { cpu.cycles += 5; native_continue_at(0x9DBF); }   // jr nc,$9DBF
+
+// $9DA0
+static void member_done(void) {
+	member_after();
+	int on = fight_goes_on();
+	cpu.cycles += 7;
+	if (!on) { combat_over(); return; }
+	cpu.cycles += 10 + 11 + 7 + 10 + 7 + 10;
+	uint8_t next = (uint8_t)(mem_read(MEMBER) + 1);
+	mem_write(MEMBER, next);
+	if (next < mem_read(0xC957)) { native_continue_at(0x9D3B); return; }   // the next member
+	cpu.cycles += 17;                  // the foes
+	push16(0x9DB7);
+	native_continue_at(0xA493);
+}
+Native native_member_done = { "member_done", 0x9DA0, 3, member_done, 0, 0, 0, .task = 1 };
+
+// $9DB7: after the foes: a new round
+static void round_over(void) {
+	int on = fight_goes_on();
+	cpu.cycles += 7;
+	if (!on) { combat_over(); return; }
+	cpu.cycles += 10 + 4 + 13;         // jp $9D37 / xor a / ld (member),a
+	mem_write(MEMBER, 0);
+	cpu.a = 0;
+	native_continue_at(0x9D3B);
+}
+Native native_round_over = { "round_over", 0x9DB7, 3, round_over, 0, 0, 0, .task = 1 };
