@@ -4,8 +4,7 @@
 // the party into the view buffer ($D800), puts the creatures on it, works
 // out what the party can see, and queues it for the screen.
 //
-// The world's and the towns' refresh are C; the dungeon's and combat's are
-// the original's still. Cycle counts are the original's.
+// Cycle counts are the original's.
 #include "../runtime/native.h"
 #include "../runtime/sms.h"
 #include "../runtime/z80.h"
@@ -660,6 +659,311 @@ static void copy_view(void) {
 	cpu.cycles += 10;
 }
 
+// ------------------------------------------------------ dungeon and combat --
+// call $07CE (bank_push): slot 2 gets bank a; the old one is left on the
+// stack, under the return; jp $07DE (bank_pop) puts it back and returns
+static void bank_push(uint8_t a) {
+	cpu.cycles += 17 + 16 + 10 + 7 + 19 + 11 + 16 + 13 + 10;
+	wr16(0xC0C2, HL);
+	push16((uint16_t)(mem_read(0xDFFF) << 8 | 0xFF));
+	mem_write(0xFFFF, a);
+	cpu.a = a;
+}
+static void bank_pop(void) {           // reached by jp: its ret is the caller's
+	cpu.cycles += 10 + 16 + 10 + 4 + 4 + 13 + 4 + 16 + 10;
+	wr16(0xC0C2, HL);
+	uint8_t a = cpu.a;
+	uint16_t w = pop16();
+	mem_write(0xFFFF, (uint8_t)(w >> 8));
+	cpu.a = a;
+}
+
+// $169D: copy 242 bytes (11 rows of the view) from hl to de, by ldi
+static void copy_view_bytes(uint16_t from, uint16_t to) {
+	cpu.cycles += 10 + 11 * (22 * 16 + 10) + 10;
+	for (int i = 0; i < 242; i++) mem_write((uint16_t)(to + i), mem_read((uint16_t)(from + i)));
+	SET_HL(from + 242); SET_DE(to + 242); SET_BC(0);
+}
+
+// $2781: the dungeon's cells around the party, through the table of how
+// each looks ($8200 in bank $10); all dark without light
+static void dungeon_copy(void) {
+	cpu.cycles += 17 + 13 + 4 + 7;
+	if (!mem_read(0xC95B)) {
+		cpu.cycles += 10 + 16 + 10 + 10 + 10;
+		wr16(0xD800, 0x007E);
+		copy_view_bytes(0xD800, 0xD802);
+		return;
+	}
+	cpu.cycles += 5 + 7;
+	bank_push(0x10);
+	cpu.cycles += 10 + 7 + 7 + 4;      // ld hl / ld d / ld b / exx
+	uint16_t dst = 0xD800;
+	cpu.cycles += 13 + 7 + 4 + 13 + 7 + 4 * 4 + 4 + 13 + 7 + 7 + 4 + 4 + 4 + 7 + 4 + 4 + 7;
+	uint8_t h = (uint8_t)(mem_read(0xC970) + 0xD0);
+	uint8_t l = (uint8_t)((uint8_t)(mem_read(0xC954) + 0xFB) * 16);
+	uint8_t dx = (uint8_t)((mem_read(0xC953) + 0xFB) & 0x0F);
+	l |= dx;
+	uint8_t first = (uint8_t)(0x10 - dx);  // cells to the level's right edge (it wraps)
+	for (int row = 0; row < 11; row++) {
+		native_sync();
+		cpu.cycles += 11 + 4 + 7;
+		uint8_t start = l, e = first;
+		for (int col = 0; col < 11; col++) {
+			cpu.cycles += 7 + 4 + 4 + 4 + 7 + 7 + 4 + 7 + 4 + 4 + 4 + 10;
+			uint8_t cell = mem_read((uint16_t)(h << 8 | l));
+			l++;
+			mem_write(dst++, mem_read((uint16_t)(0x8200 | cell)));
+			mem_write(dst++, 0xFF);
+			if (--e == 0) { cpu.cycles += 4 + 7 + 4; l = (uint8_t)(l + 0xF0); }
+			cpu.cycles += col < 10 ? 13 : 8;
+		}
+		cpu.cycles += 10 + 4 + 7 + 4 + 4 + 10;
+		l = (uint8_t)(start + 0x10);
+	}
+	bank_pop();
+}
+
+// $27E7: the dungeon's line of sight: rays as in the world ($16DB), stopped
+// by empty cells ($00) and walls and the like ($0C and up)
+static int dungeon_blocks(uint8_t t, int side) {
+	cpu.cycles += 4 + 7;
+	if (!t) { cpu.cycles += 5; return 1; }
+	cpu.cycles += 7 + (side ? 10 : 7);
+	if (t >= 0x0C) { cpu.cycles += side ? 0 : 5; return 1; }
+	return 0;
+}
+
+static void dungeon_ray_side(uint16_t ix, uint16_t iy, uint8_t b, uint16_t de) {   // $29BA
+	cpu.cycles += 17 + 15 + 15 + 4;
+	uint8_t c = b;
+	for (;;) {
+		uint8_t t = ray_cell(&ix, &iy, de);
+		cpu.cycles += 4 + 7;
+		if (--c == 0) { cpu.cycles += 5; break; }
+		if (dungeon_blocks(t, 1)) break;
+	}
+	cpu.cycles += 14 + 14 + 10;
+}
+
+static void dungeon_sight(void) {
+	cpu.cycles += 17 + 13 + 4 + 7;
+	if (!mem_read(0xC98F)) {
+		cpu.cycles += 10 + 10 + 10;
+		copy_view_bytes(0xD800, 0xD900);
+		return;
+	}
+	cpu.cycles += 5 + 15 + 10 + 16 + 10 + 10 + 17;
+	wr16(0xD900, 0x007E);
+	for (int i = 0; i < 242; i++) mem_write(0xD902 + i, mem_read(0xD900 + i));
+	cpu.cycles += 10 + 11 * (22 * 16 + 10) + 10;
+	static const int16_t step[8] = { -22, 22, -2, 2, -24, -20, 20, 24 };
+	static const int16_t side[8][2] = {
+		{ -24, -20 }, { 20, 24 }, { -24, 20 }, { -20, 24 },
+		{ -2, -22 }, { 2, -22 }, { -2, 22 }, { 2, 22 } };
+	uint16_t ix = 0, iy = 0;
+	for (int r = 0; r < 8; r++) {
+		native_sync();
+		cpu.cycles += 14 + 14 + 7;
+		ix = 0xD878; iy = 0xD978;
+		uint8_t b = 5;
+		for (;;) {
+			cpu.cycles += 10;
+			uint8_t t = ray_cell(&ix, &iy, (uint16_t)step[r]);
+			cpu.a = t;
+			cpu.cycles += 4 + 7;
+			if (--b == 0) { cpu.cycles += 5; break; }
+			if (dungeon_blocks(t, 0)) break;
+			cpu.cycles += 10;
+			dungeon_ray_side(ix, iy, b, (uint16_t)side[r][0]);
+			cpu.cycles += 10;
+			dungeon_ray_side(ix, iy, b, (uint16_t)side[r][1]);
+			cpu.cycles += 10;
+		}
+	}
+	cpu.iy = iy;
+	cpu.cycles += 14 + 10;
+}
+
+// $29DF: cells that show walls and doors by where they are in the view
+// (the table at $8000 of bank $0F) get them
+static void dungeon_walls(void) {
+	cpu.cycles += 17 + 7;
+	bank_push(0x0F);
+	cpu.cycles += 10 + 10 + 10;
+	uint16_t at = 0xD900;
+	for (int i = 0; i < 121; i++) {
+		cpu.cycles += 7 + 7 + 7;
+		if (mem_read(at) == 0x7E) { cpu.cycles += 5 + 4 + 10; at++; }
+		else {
+			cpu.cycles += 7 + 4 + 10;
+			uint8_t w = mem_read(0x8000 + i);
+			if (w) { cpu.cycles += 7 + 4 + 7; mem_write(at, 0x80); at++; mem_write(at, w); }
+			else { cpu.cycles += 4 + 10; at++; }
+		}
+		cpu.cycles += 4 + 4 + (i < 120 ? 13 : 8);
+		at++;
+	}
+	SET_HL(at); SET_DE(0x8000 + 121); SET_BC(0x0080);
+	bank_pop();
+}
+
+// $2A05: the level's creatures on the view; what is underfoot
+static void dungeon_creatures(void) {
+	cpu.cycles += 17 + 17;
+	call_original(0x6C97);             // IY = the level's four, DE = 8, B = 4
+	do {
+		cpu.cycles += 19 + 4 + 7;
+		if (!mem_read(cpu.iy + 3)) { cpu.cycles += 5; goto next; }
+		cpu.cycles += 16 + 19 + 7 + 4 + 7 + 7 + 7;
+		uint8_t y = (uint8_t)((mem_read(cpu.iy + 2) + 5 - mem_read(0xC954)) & 0x0F);
+		if (y >= 0x0B) { cpu.cycles += 5; goto next; }
+		cpu.cycles += 17 + 11 + 4 * 7 + 10 + 10 + 4 + 19 + 7 + 4 + 7 + 7 + 7;
+		uint8_t row = (uint8_t)(y * 11);
+		uint8_t x = (uint8_t)((mem_read(cpu.iy + 1) + 5 - mem_read(0xC953)) & 0x0F);
+		if (x >= 0x0B) { cpu.cycles += 5; goto next; }
+		cpu.cycles += 4 + 4 + 4 + 7 + 7 + 7 + 7;
+		uint16_t at = (uint16_t)(0xD900 | (uint8_t)(2 * (uint8_t)(x + row)));
+		if (mem_read(at) == 0x7E) { cpu.cycles += 5; goto next; }
+		cpu.cycles += 19 + 7 + 4 + 10;
+		mem_write(at, mem_read(cpu.iy + 0));
+		mem_write(at + 1, 0);
+	next:
+		cpu.cycles += 15;
+		cpu.iy += 8;
+		cpu.cycles += --cpu.b ? 13 : 8;
+	} while (cpu.b);
+	cpu.cycles += 16 + 17;
+	SET_HL(rd16(0xC953));
+	call_original(0x6DC0);             // HL = the party's cell
+	cpu.cycles += 7 + 13 + 16 + 16 + 10 + 7 + 7;
+	mem_write(0xC990, mem_read(HL));
+	wr16(0xD978, rd16(0xC959));        // the party
+	SET_HL(0xD878);
+	cpu.a = mem_read(0xD878);
+	if (cpu.a != 0x0C) { cpu.cycles += 11; return; }
+	cpu.cycles += 5 + 10 + 10;
+	mem_write(0xD878, 1);
+}
+
+// $1305/$1308: in a dungeon
+static void refresh_dungeon(void) {
+	cpu.cycles += 17; animate();
+	dungeon_copy();
+	dungeon_sight();
+	dungeon_walls();
+	dungeon_creatures();
+	cpu.cycles += 17;
+	call_original(0x1A7C);             // into video memory
+	cpu.cycles += 13 + 4 + 4 + 4 + 10 + 30 + 10 + 10;
+	uint8_t lv = mem_read(0xC970);
+	SET_HL(0x132A + 3 * lv);
+	SET_DE(0x0004);
+	call_original(0x2DA7);             // jp: "L1" etc. (its ret is this one's)
+}
+
+// $1345: combat: the arena, the foes and the party's figures (their frames)
+static void refresh_combat(void) {
+	cpu.cycles += 10 + 10 + 17;
+	copy_view_bytes(0xD800, 0xD900);
+	cpu.cycles += 14 + 10 + 7;
+	cpu.iy = 0xC839;
+	SET_DE(0x0008);
+	cpu.b = 0x10;
+	do {
+		native_sync();
+		cpu.cycles += 19 + 4 + 7;
+		uint8_t g = mem_read(cpu.iy + 5);
+		if (!g) { cpu.cycles += 5; goto next_foe; }
+		cpu.cycles += 4 + 19 + 4 + 7;
+		cpu.c = g;
+		if (mem_read(cpu.iy + 7)) cpu.cycles += 5;   // asleep: as it is
+		else {
+			cpu.cycles += 4 + 7 + 7;
+			if (g >= 0x90) {
+				cpu.cycles += 7 + 7;
+				int still = 0;
+				if (g == 0xAC) {       // the mimic, closed
+					cpu.cycles += 19 + 7 + 7;
+					if (mem_read(cpu.iy + 6) == 0x3C) { cpu.cycles += 5; still = 1; }
+				} else cpu.cycles += 5;
+				if (!still) {
+					call(0x2BBF);
+					cpu.cycles += 7 + 7;
+					if (cpu.a & 0x0F) cpu.cycles += 5;
+					else {
+						cpu.cycles += 19 + 4 + 7 + 4 + 19 + 12;
+						mem_write(cpu.iy + 6, (uint8_t)(((mem_read(cpu.iy + 6) + 1) & 3) | g));
+					}
+				}
+			} else {
+				cpu.cycles += 5 + 7 + 7;   // $1387
+				int keep = g == 0x1F;
+				if (keep) cpu.cycles += 5;
+				else { cpu.cycles += 7 + 7; keep = g == 0x38; if (!keep) cpu.cycles += 5; }
+				if (keep) {                // these always look the same
+					cpu.cycles += 19 + 12;
+					mem_write(cpu.iy + 6, g);
+				} else {
+					call(0x2BBF);
+					cpu.cycles += 7 + 7;
+					if (cpu.a & 0x1F) cpu.cycles += 5;
+					else {
+						cpu.cycles += 19 + 7 + 19;
+						mem_write(cpu.iy + 6, mem_read(cpu.iy + 6) ^ 1);
+					}
+				}
+			}
+		}
+		cpu.cycles += 19 + 19 + 17 + 4 + 17 + 11 + 4 * 7 + 10 + 10 + 4 + 4 + 4 + 7 + 10;   // $13A3 and $13F0
+		{
+			uint8_t x = mem_read(cpu.iy + 0), y = mem_read(cpu.iy + 1);
+			uint16_t at = (uint16_t)(0xD900 | (uint8_t)(2 * (uint8_t)(y * 11 + x)));
+			cpu.cycles += 19 + 7 + 4 + 10;
+			mem_write(at, mem_read(cpu.iy + 6));
+			mem_write(at + 1, 0);
+		}
+	next_foe:
+		cpu.cycles += 15;
+		cpu.iy += 8;
+		cpu.cycles += --cpu.b ? 13 : 8;
+	} while (cpu.b);
+	cpu.cycles += 14 + 10 + 7;
+	cpu.iy = 0xC8B9;
+	SET_DE(0x0005);
+	cpu.b = 8;
+	do {
+		cpu.cycles += 19 + 4 + 7;
+		uint8_t g = mem_read(cpu.iy + 2);
+		if (!g) { cpu.cycles += 5; goto next_member; }
+		cpu.cycles += 7 + 7;
+		if (g == 0x38) cpu.cycles += 5;      // lying down: still
+		else {
+			call(0x2BBF);
+			cpu.cycles += 7 + 7;
+			if (cpu.a & 0x1F) cpu.cycles += 5;
+			else {
+				cpu.cycles += 19 + 7 + 19;
+				mem_write(cpu.iy + 3, mem_read(cpu.iy + 3) ^ 1);
+			}
+		}
+		cpu.cycles += 19 + 19 + 17 + 4 + 17 + 11 + 4 * 7 + 10 + 10 + 4 + 4 + 4 + 7 + 10;
+		{
+			uint8_t x = mem_read(cpu.iy + 0), y = mem_read(cpu.iy + 1);
+			uint16_t at = (uint16_t)(0xD900 | (uint8_t)(2 * (uint8_t)(y * 11 + x)));
+			cpu.cycles += 19 + 7 + 4 + 10;
+			mem_write(at, mem_read(cpu.iy + 3));
+			mem_write(at + 1, 0);
+		}
+	next_member:
+		cpu.cycles += 15;
+		cpu.iy += 5;
+		cpu.cycles += --cpu.b ? 13 : 8;
+	} while (cpu.b);
+	cpu.cycles += 10;
+	call_original(0x1A7C);             // jp: into video memory
+}
+
 // $129D
 static void refresh(void) {
 	cpu.cycles += 13 + 7 + 7;
@@ -685,6 +989,20 @@ static void refresh(void) {
 		copy_view();
 		cpu.cycles += 10;              // jp $15E4
 		compose();
+	} else if (kind == 2) {            // $1305 / $1308: a dungeon
+		if (changed) call(0x1431);
+		refresh_dungeon();
+	} else if (kind <= 6) {            // combat: $1342-$1409
+		if (changed) call(0x1431);
+		if (kind == 4 || kind == 5) cpu.cycles += 10;   // jp $1345
+		if (kind == 6) {               // $1409: the arena as it is
+			cpu.cycles += 10 + 10 + 17;
+			copy_view_bytes(0xD800, 0xD900);
+			cpu.cycles += 10 + 16 + 10;
+			wr16(0xD98E, 0x8A1F);
+			SET_HL(0x8A1F);
+			call_original(0x1A7C);
+		} else refresh_combat();
 	} else {
 		uint16_t entry = rd16((changed ? 0x12D3 : 0x12C5) + 2 * kind);
 		SET_HL(entry);
