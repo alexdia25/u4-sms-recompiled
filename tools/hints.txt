@@ -366,3 +366,7 @@ native   03:A493 native_foes_turn
 name     03:A5BC foe_acts
 name     01:6A0F dungeon_turn
 native   01:6A0F native_dungeon_turn
+name     02:8603 dungeon_attack
+native   02:8603 native_dungeon_attack
+name     02:8FCB dungeon_search
+native   02:8FCB native_dungeon_search

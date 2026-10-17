@@ -638,6 +638,235 @@ static void attack(void) {
 }
 Native native_attack = { "attack", 0x848A, 2, attack, 0, 0, 0, .task = 1 };
 
+// dungeon_attack ($8603): "Direction:", then the creature there, if any
+// (6C6A: carry when nobody); attacking the harmless costs karma. Then the
+// fight ($3B52).
+static void dungeon_attack(void) {
+	call(0x4324);
+	newline();
+	call(0x4C28);                      // "Direction:"
+	if (prompt(0x860C, 0x4C3C)) { native_continue_at(0x8081); return; }
+	cpu.cycles += 19 + 17 + 100;       // $40B9: HL = the step that way
+	cpu.a = mem_read(SLOT + 0x1A);
+	SET_HL(rd16(0x40BF + 2 * cpu.a));
+	cpu.cycles += 13 + 4 + 7 + 4 + 13 + 4 + 7 + 4;
+	cpu.l = (mem_read(PARTY_XY) + cpu.l) & 0x0F;
+	cpu.h = (mem_read(PARTY_XY + 1) + cpu.h) & 0x0F;
+	cpu.a = cpu.h;
+	call(0x6C6A);                      // carry: nobody there
+	cpu.cycles += 7;
+	if (cpu.f & FC) { cpu.cycles += 5; attack_nothing(); return; }
+	call(0x48F7);                      // IY = them
+	cpu.cycles += 19;
+	cpu.a = mem_read(cpu.iy + 3);
+	call(0x430A);                      // carry: hostile anyway
+	if (cpu.f & FC) cpu.cycles += 10;
+	else { cpu.cycles += 17; karma_cost(); }
+	cpu.cycles += 10;
+	native_continue_at(0x3B52);        // the fight
+}
+Native native_dungeon_attack = { "dungeon_attack", 0x8603, 2, dungeon_attack, 0, 0, 0, .task = 1 };
+
+// ------------------------------------------------------- dungeon search --
+#define UNDERFOOT   0xC990          // the dungeon cell the party stands on
+
+static void found_nothing(void) {     // $8FDC
+	call(0x40D1);
+	say_inline(0x8FE2);                // "You find Nothing!"
+	done();
+}
+
+// $922D: the member picked loses A * 100 hit points... at most; a flash
+static void search_hurt(uint8_t a) {
+	cpu.cycles += 11 + 11 + 11 + 4 + 7;
+	cpu.l = a;
+	cpu.h = 0x64;
+	call(0x2AA1);                      // multiply_8x8
+	cpu.cycles += 19;
+	cpu.c = mem_read(SLOT + 0x08);
+	call(0x4679);                      // member_hurt
+	cpu.cycles += 7;
+	cpu.a = 0x13;
+	call(0x05F1);
+	cpu.cycles += 19;
+	cpu.c = mem_read(SLOT + 0x08);
+	call(0x49A6);
+	call(0x041C);
+	call(0x4999);
+	call(0x041C);
+	cpu.cycles += 10 + 10 + 10 + 10;
+}
+
+// "Who ...?" and a member who can act; 0 when cancelled (or can't act)
+static int search_who(uint16_t site) {
+	call(0x4BCB);
+	if (prompt(site, 0x4BD2)) { native_continue_at(0x8081); return 0; }
+	cpu.cycles += 19;
+	cpu.c = mem_read(SLOT + 0x08);
+	call(0x4466);                      // member_able
+	cpu.cycles += 10;
+	if (cpu.f & FC) { native_continue_at(0x807C); return 0; }
+	call(0x48B6);                      // IY = their record
+	return 1;
+}
+
+// $9088: a stat goes up by the next amount at DE (to 50 at most); its name
+static void stat_up(uint16_t name) {
+	cpu.cycles += 7 + 6 + 4;
+	uint8_t up = mem_read(DE);
+	SET_DE(DE + 1);
+	cpu.a = up;
+	if (!up) { cpu.cycles += 11; return; }
+	cpu.cycles += 5 + 4 + 7 + 7;
+	unsigned v = up + cpu.b;
+	if ((uint8_t)v >= 0x32) { cpu.cycles += 7; v = 0x32; }
+	else cpu.cycles += 5;
+	cpu.cycles += 4 + 17;
+	cpu.b = (uint8_t)v;
+	SET_HL(name);
+	text_print(name);
+	cpu.cycles += 10 + 10;
+	SET_HL(0x90DD);
+	text_print(0x90DD);                // " + 5"
+}
+
+// $9002: an orb: it hurts whoever touches it, and raises their stats
+static void touch_orb(void) {
+	say_inline(0x9005);                // "You find a Magical Ball... Who touches?"
+	if (!search_who(0x9031)) return;
+	cpu.cycles += 16 + 17;
+	SET_HL(rd16(PARTY_XY));
+	call_original(0x6DC0);             // HL = the cell
+	cpu.cycles += 10 + 13 + 7 + 4 + 4 + 10 + 30 + 4 + 7 + 6;
+	mem_write(HL, 0);                  // the orb is gone
+	uint8_t row = (uint8_t)((mem_read(0xC9A0) - 0x12) * 4);
+	SET_HL(DE);                        // (ex de,hl)
+	SET_DE(0x909D + row + 1);
+	uint8_t hurt = mem_read(0x909D + row);
+	cpu.a = hurt;
+	cpu.cycles += 17;
+	search_hurt(hurt);
+	static const uint16_t names[3] = { 0x90BD, 0x90C6, 0x90D0 };
+	for (int i = 0; i < 3; i++) {      // strength, dexterity, intelligence
+		cpu.cycles += 10 + 19;
+		cpu.b = mem_read(cpu.iy + 6 + i);
+		cpu.cycles += 17;
+		stat_up(names[i]);
+		cpu.cycles += 19;
+		mem_write(cpu.iy + 6 + i, cpu.b);
+	}
+	done();
+}
+
+static void fountain_no_effect(void) { // $9138
+	say_inline(0x913B);                // "Hmmm--No Effect!"
+	cpu.cycles += 10;
+}
+
+// $90E3: a fountain: by its kind, it heals, hurts, cures or poisons
+static void drink(void) {
+	say_inline(0x90E6);                // "You find a Fountain. Who drinks?"
+	if (!search_who(0x910B)) return;
+	cpu.cycles += 13 + 7 + 10 + 73;    // ld a,(cell) / and $0F / ld hl / rst $18: the handler returns to $912B
+	uint8_t kind = mem_read(UNDERFOOT) & 0x0F;
+	cpu.a = kind;
+	SET_HL(rd16(0x912E + 2 * kind));
+	switch (kind) {
+	case 0: fountain_no_effect(); break;
+	case 1: {                          // $914E: healing
+		cpu.cycles += 19 * 4 + 4 + 15 + 7;
+		uint16_t hp = rd16(cpu.iy), max = rd16(cpu.iy + 2);
+		if (hp == max) { cpu.cycles += 5; fountain_no_effect(); break; }
+		cpu.cycles += 19 + 19;
+		wr16(cpu.iy, max);
+		say_inline(0x9168);            // "Ahh-Refreshing!"
+		cpu.cycles += 10;
+		break;
+	}
+	case 2:                            // $917A: bad water
+		say_inline(0x917D);            // "Bleck--Nasty!"
+		cpu.cycles += 7 + 10;
+		search_hurt(1);
+		break;
+	case 3:                            // $9191: it cures poison
+		cpu.cycles += 19 + 7 + 7;
+		if (mem_read(cpu.iy + 0x1C) != 'P') { cpu.cycles += 5; fountain_no_effect(); break; }
+		cpu.cycles += 19;
+		mem_write(cpu.iy + 0x1C, 'G');
+		say_inline(0x919F);            // "Hmm--Delicious!"
+		cpu.cycles += 10;
+		break;
+	case 4:                            // $91B1: poison
+		cpu.cycles += 19 + 7 + 7;
+		if (mem_read(cpu.iy + 0x1C) == 'P') { cpu.cycles += 5; fountain_no_effect(); break; }
+		cpu.cycles += 19;
+		mem_write(cpu.iy + 0x1C, 'P');
+		say_inline(0x91BF);            // "Argh-Choke-Gasp!"
+		cpu.cycles += 7 + 10;
+		search_hurt(1);
+		break;
+	default:                           // past the table: as the original does
+		push16(0x912B);
+		native_continue_at(HL);
+		return;
+	}
+	done();                            // $912B: jp $8084
+}
+
+// $91D6: an altar holds the dungeon's stone, once
+static void altar(void) {
+	cpu.cycles += 13 + 7 + 7 + 10;
+	uint8_t d = (uint8_t)(mem_read(0xC9A0) - 0x12);
+	if (d >= 6) { found_nothing(); return; }
+	cpu.cycles += 4 + 4 + 7;
+	uint8_t bit = 0x80;
+	for (int i = 0; i <= d; i++) {
+		bit = (uint8_t)(bit << 1 | bit >> 7);
+		cpu.cycles += 8 + (i < d ? 13 : 8);
+	}
+	cpu.c = bit;
+	cpu.b = 0;
+	cpu.cycles += 10 + 7 + 4 + 10;
+	SET_HL(0xC955);
+	if (mem_read(HL) & bit) { found_nothing(); return; }
+	cpu.cycles += 7 + 4 + 7;
+	mem_write(HL, mem_read(HL) | bit);
+	call(0x40E1);
+	say_inline(0x91F9);                // "You find the "
+	cpu.cycles += 13 + 7 + 17 + 17;
+	cpu.a = (uint8_t)(mem_read(0xC9A0) + 0x8E);
+	call_original(0x340F);             // its name
+	text_print(HL);
+	say_inline(0x9212);                // " stone!"
+	cpu.cycles += 7 + 7;
+	cpu.a = 5; cpu.c = 5;
+	call(0x4255);                      // karma_gain
+	cpu.cycles += 10 + 7;
+	SET_HL(0x00C8);
+	cpu.c = 0;
+	call(0x4205);                      // member_gain_xp
+	done();
+}
+
+// dungeon_search ($8FCB): what lies underfoot: an orb, a fountain, an altar
+static void dungeon_search(void) {
+	call(0x4324);
+	newline();
+	cpu.cycles += 13 + 7 + 10 + 17;
+	uint8_t what = mem_read(UNDERFOOT) & 0xF0;
+	cpu.a = what;
+	SET_HL(0x8FF8);
+	static const uint8_t kinds[3] = { 0x70, 0x90, 0xB0 };
+	int i;
+	for (i = 0; i < 3 && kinds[i] != what; i++) {}
+	if (i == 3) { cpu.cycles += 58 * 3 + 22; found_nothing(); return; }
+	cpu.cycles += 58 * i + 79;
+	if (i == 0) touch_orb();
+	else if (i == 1) drink();
+	else altar();
+}
+Native native_dungeon_search = { "dungeon_search", 0x8FCB, 2, dungeon_search, 0, 0, 0, .task = 1 };
+
 // --------------------------------------------------------------- magic --
 // magic ($863F): Cast (cast_spell $5B8C, original code: it waits for frames)
 // or Mix: pick a spell (two pages of 13), tick reagents, say how many, and

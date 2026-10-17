@@ -454,6 +454,15 @@ def main():
         DUNGEONS['dspell_' + sp.lower()] = ('despise', MAGIC, '2DD222' + 'D' * DUNGEON_SPELLS.index(sp) + '2U2', 20)
     DUNGEONS['dungeon_climb'] = ('despise', ['C95B:FF'], 'L', 20)          # the ladder up, next to the way in
     DUNGEONS['dungeon_room'] = ('despise', ['C95B:FF'], 'RRDRR', 60)       # through a door into a room
+    DUNGEONS['dungeon_attack'] = ('despise', ['C95B:FF'], '2D2D2' + '2D2R2', 30)   # at nothing, twice
+    DUNGEONS['dungeon_fight'] = ('despise', ['C95B:FF', 'C652:04', 'C653:02', 'C654:90'], '2D2R2', 80)   # an orc east of the party
+    SEARCH6 = '2DDDDDD2'               # the command menu, Search
+    DUNGEONS['dsearch_nothing'] = ('despise', ['C95B:FF'], SEARCH6, 10)
+    for cell, what in ((0x70, 'orb'), (0x90, 'fountain0'), (0x91, 'fountain1'), (0x92, 'fountain2'),
+                       (0x93, 'fountain3'), (0x94, 'fountain4'), (0xB0, 'altar')):
+        # the cell under the party becomes one, and the party searches
+        DUNGEONS['dsearch_' + what] = ('despise', ['C95B:FF', 'C751:20', 'C76D:50' if cell == 0x93 else 'C751:20',
+                                                    'D022:%02X' % cell, 'C990:%02X' % cell], SEARCH6 + '2', 10)
     DUNGEONS['dspell_y_top'] = ('wrong', MAGIC, '2DD222' + 'D' * DUNGEON_SPELLS.index('Y') + '2', 20)
     for name, (d, pokes, steer, n) in DUNGEONS.items():
         rnd = random.Random(name)
