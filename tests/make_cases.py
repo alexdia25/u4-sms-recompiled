@@ -421,6 +421,12 @@ def main():
         STEER['cspell_' + sp.lower()] = '2D2' + 'D' * i + '2' + '2' + 'U2' + '2'
     for i, g in enumerate((0x90, 0xA4, 0xB0, 0xC0, 0xD0, 0xDC, 0xE0, 0xE8, 0xEC, 0xF0, 0xF8, 0xFC)):
         FIGHTS['foe_%02x' % g] = (('p15', 'p28', 'p19')[i % 3], ['C957:04', 'person+3:%02X' % g], 20 + i, 120)
+    # the ends of a fight: every foe gone, or the party down
+    NOFOES = ['%04X:00' % (0xC83E + 8 * i) for i in range(16)]
+    AFTER = {'fight_won': NOFOES, 'fight_lost': ['C751:00', 'C752:00', 'C76D:44']}
+    FIGHTS['fight_won'] = ('p15', ['C957:01'], 30, 10)
+    FIGHTS['fight_lost'] = ('p28', ['C957:01'], 31, 10)
+    STEER['fight_won'] = STEER['fight_lost'] = 'R'
     for name, (who, pokes, seed, n) in FIGHTS.items():
         rnd = random.Random(name)
         x, y, d, moves, rec = PEOPLE[who]
@@ -438,6 +444,8 @@ def main():
         s.press(d, 30)
         s.press('2', 30)
         s.f += 200                     # the battlefield is set up
+        for p in AFTER.get(name, []):
+            s.poke(p)
         for k in STEER.get(name, ''):
             s.press(k, 40)
         for _ in range(n):
@@ -462,6 +470,9 @@ def main():
     DUNGEONS['dungeon_room'] = ('despise', ['C95B:FF'], 'RRDRR', 60)       # through a door into a room
     DUNGEONS['dungeon_attack'] = ('despise', ['C95B:FF'], '2D2D2' + '2D2R2', 30)   # at nothing, twice
     DUNGEONS['dungeon_fight'] = ('despise', ['C95B:FF', 'C652:04', 'C653:02', 'C654:90'], '2D2R2', 80)   # an orc east of the party
+    # the room's foes gone: the party walks out the way it came
+    DUNGEONS['dungeon_room_exit'] = ('despise', ['C95B:FF'], 'RRDRR', 0)
+    DUNGEON_AFTER = {'dungeon_room_exit': (100, NOFOES, 'L' * 12)}
     SEARCH6 = '2DDDDDD2'               # the command menu, Search
     DUNGEONS['dsearch_nothing'] = ('despise', ['C95B:FF'], SEARCH6, 10)
     for cell, what in ((0x70, 'orb'), (0x90, 'fountain0'), (0x91, 'fountain1'), (0x92, 'fountain2'),
@@ -484,9 +495,38 @@ def main():
         s.f += 60
         for k in steer:
             s.press(k, 40)
+        if name in DUNGEON_AFTER:
+            wait, pokes, keys = DUNGEON_AFTER[name]
+            s.f += wait
+            for p in pokes:
+                s.poke(p)
+            for k in keys:
+                s.press(k, 40)
         for _ in range(n):
             r = rnd.random()
             k = rnd.choice('UDLR') if r < 0.6 else '2' if r < 0.9 else '1'
+            s.press(k, rnd.choice((20, 30, 40, 60)))
+        for _ in range(4):
+            s.press('1', 60)
+        s.write(name)
+    # a fight out in the world: an orc set east of the party, attacked
+    for name, steps in (('world_fight', 200), ('world_fight_2', 300)):
+        rnd = random.Random(name)
+        s = Script()
+        s.poke('C96D:5B')
+        s.poke('C96E:44')
+        s.press('L', 40)
+        s.press('L', 70)
+        s.f += 300
+        for p in ('C652:5C', 'C653:44', 'C654:90', 'C655:90'):
+            s.poke(p)
+        s.f += 30
+        for k in '2D2R2':
+            s.press(k, 40)
+        s.f += 200
+        for _ in range(steps):
+            r = rnd.random()
+            k = rnd.choice('UDLR') if r < 0.3 else '2' if r < 0.9 else '1'
             s.press(k, rnd.choice((20, 30, 40, 60)))
         for _ in range(4):
             s.press('1', 60)

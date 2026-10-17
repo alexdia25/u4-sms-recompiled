@@ -393,3 +393,4 @@ name     03:9DA0 member_done
 name     03:9DB7 round_over
 native   03:9DA0 native_member_done
 native   03:9DB7 native_round_over
+native   03:9DBF native_combat_end

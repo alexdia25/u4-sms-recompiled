@@ -1267,3 +1267,247 @@ static void round_over(void) {
 	native_continue_at(0x9D3B);
 }
 Native native_round_over = { "round_over", 0x9DB7, 3, round_over, 0, 0, 0, .task = 1 };
+
+// ------------------------------------------------------------ the end --
+// $9DBF: the fight is over: the party's fate ($9FC8), the outcome ($9E66),
+// the map back, and the game mode the fight came from.
+
+#define op_cp(v) op_sub8(v, 0, 0)
+
+static uint16_t rst30(uint16_t hl, uint8_t a) {      // rst $30: HL += A
+	uint16_t r = (uint16_t)(hl + a);
+	cpu.cycles += 11 + 4 + 4 + ((uint8_t)(hl + a) < a ? 5 + 4 + 10 : 11);
+	SET_HL(r);
+	cpu.a = (uint8_t)r;
+	return r;
+}
+
+// $A029: HL = the dungeon cell at (L, H) on this level
+static void room_cell(void) {
+	cpu.cycles += 17 + 4 * 7 + 13 + 7 + 4 + 10;
+	cpu.a = (uint8_t)(cpu.h << 4 | cpu.l);
+	SET_HL((uint16_t)((mem_read(0xC970) + 0xD0) << 8 | cpu.a));
+	cpu.a = cpu.h;
+}
+
+// $9FFD/$A000/$A003/$A006: one step out of the room in direction `dir`;
+// zero if the cell there is $C0
+static int room_step(int dir) {
+	static const uint8_t cost[4] = { 7 + 10 + 10 + 10, 7 + 10 + 10, 7 + 10, 7 };
+	cpu.cycles += 17 + cost[dir];
+	cpu.a = (uint8_t)dir;
+	call(0x7E39);                      // L, H = the step
+	cpu.cycles += 13 + 4 + 7 + 4 + 13 + 4 + 7 + 4 + 16;
+	cpu.l = (mem_read(0xC953) + cpu.l) & 0x0F;
+	cpu.h = (mem_read(0xC954) + cpu.h) & 0x0F;
+	wr16(0xC953, HL);
+	cpu.cycles += 17 + 11;             // call $A022 / push hl
+	uint16_t hl = HL;
+	room_cell();
+	cpu.a = mem_read(HL);
+	SET_HL(hl);
+	cpu.cycles += 7 + 10 + 10 + 7 + 10;
+	op_cp(0xC0);
+	return !(cpu.f & FZ);
+}
+
+// $9E66 in a dungeon room: out by the side the party left, or by the
+// room's exit to another place
+static void leave_room(void) {
+	say_inline_v(0x9E71);              // "Leave Room!"
+	cpu.cycles += 13 + 4 + 10;
+	uint8_t way = mem_read(0xC984);
+	if (!(way & 0x80)) {               // $9EB8: to the place in the room's table
+		cpu.cycles += 4 + 4 + 10 + 7 + 4 + 4 + 4 + 4 + 10;
+		uint8_t i = (uint8_t)(way * 4 + mem_read(0xC9BA));
+		cpu.b = i;
+		rst30(0xA037, (uint8_t)(i * 5));
+		cpu.cycles += 7 + 6 + 7 + 6 + 20 + 7 + 6 + 7 + 6 + 20 + 7 + 10 + 7 + 7;
+		wr16(0xC953, rd16(HL));
+		wr16(0xC96D, rd16(HL + 2));
+		SET_DE(rd16(HL + 2));
+		SET_HL(HL + 4);
+		cpu.a = mem_read(HL);
+		SET_HL(0xC9A0);
+		op_cp(mem_read(HL));
+		mem_write(HL, cpu.a);
+		if (cpu.f & FZ) { cpu.cycles += 11; return; }
+		cpu.cycles += 5;
+		say_inline_v(0x9EE0);          // "into Dungeon " and its name
+		cpu.cycles += 13 + 7;
+		cpu.a = (uint8_t)(mem_read(0xC9A0) + 0x7D);
+		tcall(0x7F6B, 0x9EF3);
+		tcall(0x7F6E, 0x9EF6);
+		tcall(0x7E48, 0x9EF9);
+		cpu.cycles += 7 + 13 + 10;
+		cpu.a = 7;
+		mem_write(0xC970, 7);
+		return;
+	}
+	cpu.cycles += 13 + 10 + 10 + 10 + 52;   // by the side: jp $0018 / jp $0083
+	uint8_t side = mem_read(0xC9BA);
+	SET_HL(rd16(0x9E8E + 2 * side));
+	cpu.a = cpu.l;
+	static const int then[4] = { 3, 2, 3, 2 };
+	if (side >= 2) room_step(side);
+	if (!room_step(side)) { cpu.cycles += 11; return; }
+	cpu.cycles += 5 + 10 - 17;         // jp, not call: its ret ends $9E66
+	room_step(then[side]);
+}
+
+// $9E66 elsewhere ($9F02): victory if a member is still on the field, else
+// the party fled - or fell
+static void outcome(void) {
+	cpu.cycles += 14 + 10 + 7;
+	SET_DE(0x0005);
+	cpu.b = 8;
+	uint16_t iy = 0xC8B9;
+	int on = 0;
+	for (;;) {
+		cpu.cycles += 19 + 4 + 7;
+		cpu.a = mem_read(iy + 2);
+		op_or(cpu.a);
+		if (cpu.a) { cpu.cycles += 5; on = 1; break; }
+		cpu.cycles += 15;
+		iy += 5;
+		if (--cpu.b) cpu.cycles += 13; else { cpu.cycles += 8; break; }
+	}
+	cpu.iy = iy;
+	if (!on) {
+		cpu.cycles += 13;
+		cpu.a = mem_read(0xC97D);
+		call(0x7E75);
+		cpu.cycles += 7;
+		if (cpu.f & FC) {              // $9F2B
+			cpu.cycles += 5;
+			say_inline_v(0x9F2E);      // "Battle is lost!"
+			cpu.cycles += 7 + 7 + 10;
+			cpu.a = 2; cpu.c = 2;
+			task_call(0x7F2F, 0x9DCB);
+			return;
+		}
+		cpu.cycles += 7 + 7;           // fled: karma
+		cpu.a = 2; cpu.c = 1;
+		call(0x7E00);
+		cpu.cycles += 7 + 7 + 10;
+		cpu.a = 2; cpu.c = 3;
+		task_call(0x7E00, 0x9DCB);
+		return;
+	}
+	say_inline_v(0x9F4A);              // "Victory!"
+	cpu.cycles += 13;
+	cpu.a = mem_read(0xC97D);
+	call(0x7E75);
+	cpu.cycles += 7;
+	if (cpu.f & FC) {
+		call(0x7ED8);
+		cpu.cycles += 7 + 7;
+		op_and(1);
+		cpu.c = 2;
+		call(0x7E00);
+	} else cpu.cycles += 5;
+	uint8_t from = mem_read(0xC975), foe = mem_read(0xC97D);
+	cpu.cycles += 13 + 7;
+	cpu.a = from;
+	op_cp(4);
+	if (from == 4) { cpu.cycles += 11; return; }
+	cpu.cycles += 5 + 13 + 7;
+	op_cp(1);
+	if (from == 1) { cpu.cycles += 11; return; }
+	cpu.cycles += 5 + 13 + 7 + 10;
+	cpu.a = foe;
+	op_cp(0x80);
+	if (foe == 0x80) { task_call(0xBA0B, 0x9DCB); return; }   // jp $BA0B
+	cpu.cycles += 13 + 7;
+	cpu.a = from;
+	op_cp(2);
+	if (from == 2) {                   // in a dungeon: a chest on the cell
+		cpu.cycles += 7 + 13 + 7;
+		cpu.a = foe;
+		static const uint8_t keep[3] = { 0x94, 0xB4, 0xA0 };
+		for (int i = 0; i < 3; i++) {
+			op_cp(keep[i]);
+			if (foe == keep[i]) { cpu.cycles += 11; return; }
+			cpu.cycles += 5 + (i < 2 ? 7 : 0);
+		}
+		cpu.cycles += 16;
+		SET_HL(rd16(0xC97A));
+		room_cell();
+		cpu.cycles += 7 + 4 + 5;
+		cpu.a = mem_read(HL);
+		op_or(cpu.a);
+		if (cpu.a) { cpu.cycles += 6; return; }
+		cpu.cycles += 10 + 10;
+		mem_write(HL, 0x40);
+		return;
+	}
+	cpu.cycles += 12 + 13 + 7 + 7;     // $9F9A
+	cpu.a = foe;
+	op_cp(0x90);
+	int chest = 0;
+	if (foe >= 0x90) cpu.cycles += 5;
+	else {
+		cpu.cycles += 7;
+		op_cp(0x20);
+		cpu.cycles += 7;
+		if (foe < 0x20) { cpu.cycles += 5; }
+		else {
+			cpu.cycles += 7 + 7;
+			op_cp(0x2F);
+			if (foe < 0x2F) { cpu.cycles += 5; chest = 1; }
+		}
+		if (!chest) {
+			cpu.cycles += 7 + 5;       // $9FA9
+			op_cp(0x50);
+			if (foe < 0x50) { cpu.cycles += 6; return; }
+			cpu.cycles += 7 + 5;
+			op_cp(0x5F);
+			if (foe >= 0x5F) { cpu.cycles += 6; return; }
+		}
+	}
+	static const uint8_t none[5] = { 0x94, 0xA0, 0xB8, 0xB4, 0xDC };   // $9FAF
+	for (int i = 0; i < 5; i++) {
+		cpu.cycles += 7 + 5;
+		op_cp(none[i]);
+		if (foe == none[i]) { cpu.cycles += 6; return; }
+	}
+	cpu.cycles += 13;
+	cpu.a = mem_read(0xC97C);
+	call(0x7E99);
+	cpu.cycles += 5;
+	if (cpu.f & FC) { cpu.cycles += 6; return; }
+	cpu.cycles += 10;
+	task_call(0xBA4C, 0x9DCB);         // jp $BA4C: a chest on the map
+}
+
+static void combat_end(void) {
+	tcall(0x7F4D, 0x9DBF);
+	yield_at(0x9DC2);
+	cpu.cycles += 17 + 13 + 4 + 7;     // $9FC8: is anyone still standing?
+	uint8_t n = mem_read(0xC957);
+	cpu.a = n; cpu.b = n; cpu.c = 0;
+	for (;;) {
+		call(0x7ED2);
+		if (!(cpu.f & FC)) { cpu.cycles += 11; break; }
+		cpu.cycles += 5 + 4;
+		cpu.c++;
+		if (--cpu.b) cpu.cycles += 13;
+		else { cpu.cycles += 8 + 10; task_call(0x7EC9, 0x9DC8); break; }   // all down
+	}
+	cpu.cycles += 17 + 13 + 7 + 10;    // call $9E66
+	cpu.a = mem_read(MAP_MODE);
+	op_cp(5);
+	if (cpu.a == 5) leave_room();
+	else outcome();
+	tcall(0x0605, 0x9DCB);
+	tcall(0x7EA2, 0x9DCE);
+	cpu.cycles += 13 + 7 + 7 + 7;
+	uint8_t mode = (uint8_t)(mem_read(0xC975) + 0x11);
+	cpu.a = mode;
+	op_cp(0x15);
+	if (mode == 0x15) { cpu.cycles += 7 + 13 + 7; cpu.a = mem_read(0xC9B7); op_and(0x7F); }
+	else cpu.cycles += 5;
+	cpu.cycles += 13 + 10;
+	mem_write(0xC600, cpu.a);
+}
+Native native_combat_end = { "combat_end", 0x9DBF, 3, combat_end, 0, 0, 0, .task = 1 };
