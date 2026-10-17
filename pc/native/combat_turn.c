@@ -637,3 +637,224 @@ static void combat_attack(void) {
 	cpu.cycles += 10;
 	command_end(END_NEWLINE);
 }
+
+// ---------------------------------------------------------- foes' turn --
+// foes_turn ($A493): after the party, each of the 16 foes in turn, one per
+// frame: asleep ones may wake, the energy-draining kind ($EC) negates magic,
+// the phantom kind ($DC) may blink elsewhere; each picks the nearest member
+// who can act and goes for them ($A5BC, original code); then the field it
+// stands on may hurt it (fire, poison) or put it to sleep. Called with its
+// return kept in the slot (task_enter_2).
+#define FOE_ACTS    0xA5BC
+
+static void yield_at(uint16_t site) {  // "call yield" at site: the next turn goes on after it
+	cpu.cycles += 17 + 58;
+	SET_HL((uint16_t)(site + 3));
+	task_wait_turn((uint16_t)(site + 3));
+}
+
+static uint8_t random_v(void) {        // call random by its vector
+	call(0x7ED8);
+	return cpu.a;
+}
+
+// $A58D: the foe takes up to 127 damage (fire, poison)
+static void foe_burns(void) {
+	cpu.cycles += 7;
+	cpu.a = 0x14;
+	call(0x05F1);
+	cpu.cycles += 7 + 19;
+	cpu.b = 0xFF;
+	cpu.c = mem_read(SLOT + 0x1B);
+	random_v();
+	cpu.cycles += 7;
+	op_and(0x7F);
+	tcall(0x7E36, 0xA59C);             // damage_monster
+	cpu.cycles += 12;
+}
+
+static void foes_turn(void) {
+	uint16_t back = pop16();
+	cpu.cycles += 17 + 77;             // task_enter_2
+	wr16(SLOT + 0x26, back);
+	SET_HL(back);
+	call(0x7F29);
+	call(0x7F4D);
+	yield_at(0xA49C);
+	cpu.cycles += 19 + 19;
+	mem_write(SLOT + 0x16, 0x10);
+	mem_write(SLOT + 0x1B, 0);
+	do {
+		cpu.cycles += 19;              // $A4A7
+		cpu.c = mem_read(SLOT + 0x1B);
+		call(0x7E8D);                  // IY = the foe
+		cpu.cycles += 19 + 4 + 10;
+		cpu.a = mem_read(cpu.iy + 5);
+		op_or(cpu.a);
+		if (!cpu.a) goto next;         // none there
+		cpu.cycles += 19 + 4 + 7;
+		cpu.a = mem_read(cpu.iy + 7);
+		op_or(cpu.a);
+		if (cpu.a) {                   // asleep: wakes one time in eight
+			random_v();
+			cpu.cycles += 7 + 10;
+			op_and(7);
+			if (cpu.a) goto next;
+		} else cpu.cycles += 5;
+		cpu.cycles += 19 + 19 + 7 + 7; // $A4C2
+		mem_write(cpu.iy + 7, 0);
+		cpu.a = mem_read(cpu.iy + 5);
+		op_sub8(0xEC, 0, 0);
+		if (cpu.a == 0xEC) {           // it negates magic for a while
+			cpu.cycles += 7 + 13 + 7 + 13;
+			mem_write(0xC976, 0x4E);
+			mem_write(0xC977, 2);
+			cpu.a = 2;
+			call(0x7F29);
+			cpu.cycles += 12;
+		} else {
+			cpu.cycles += 5 + 7 + 7;
+			op_sub8(0xDC, 0, 0);
+			if (cpu.a == 0xDC) {
+				random_v();
+				cpu.cycles += 7 + 7;
+				op_and(7);
+				if (!cpu.a) {          // it blinks to a free spot
+					do {
+						cpu.cycles += 7;
+						cpu.a = 0x0B;
+						call(0x7EDB);  // random_below
+						cpu.cycles += 4 + 7;
+						cpu.l = cpu.a;
+						cpu.a = 0x0B;
+						call(0x7EDB);
+						cpu.cycles += 4;
+						cpu.h = cpu.a;
+						call(0xA9E2);  // carry: not free
+						cpu.cycles += 7;
+						if (!(cpu.f & FC)) break;
+						cpu.cycles += 5;
+					} while (1);
+					cpu.cycles += 19 + 19;
+					mem_write(cpu.iy + 0, cpu.l);
+					mem_write(cpu.iy + 1, cpu.h);
+				} else cpu.cycles += 5;
+			} else cpu.cycles += 5;
+		}
+		// $A4FE: the nearest member who can act
+		cpu.cycles += 19 + 19 + 19 + 19 + 13 + 4 + 7;
+		cpu.l = mem_read(cpu.iy + 0);
+		cpu.h = mem_read(cpu.iy + 1);
+		mem_write(SLOT + 0x1C, 0xFF);
+		mem_write(SLOT + 0x1D, 0xFF);
+		cpu.b = mem_read(0xC957);
+		cpu.c = 0;
+		do {
+			call(0x7ED2);              // member_can_act: carry if not
+			cpu.cycles += 7;
+			if (cpu.f & FC) { cpu.cycles += 5; goto counted; }
+			call(0x7E90);              // IY = the member's figure
+			cpu.cycles += 19 + 4 + 7;
+			cpu.a = mem_read(cpu.iy + 2);
+			op_or(cpu.a);
+			if (!cpu.a) { cpu.cycles += 5; goto counted; }
+			cpu.cycles += 4 + 19 + 7;
+			cpu.a = cpu.l;
+			op_sub8(mem_read(cpu.iy + 0), 0, 1);
+			if (cpu.f & FC) { cpu.cycles += 8; cpu.a = (uint8_t)-cpu.a; }
+			else cpu.cycles += 5;
+			cpu.cycles += 4 + 4 + 19 + 7;
+			cpu.d = cpu.a;
+			cpu.a = cpu.h;
+			op_sub8(mem_read(cpu.iy + 1), 0, 1);
+			if (cpu.f & FC) { cpu.cycles += 8; cpu.a = (uint8_t)-cpu.a; }
+			else cpu.cycles += 5;
+			cpu.cycles += 4 + 19 + 7;
+			op_add8(cpu.d, 0);
+			op_sub8(mem_read(SLOT + 0x1D), 0, 0);
+			if (!(cpu.f & FC)) { cpu.cycles += 5; goto counted; }
+			cpu.cycles += 19 + 19;
+			mem_write(SLOT + 0x1D, cpu.a);
+			mem_write(SLOT + 0x1C, cpu.c);
+		counted:
+			cpu.cycles += 4;
+			cpu.c++;
+			if (--cpu.b) cpu.cycles += 13;
+			else cpu.cycles += 8;
+		} while (cpu.b);
+		cpu.cycles += 19 + 7;          // $A540
+		cpu.a = mem_read(SLOT + 0x1C);
+		op_sub8(0xFF, 0, 0);
+		if (cpu.a != 0xFF) tcall(FOE_ACTS, 0xA545);   // it goes for them
+		else cpu.cycles += 10;
+		cpu.cycles += 19;              // $A548: the field it stands on
+		cpu.c = mem_read(SLOT + 0x1B);
+		call(0x7E8D);
+		cpu.cycles += 19 + 19;
+		cpu.l = mem_read(cpu.iy + 0);
+		cpu.h = mem_read(cpu.iy + 1);
+		call(0xA460);                  // A = the tile
+		cpu.cycles += 10 + 17 + 10;    // ld hl,$A575 / call switch_on_a by its vector
+		{
+			static const uint8_t tiles[4] = { 0x46, 0x4C, 0x44, 0x47 };
+			uint8_t tile = cpu.a;
+			int i;
+			for (i = 0; i < 4 && tiles[i] != tile; i++) {}
+			if (i == 4) {
+				cpu.cycles += 58 * 4 + 22;
+				cpu.b = 0;
+				SET_HL(0xA581);
+			} else {
+				cpu.cycles += 58 * i + 79;
+				cpu.b = (uint8_t)(tile + 1);
+				SET_HL(rd16(0xA576 + 3 * i));
+				cpu.a = 0xA5; cpu.f = 0x5D;   // (the switch pops its return address)
+				if (i < 2) {           // $A582: fire, unless it lives in it
+					cpu.cycles += 19 + 7 + 7;
+					uint8_t g = mem_read(cpu.iy + 5);
+					cpu.a = g;
+					op_sub8(0xE8, 0, 0);
+					if (g == 0xE8) cpu.cycles += 5;
+					else {
+						cpu.cycles += 7 + 7;
+						op_sub8(0xF0, 0, 0);
+						if (g >= 0xF0) cpu.cycles += 5;
+						else foe_burns();
+					}
+				} else if (i == 2) foe_burns();   // poison
+				else {                 // $A5A1: a sleep field
+					cpu.cycles += 19;
+					cpu.a = mem_read(cpu.iy + 5);
+					call(0x7F4A);      // Z: it doesn't sleep
+					cpu.cycles += 7;
+					if (cpu.f & FZ) cpu.cycles += 5;
+					else {
+						random_v();
+						cpu.cycles += 19 + 7;
+						op_sub8(mem_read(cpu.iy + 4), 0, 0);
+						if (cpu.f & FC) cpu.cycles += 5;
+						else {
+							cpu.cycles += 7;
+							cpu.a = 0x14;
+							call(0x05F1);
+							cpu.cycles += 19 + 12;
+							mem_write(cpu.iy + 7, 0xFF);
+						}
+					}
+				}
+			}
+		}
+		yield_at(0xA55D);
+	next:
+		cpu.cycles += 23 + 23 + 10;    // $A560
+		mem_write(SLOT + 0x1B, mem_read(SLOT + 0x1B) + 1);
+		mem_write(SLOT + 0x16, mem_read(SLOT + 0x16) - 1);
+	} while (mem_read(SLOT + 0x16));
+	tcall(0x7EE1, 0xA569);
+	tcall(0x7E81, 0xA56C);
+	tcall(0x7F23, 0xA56F);
+	cpu.cycles += 10 + 42;             // jp task_return_2
+	SET_HL(rd16(SLOT + 0x26));
+	native_continue_at(HL);
+}
+Native native_foes_turn = { "foes_turn", 0xA493, 3, foes_turn, 0, 0, 0, .task = 1 };

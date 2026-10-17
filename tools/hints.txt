@@ -361,3 +361,5 @@ name     03:9D6E combat_member_prompt
 name     03:A073 combat_menu
 native   03:9D3B native_combat_turn
 native   03:9D6E native_combat_prompt
+name     03:A493 foes_turn
+native   03:A493 native_foes_turn

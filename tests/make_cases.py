@@ -404,6 +404,8 @@ def main():
         'fight_commands': ('p15', ['C957:02', 'C914:02'], 13, 30), # each command from the combat menu
         'fight_cast':    ('p28', MAGIC, 14, 30),                   # spells in combat
     }
+    for i, g in enumerate((0x90, 0xA4, 0xB0, 0xC0, 0xD0, 0xDC, 0xE0, 0xE8, 0xEC, 0xF0, 0xF8, 0xFC)):
+        FIGHTS['foe_%02x' % g] = (('p15', 'p28', 'p19')[i % 3], ['C957:04', 'person+3:%02X' % g], 20 + i, 120)
     STEER = {'fight_flee': 'LLLLLLLLLLLLLLLLLLLLLLLL', 'fight_blocked': 'UUUUUURRRRRRDDDDDDLLLLLL'}
     for _n in ('fight_dagger', 'fight_oil', 'fight_halberd', 'fight_axe', 'fight_wand'):
         STEER[_n] = '2222' * 6              # menu, Attack, aim, (next member)
@@ -414,6 +416,9 @@ def main():
         x, y, d, moves, rec = PEOPLE[who]
         s = Script()
         for p in ['C953:%02X' % x, 'C985:%02X' % x, 'C954:%02X' % y, 'C986:%02X' % y] + pokes:
+            if p.startswith('person+'):    # the townsperson becomes a monster
+                off, val = p[7:].split(':')
+                p = '%04X:%s' % (0xC651 + rec * 8 + int(off, 16), val)
             s.poke(p)
         s.f += 10
         s.press(moves[0], 30)
