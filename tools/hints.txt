@@ -377,3 +377,15 @@ native   00:129D native_refresh
 name     00:1A7C compose_screen
 native   00:1A7C native_compose_screen
 native   00:0AE5 native_settle_point
+name     00:3BD9 fight_on_map
+name     00:3B9F fight
+name     00:3B52 fight_in_dungeon
+name     00:3B94 fight_in_room
+name     00:3CEA begin_combat
+name     00:3BFC roll_foes
+name     00:3AE2 choose_arena
+native   00:3BD9 native_fight_on_map
+native   00:3B9F native_fight
+native   00:3B52 native_fight_in_dungeon
+native   00:3B94 native_fight_in_room
+native   00:3CEA native_begin_combat

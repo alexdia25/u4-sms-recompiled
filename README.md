@@ -129,7 +129,7 @@ alone runs the game.
   - map loading and walking, the creatures on the map, the screen refresh everywhere (with the line of sight), and drawing the view into video memory;
   - the party's turn in a dungeon, its Attack and Search (orbs, fountains, altars);
   - the player's turn, moving, and all eight commands (Talk, Attack, Magic with spell mixing, casting and every spell, Get Chest, Use, Ready, Search, Camp);
-  - combat: a member's turn (moving, fleeing, passing, the menu and its commands) and the foes' turn;
+  - combat: starting a fight (the battlefield, the foes rolled), a member's turn (moving, fleeing, passing, the menu and its commands) and the foes' turn;
   - combat and karma rules;
   - the task system.
 
