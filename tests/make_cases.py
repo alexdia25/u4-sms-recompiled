@@ -321,6 +321,36 @@ def main():
         for _ in range(4):
             s.press('1', 60)
         s.write(name)
+    ALL_MIX = ['%04X:03' % (0xC937 + i) for i in range(26)]   # three of each mixture
+    CASTS = {                          # Magic, Cast: RAM writes, out in the world?, presses in the list
+        'cast_first':   (ALL_MIX, False, '2'),
+        'cast_scroll':  (ALL_MIX, False, 'DDDDDDDDDDD2'),        # past the first page
+        'cast_back':    (ALL_MIX, False, 'DDDDDDDDDUUUUUUUUUU2'),
+        'cast_world':   (ALL_MIX, True, 'DD2'),
+        'cast_cancel':  (ALL_MIX, False, 'D1'),
+        'cast_none':    ([], False, ''),
+        'cast_random':  (ALL_MIX, True, ''),
+    }
+    for name, (pokes, world, keys) in CASTS.items():
+        rnd = random.Random(name)
+        s = Script()
+        if world:
+            for k in 'LLLLLL':
+                s.press(k, 30)
+        for p in pokes:
+            s.poke(p)
+        s.f += 10
+        for k in '2DD22':              # command menu, Magic, Cast
+            s.press(k, 30)
+        s.f += 30
+        s.press('2', 40)               # the Avatar casts
+        for k in keys:
+            s.press(k, 30)
+        s.f += 120
+        random_presses(s, rnd, 20)
+        for _ in range(4):
+            s.press('1', 60)
+        s.write(name)
     for seed in range(2):              # anything at all
         rnd = random.Random('play%d' % seed)
         s = Script()

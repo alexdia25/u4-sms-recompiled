@@ -353,5 +353,6 @@ name     02:848A attack_command
 native   02:848A native_attack
 name     02:863F magic_command
 native   02:863F native_magic
+native   01:5B8C native_cast_spell
 name     02:9254 camp_menu
 native   02:9254 native_camp_menu

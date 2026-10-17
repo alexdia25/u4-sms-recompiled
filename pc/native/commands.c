@@ -999,3 +999,240 @@ chosen:                                // $87E8: Done
 	newline();
 	done();
 }
+
+// ---------------------------------------------------------- cast_spell --
+// cast_spell ($5B8C, bank 1): who casts (outside combat), then a list of the
+// spells with mixtures that work here (by map mode, $5D72), eight at a time,
+// each with its mixtures and M.P. ($5DE1). Casting uses a mixture; with M.P.
+// enough the spell's own routine runs ($5DFB, original code). Called with
+// the return address kept in the slot (task_enter_2); returns carry clear
+// when a spell ran.
+#define CASTER     0xC97F
+#define SPELL_MP   0x5DE1
+
+// $5D54: from spell C, step by B (+1 / -1) to the next spell with mixtures
+// that works here; carry when there is none
+static int next_spell(void) {
+	cpu.cycles += 17 + 13 + 10 + 91 + 4;
+	uint16_t allowed = rd16(0x5D72 + 2 * mem_read(MAP_KIND));
+	SET_DE(allowed);
+	for (;;) {
+		cpu.cycles += 4 + 4 + 4 + 7 + 4;
+		cpu.c = (uint8_t)(cpu.c + cpu.b);
+		cpu.a = cpu.c;
+		if (cpu.c >= 0x1A) { cpu.cycles += 11; cpu.f |= FC; return 1; }
+		cpu.cycles += 5 + 4 + 4 + 48 + 4 + 7;
+		SET_HL(allowed + cpu.c);
+		cpu.a = mem_read(HL);
+		op_or(cpu.a);
+		if (!cpu.a) { cpu.cycles += 5; continue; }
+		cpu.cycles += 4 + 10 + 48 + 4 + 7;
+		SET_HL(MIXTURES + cpu.c);
+		cpu.a = mem_read(HL);
+		op_or(cpu.a);
+		if (!cpu.a) { cpu.cycles += 5; continue; }
+		cpu.cycles += 10;
+		return 0;
+	}
+}
+
+static void cast_end(int ran) {        // $5D49 / $5D50: jp task_return_2
+	cpu.cycles += 4 + 10 + 42;
+	if (ran) cpu.f &= ~FC; else cpu.f |= FC;
+	SET_HL(rd16(SLOT + 0x26));
+	native_continue_at(HL);
+}
+
+static void cast_cancel(void) {        // $5D4D: "Aborted!"
+	call(0x472D);
+	cast_end(0);
+}
+
+// $5C01: the page of up to eight spells from (ix+$1C)
+static void spell_page(void) {
+	call(0x2E1B);                      // menu_window_clear
+	cpu.cycles += 10 + 19 + 4 + 7;
+	SET_DE(0xCA66);
+	cpu.c = (uint8_t)(mem_read(SLOT + 0x1C) - 1);
+	cpu.b = 8;
+	for (;;) {
+		cpu.cycles += 4 + 4 + 7 + 7;
+		cpu.c++;
+		cpu.a = cpu.c;
+		if (cpu.c >= 0x1A) { cpu.cycles += 5; break; }
+		cpu.cycles += 13 + 10 + 91 + 4 + 48 + 4 + 7;
+		uint16_t allowed = rd16(0x5D72 + 2 * mem_read(MAP_KIND));
+		SET_HL(allowed + cpu.c);
+		cpu.a = mem_read(HL);
+		op_or(cpu.a);
+		if (!cpu.a) { cpu.cycles += 5; continue; }
+		cpu.cycles += 4 + 10 + 48 + 4 + 7;
+		SET_HL(MIXTURES + cpu.c);
+		uint8_t have = mem_read(HL);
+		cpu.a = have;
+		op_or(have);
+		if (!have) { cpu.cycles += 5; continue; }
+		cpu.cycles += 11 + 4 + 7;
+		push16((uint16_t)(cpu.a << 8 | cpu.f));
+		cpu.a = (uint8_t)(cpu.c + 0x65);
+		call(0x340F);                  // item_name: the spell's name
+		cpu.cycles += 11;
+		push16(DE);
+		call(0x2D6C);                  // into the window
+		SET_DE(pop16());
+		cpu.cycles += 10 + 10 + 11 + 4 + 10 + 4 + 7 + 11;
+		SET_HL(DE + 0x004C);
+		SET_DE(HL);
+		uint16_t af = pop16();
+		cpu.a = af >> 8; cpu.f = (uint8_t)af;
+		SET_HL(cpu.a);
+		push16(BC);
+		call(0x2D87);                  // mixtures
+		SET_BC(pop16());
+		cpu.cycles += 10 + 7;
+		cpu.a = 0x28;
+		call(0x2D9A);                  // "/"
+		cpu.cycles += 4 + 10 + 48 + 4 + 7 + 11;
+		cpu.a = mem_read(SPELL_MP + cpu.c);
+		SET_HL(cpu.a);
+		push16(BC);
+		call(0x2D87);                  // M.P.
+		SET_BC(pop16());
+		cpu.cycles += 10 + 7;
+		cpu.a = 0x29;
+		call(0x2D9A);
+		cpu.cycles += 10 + 11 + 4;
+		uint16_t at = DE;
+		SET_DE(at + 0x0028);
+		SET_HL(at);
+		if (--cpu.b == 0) { cpu.cycles += 8; break; }
+		cpu.cycles += 13;
+	}
+	cpu.cycles += 19;                  // $5C5F
+	cpu.c = mem_read(SLOT + 0x1D);
+	call(0x49A6);                      // the bar on the line picked
+	call(0x2E54);                      // menu_window_show
+}
+
+static void cast_spell(void) {
+	uint16_t back = pop16();
+	cpu.cycles += 17 + 77;             // task_enter_2
+	wr16(SLOT + 0x26, back);
+	SET_HL(back);
+	cpu.cycles += 10;
+	SET_BC(0x01FF);
+	int none = next_spell();           // the first spell there is
+	cpu.cycles += 19 + 19 + 19 + 7;
+	mem_write(SLOT + 0x1C, cpu.c);     // the first spell on the page
+	mem_write(SLOT + 0x1D, 0);         // the line picked
+	mem_write(SLOT + 0x1E, cpu.c);     // the spell picked
+	if (none) {
+		say_inline(0x5BA4);            // "You have no mixtures!"
+		cpu.cycles += 10;
+		cast_end(0);
+		return;
+	}
+	cpu.cycles += 5 + 13 + 7 + 7;
+	if (mem_read(MAP_KIND) < 3) {      // outside combat: who casts
+		say_inline(0x5BC8);            // "Player: "
+		call(0x4BCB);
+		if (prompt(0x5BD4, 0x4BD2)) { cast_cancel(); return; }
+		cpu.cycles += 19 + 13 + 4;
+		uint8_t who = mem_read(SLOT + 0x08);
+		mem_write(CASTER, who);
+		cpu.a = cpu.c = who;
+		call(0x4466);                  // member_able
+		cpu.cycles += 7;
+		if (cpu.f & FC) {
+			call(0x46D0);
+			cpu.cycles += 10;
+			cast_end(0);
+			return;
+		}
+		cpu.cycles += 5;
+	} else cpu.cycles += 5;
+	say_inline(0x5BF4);                // "Spell name: "
+	spell_page();
+	static const uint8_t keys[4] = { 0x01, 0x02, 0x10, 0x20 };
+	for (;;) {
+		int k;
+		do {                           // $5C68: wait for a key
+			task_frame_tick(0x5C68);
+			cpu.cycles += 13 + 7 + 10;
+			uint8_t a = mem_read(JOY) & 0x7F;
+			SET_HL(0x5C78);
+			k = switch_on(keys, 4, a, 0x5C76);
+			if (k < 0) cpu.cycles += 12;
+		} while (k < 0);
+		if (k == 2) { cast_cancel(); return; }   // button 1
+		if (k == 3) break;             // button 2: cast it
+		int up = k == 0;               // $5C85 up / $5CB6 down
+		cpu.cycles += 7 + 19;
+		cpu.b = up ? 0xFF : 0x01;
+		cpu.c = mem_read(SLOT + 0x1E);
+		next_spell();
+		cpu.cycles += 7;
+		if (cpu.f & FC) { cpu.cycles += 5; continue; }   // no more that way
+		cpu.cycles += 19;
+		mem_write(SLOT + 0x1E, cpu.c);
+		call(0x40D9);                  // beep
+		cpu.cycles += 19 + (up ? 4 : 7) + 7;   // ld a,(ix+$1D) / or a or cp 7 / jr z
+		uint8_t line = mem_read(SLOT + 0x1D);
+		cpu.a = line;
+		if (up ? line != 0 : line != 7) {   // move the bar
+			cpu.cycles += 23 + 4;
+			mem_write(SLOT + 0x1D, up ? line - 1 : line + 1);
+			cpu.c = line;
+			call(0x4999);              // off
+			cpu.cycles += 4;
+			cpu.c = up ? line - 1 : line + 1;
+			call(0x49A6);              // on
+			cpu.cycles += 12;
+			continue;
+		}
+		cpu.cycles += 5 + 7 + 19;      // scroll the page by one spell
+		cpu.b = up ? 0xFF : 0x01;
+		cpu.c = mem_read(SLOT + 0x1C);
+		next_spell();
+		cpu.cycles += 19 + 10;
+		mem_write(SLOT + 0x1C, cpu.c);
+		spell_page();
+	}
+	call(0x40C9);                      // $5CE8: click
+	cpu.cycles += 19 + 7;
+	uint8_t spell = mem_read(SLOT + 0x1E);
+	cpu.a = (uint8_t)(spell + 0x65);
+	cpu.cycles += 17 + 17;             // call print_item_name / its call item_name
+	call_original(0x340F);
+	text_print(HL);
+	cpu.cycles += 7 + 17;
+	text_char('!');
+	newline();
+	call(0x5DCE);                      // the caster's status
+	cpu.cycles += 19 + 10 + 30 + 11;
+	SET_HL(MIXTURES + spell);
+	mem_write(HL, mem_read(HL) - 1);   // a mixture used
+	cpu.cycles += 19 + 10 + 48 + 19 + 20;
+	uint8_t mp = mem_read(SPELL_MP + spell);
+	mem_write(SLOT + 0x1F, mp);
+	SET_HL(SPELL_MP + spell);
+	SET_BC(rd16(CASTER));
+	call(0x48B6);                      // member_record: IY
+	cpu.cycles += 19 + 19 + 7;
+	cpu.a = mem_read(cpu.iy + 9);
+	op_sub8(mp, 0, 0);
+	if (!(cpu.f & FC)) {               // M.P. enough: the spell
+		cpu.cycles += 19 + 10 + 10 + 52;
+		cpu.a = spell;
+		SET_HL(rd16(0x5DFB + 2 * spell));
+		native_continue_at(HL);
+		return;
+	}
+	cpu.cycles += 5;
+	say_inline(0x5D2B);                // "M.P. too low!"
+	call(0x40D1);
+	say_inline(0x5D40);                // "Failed!"
+	op_or(cpu.a);
+	cast_end(1);
+}
+Native native_cast_spell = { "cast_spell", 0x5B8C, 1, cast_spell, 0, 0, 0, .task = 1 };
