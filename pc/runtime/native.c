@@ -75,6 +75,8 @@ static int reg_ok(unsigned before, unsigned orig, unsigned nat, int is_output) {
 	return !is_output || nat == orig;
 }
 
+static int task_in_call(void);
+
 int native_call(Native *n) {
 	int m = get_mode();
 	static const char *trace = (const char *)-1;   // U4_TRACE=<names>: log entry times
@@ -89,6 +91,7 @@ int native_call(Native *n) {
 	track(n);
 	if (n->task) {             // a C task runs as a whole, or not at all
 		if (m == MODE_SHADOW) return 0;
+		if (task_in_call()) return 0;   // inside a C task's task_call: the original runs
 		run_task(n);
 		return 1;
 	}
@@ -356,6 +359,15 @@ static void drop_task(Fiber *f) {
 	if (f->wait_pc) native_tasks_waiting--;
 	f->wait_pc = 0;
 	f->n = NULL;
+}
+
+// the C task of the current slot waits in task_call for an original
+// routine: a C task started there now would take its fiber
+static int task_in_call(void) {
+	int off = cpu.ix - TASK_SLOTS;
+	if (off < 0 || off % 0x30 || off / 0x30 >= SLOTS) return 0;
+	Fiber *f = &task_fiber[off / 0x30];
+	return f->n && f->wait_pc && f->wait_sp;
 }
 
 // start a C task in the current slot (afresh, if one was still there)

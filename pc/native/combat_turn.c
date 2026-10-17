@@ -1,9 +1,9 @@
 // A party member's turn in combat, as a C task (bank 3 $9D3B-$9DA0) with the
 // combat menu ($A073). Bank 3 reaches the routines of banks 0 and 1 through
 // the vectors at $7E03-$7F77 (a jp each), so a "call vector" here is the
-// call plus the jp. The commands are original code still: the C task hands
-// over to them; they end the turn at $9DA0, or come back to the prompt at
-// $9D6E. Cycle counts are the original's.
+// call plus the jp. Original routines that wait for frames are called with
+// task_call (tcall). Casting is a C task of its own, so the menu hands over
+// to it; it comes back to the prompt at $9D6E, or ends the turn at $9DA0. Cycle counts are the original's.
 #include "../runtime/native.h"
 #include "../runtime/sms.h"
 #include "../runtime/z80.h"
@@ -66,7 +66,7 @@ static void say_inline_v(uint16_t text) {
 // a command's end: $A0C0 "Aborted!", $A0C6 cancelled (carry), $A0C9 a new
 // line, $A0CC done; then back in the turn at $9D9E: cancelled, the prompt
 // again, else the turn is over
-enum { END_ABORTED, END_CANCELLED, END_NEWLINE, END_DONE };
+enum { END_ABORTED, END_CANCELLED, END_NEWLINE, END_DONE, END_AS_IS };
 static void command_end(int how) {
 	if (how == END_ABORTED) {
 		cpu.cycles += 10;
@@ -76,7 +76,7 @@ static void command_end(int how) {
 	if (how <= END_CANCELLED) {
 		cpu.cycles += 4 + 12;          // scf / jr $A0CD
 		cpu.f |= FC;
-	} else {
+	} else if (how != END_AS_IS) {     // ($A0CD keeps the command's carry)
 		if (how == END_NEWLINE) call(0x7F6E);
 		cpu.cycles += 4;               // or a
 		op_or(cpu.a);
@@ -323,8 +323,31 @@ static void combat_menu(uint16_t back) {
 	cpu.cycles += 19 + 10 + 10 + 10 + 52;   // ld a / ld hl / jp $0018 / jp $0083: the command (original)
 	cpu.a = cmd;
 	SET_HL(rd16(0xA0B4 + 2 * cmd));
-	if (cmd == 0) combat_attack();
-	else native_continue_at(HL);
+	switch (cmd) {
+	case 0: combat_attack(); break;
+	case 1: native_continue_at(HL); break;   // Cast: cast_spell is a C task of its own
+	case 2:                            // $A2DA: Get Chest
+		tcall(0x7F29, 0xA2DA);
+		tcall(0x7F20, 0xA2DD);
+		cpu.cycles += 10;
+		command_end(END_DONE);
+		break;
+	case 3:                            // $A2E3: Ready Weapon
+		tcall(0x7EDE, 0xA2E3);
+		cpu.cycles += 10;
+		command_end(END_AS_IS);
+		break;
+	case 4:                            // $A2E9: Use Item
+		tcall(0x7E2D, 0xA2E9);
+		cpu.cycles += 10;
+		command_end(END_DONE);
+		break;
+	default:                           // $A2EF: Status
+		tcall(0x7E2A, 0xA2EF);
+		cpu.cycles += 10;
+		command_end(END_DONE);
+		break;
+	}
 }
 
 // $9D6E: ">" and wait: a direction moves, button 1 passes (original code),

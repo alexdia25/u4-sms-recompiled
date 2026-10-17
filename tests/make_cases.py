@@ -401,10 +401,14 @@ def main():
         'fight_halberd': ('p19', ['C75C:0A'], 10, 40),
         'fight_axe':     ('p31', ['C75C:0B'], 11, 40),             # the magic axe comes back
         'fight_wand':    ('p13', ['C75C:0E', 'C757:10'], 12, 40),  # low dexterity
+        'fight_commands': ('p15', ['C957:02', 'C914:02'], 13, 30), # each command from the combat menu
+        'fight_cast':    ('p28', MAGIC, 14, 30),                   # spells in combat
     }
     STEER = {'fight_flee': 'LLLLLLLLLLLLLLLLLLLLLLLL', 'fight_blocked': 'UUUUUURRRRRRDDDDDDLLLLLL'}
     for _n in ('fight_dagger', 'fight_oil', 'fight_halberd', 'fight_axe', 'fight_wand'):
         STEER[_n] = '2222' * 6              # menu, Attack, aim, (next member)
+    STEER['fight_commands'] = ('2DD2' + '2DDD22' + '2DDDD2D22' + '2DDDDD22' + '2DDDDD2' + '1' + '2DDD2D2')
+    STEER['fight_cast'] = '2D22' + '2D2D2' + '2D2DD2' + '2D2U2' + '2D2DDD22'
     for name, (who, pokes, seed, n) in FIGHTS.items():
         rnd = random.Random(name)
         x, y, d, moves, rec = PEOPLE[who]
