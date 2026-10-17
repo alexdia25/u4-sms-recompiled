@@ -22,6 +22,8 @@
 #define JOY_HELD      0xC0AF
 #define JOY_PRESSED   0xC0B0
 #define MAP_KIND      0xC99F
+#define PARTY         0xC751
+#define PARTY_SIZE    0xC957
 
 static void call(uint16_t addr) { cpu.cycles += 17; call_original(addr); }
 
@@ -37,6 +39,187 @@ static int command_pressed(void) {
 	uint8_t held = mem_read(JOY_HELD);
 	return held != 0x01 && held != 0x02 && held != 0x04 && held != 0x08 &&
 		mem_read(JOY_PRESSED) == 0x20;
+}
+
+static void tcall(uint16_t addr, uint16_t site) {   // a routine that may wait for frames
+	cpu.cycles += 17;
+	task_call(addr, (uint16_t)(site + 3));
+}
+
+// $B4EE: the sleeping may wake (1 in 8), the poisoned lose 2 hit points;
+// starving, everyone who can act loses 2
+static void statuses(void) {
+	cpu.cycles += 17 + 14 + 10 + 13 + 4 + 7 + 19;
+	cpu.iy = PARTY;
+	SET_DE(0x001D);
+	cpu.b = mem_read(PARTY_SIZE);
+	cpu.c = 0;
+	mem_write(SLOT + 0x17, 1);
+	do {
+		cpu.cycles += 19 + 7 + 7;
+		uint8_t st = mem_read(cpu.iy + 0x1C);
+		cpu.a = st;
+		if (st == 'S') {
+			call(0x2BBF);              // random
+			cpu.cycles += 7 + 7;
+			op_and(7);
+			if (!cpu.a) { cpu.cycles += 19 + 12; mem_write(cpu.iy + 0x1C, 'G'); }
+			else cpu.cycles += 5;
+		} else {
+			cpu.cycles += 5 + 7 + 7;
+			if (st == 'P') {
+				cpu.cycles += 10;
+				SET_HL(0x0002);
+				call(0x467F);          // member_take_damage
+				call(0x49A6);
+				cpu.cycles += 23;
+				mem_write(SLOT + 0x17, mem_read(SLOT + 0x17) + 1);
+			} else cpu.cycles += 5;
+		}
+		cpu.cycles += 15 + 4;
+		cpu.iy += 0x1D;
+		cpu.c++;
+		cpu.cycles += --cpu.b ? 13 : 8;
+	} while (cpu.b);
+	cpu.cycles += 23 + 7;
+	uint8_t hurt = (uint8_t)(mem_read(SLOT + 0x17) - 1);
+	mem_write(SLOT + 0x17, hurt);
+	if (hurt) {                        // someone was poisoned: a sound
+		cpu.cycles += 7;
+		cpu.a = 0x11;
+		call(0x05F1);
+		call(0x041C);
+	} else cpu.cycles += 5;
+	cpu.cycles += 13;
+	cpu.a = mem_read(PARTY_SIZE);
+	call(0x4753);                      // carry: no food left
+	if (!(cpu.f & FC)) { cpu.cycles += 11; return; }
+	cpu.cycles += 5 + 10 + 17;
+	SET_HL(0xBD22);
+	text_print(0xBD22);                // "Starving!!!"
+	cpu.cycles += 13 + 4 + 7;
+	cpu.b = mem_read(PARTY_SIZE);
+	cpu.c = 0;
+	do {
+		call(0x4445);                  // member_can_act
+		cpu.cycles += 7;
+		if (!(cpu.f & FC)) {
+			cpu.cycles += 10;
+			SET_HL(0x0002);
+			call(0x467F);
+		} else cpu.cycles += 5;
+		cpu.cycles += 4;
+		cpu.c++;
+		cpu.cycles += --cpu.b ? 13 : 8;
+	} while (cpu.b);
+	cpu.cycles += 7;
+	cpu.a = 0x11;
+	call(0x05F1);
+	cpu.cycles += 10;                  // jp $4896: it returns for statuses' caller
+	task_call(0x4896, 0xB4D3);
+}
+
+// $B56D: in towns, a door that was opened locks again after a while
+static void relock_door(void) {
+	cpu.cycles += 17 + 13 + 7;
+	if (mem_read(MAP_KIND) != 1) { cpu.cycles += 11; return; }
+	cpu.cycles += 5 + 11 + 10 + 7 + 4 + 7;
+	uint16_t hl = HL;
+	SET_HL(0xC9A4);
+	uint8_t t = mem_read(0xC9A4);
+	if (t) {
+		cpu.cycles += 11 + 7;
+		t--;
+		mem_write(0xC9A4, t);
+		if (!t) {
+			cpu.cycles += 13 + 10 + 7 + 7;
+			if (mem_read(0xC9A2) == mem_read(PARTY_XY)) {
+				cpu.cycles += 13 + 10 + 7 + 7;
+				if (mem_read(0xC9A3) == mem_read(PARTY_XY + 1)) {
+					cpu.cycles += 7 + 13 + 12;   // the party stands in it: later
+					mem_write(0xC9A4, 1);
+					goto out;
+				}
+			}
+			cpu.cycles += 5 + 16;
+			SET_HL(rd16(0xC9A2));
+			call(0xB5A4);
+			cpu.cycles += 10 + 4 + 10;
+			mem_write(HL, 0x3B);       // locked again
+			cpu.l++;
+			mem_write(HL, 0x00);
+		} else cpu.cycles += 5;
+	} else cpu.cycles += 5;
+out:
+	cpu.cycles += 10 + 10;
+	SET_HL(hl);
+}
+
+// $372E: one more move (32-bit), and the 5-digit BCD move counter
+static void count_move(void) {
+	cpu.cycles += 17 + 11 + 11 + 16 + 10 + 11 + 16 + 7;
+	uint16_t hl = HL, bc = BC;
+	uint16_t lo = (uint16_t)(rd16(0xC8FD) + 1);
+	wr16(0xC8FD, lo);
+	if (!lo) { cpu.cycles += 16 + 6 + 16; wr16(0xC8FF, (uint16_t)(rd16(0xC8FF) + 1)); }
+	else cpu.cycles += 5;
+	cpu.cycles += 10 + 10 + 4;
+	int carry = 1;
+	for (int i = 0; i < 5; i++) {      // scf / adc a,0 / daa, five bytes
+		cpu.a = mem_read(0xC901 + i);
+		op_add8(0, carry);
+		op_daa();
+		carry = cpu.f & FC;
+		mem_write(0xC901 + i, cpu.a);
+		cpu.cycles += 7 + 4 + 4 + 7 + 6 + (i < 4 ? 13 : 8);
+	}
+	SET_HL(hl);                        // (pushed and popped)
+	SET_BC(bc);
+	cpu.cycles += 10 + 10 + 10;
+}
+
+// $3754: a timed effect in combat wears off
+static void effect_wears(void) {
+	cpu.cycles += 17 + 13 + 4;
+	uint8_t n = mem_read(0xC977);
+	cpu.a = n;
+	op_or(n);
+	if (!n) { cpu.cycles += 11; return; }
+	cpu.cycles += 5 + 4 + 13;
+	n--;
+	cpu.a = n;
+	mem_write(0xC977, n);
+	if (n) { cpu.cycles += 11; return; }
+	cpu.cycles += 5 + 13 + 10;
+	mem_write(0xC976, 0);
+}
+
+// $B4CA: the end of the turn: food, statuses, levels, the creatures
+static void end_of_turn(void) {
+	tcall(0x465D, 0xB4CA);             // everyone dead: game over
+	cpu.cycles += 17 + 10 + 7 + 7;     // $B55E: the ship's hull mends, slowly
+	SET_HL(0xC961);
+	if (mem_read(0xC961) < 0x32) {
+		cpu.cycles += 5;
+		call(0x2BBF);
+		cpu.cycles += 7;
+		op_and(3);
+		if (!cpu.a) { cpu.cycles += 5 + 11 + 10; mem_write(0xC961, mem_read(0xC961) + 1); }
+		else cpu.cycles += 11;
+	} else cpu.cycles += 11 - 5 + 5;
+	statuses();
+	tcall(0x4776, 0xB4D3);             // magic points, food
+	call(0x957C);                      // Z: in a dungeon
+	cpu.cycles += 7;
+	if (!(cpu.f & FZ)) {
+		tcall(0xB5B3, 0xB4DB);         // the creatures move
+		tcall(0xBB17, 0xB4DE);
+	} else cpu.cycles += 5;
+	count_move();
+	effect_wears();
+	call(0x4324);                      // the status window
+	relock_door();
+	cpu.cycles += 10;
 }
 
 typedef struct TurnLoop {
@@ -86,9 +269,10 @@ static void turn_loop(const TurnLoop *t) {
 				cpu.cycles += 5;
 			}
 		}
-		handoff(0x3F14, t->after_end); // the end of the turn
-		cpu.cycles += 17;
-		return;
+		tcall(0x3F14, t->end_at);      // the ground's hazards
+		cpu.cycles += 17;              // call $B4CA
+		end_of_turn();
+		cpu.cycles += 12;              // jr back to the top
 	}
 }
 

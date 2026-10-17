@@ -166,6 +166,12 @@ def main():
         'walk_world': ([], 'LLLLLLUDLR', 150),
         'ride_world': (['C959:14', 'C95A:00'], 'LLLLLLUDLR', 150),
         'sail':       (['C959:11', 'C95A:00'], 'UDLR', 60),
+        'walk_poisoned': (['C76D:50', 'C957:02', 'C78A:50'], 'UDLR', 60),
+        'walk_starving': (['C907:00', 'C908:00', 'C957:03'], 'UDLR', 60),
+        'walk_asleep':   (['C957:02', 'C78A:53'], 'UDLR', 60),
+        'sail_damaged':  (['C959:11', 'C95A:00', 'C961:10'], 'UDLR', 60),
+        'walk_door':     (['C9A2:02', 'C9A3:0F', 'C9A4:03'], 'UDRR', 30),   # an opened door closes again
+        'walk_door_in':  (['C9A2:01', 'C9A3:0F', 'C9A4:02'], 'UDUD', 10),   # ... not while the party stands in it
     }
     for name, (pokes, dirs, n) in WALKS.items():
         rnd = random.Random(name)
