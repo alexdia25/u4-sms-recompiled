@@ -261,6 +261,39 @@ def main():
             s.press('2', 60)
         random_presses(s, rnd, 12)
         s.write(name)
+    ATTACKS = {                        # Attack: where the party stands (or a person's spot), RAM writes, direction
+        'attack_person':  ('p15', [], None),
+        'attack_guard':   ('p28', [], None),
+        'attack_nobody':  (None, [], 'U'),
+        'ship_fire':      ('world', ['C959:10', 'C95A:00'], 'U'),
+        'ship_no_fire':   ('world', ['C959:10', 'C95A:00'], 'L'),
+        'ship_fire_odd':  ('world', ['C959:11', 'C95A:00'], 'L'),
+    }
+    for name, (where, pokes, d) in ATTACKS.items():
+        rnd = random.Random(name)
+        s = Script()
+        if where == 'world':
+            for k in 'LLLLLL':
+                s.press(k, 30)
+        elif where:
+            x, y, d, moves, rec = PEOPLE[where]
+            for p in ['C953:%02X' % x, 'C985:%02X' % x, 'C954:%02X' % y, 'C986:%02X' % y]:
+                s.poke(p)
+            s.f += 10
+            s.press(moves[0], 30)
+            s.press(moves[1], 50)
+        for p in pokes:
+            s.poke(p)
+        s.f += 10
+        for k in '2D2':                # command menu, Attack
+            s.press(k, 30)
+        s.press(d, 30)                 # the direction, confirmed
+        s.press('2', 30)
+        s.f += 60
+        random_presses(s, rnd, 30, menu=False)
+        for _ in range(4):             # out of any menu, so the run doesn't end inside one
+            s.press('1', 60)
+        s.write(name)
     for seed in range(2):              # anything at all
         rnd = random.Random('play%d' % seed)
         s = Script()

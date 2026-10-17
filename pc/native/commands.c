@@ -517,3 +517,123 @@ static void use_sextant(void) {
 	newline();
 	done();
 }
+
+// -------------------------------------------------------------- attack --
+// attack ($848A): "Direction:", then whoever is there. Some can't be
+// attacked (the table at $85CD). In towns everyone guarding (guards $50,
+// Lord British $5E) turns hostile; elsewhere attacking the harmless costs
+// karma. Then the fight ($3BD9). Nobody there: on a ship the broadsides
+// ($8534, original code: the cannonballs fly frame by frame), else
+// "Nothing to Attack!". In dungeons the dungeon's own ($8077).
+static void karma_cost(void) {        // $85EE: compassion, justice, honour -5
+	static const uint8_t virtues[3] = { 1, 3, 5 };
+	for (int i = 0; i < 3; i++) {
+		cpu.cycles += 7 + 7 + (i < 2 ? 17 : 10);
+		cpu.a = 5;
+		cpu.c = virtues[i];
+		call_original(0x426F);         // karma_lose
+	}
+}
+
+static void attack_nothing(void) {     // $85D2
+	call(0x40D1);
+	say_inline(0x85D8);                // "Nothing to Attack!"
+	done();
+}
+
+static void attack(void) {
+	call(0x4324);
+	newline();
+	call(0x957C);
+	cpu.cycles += 10;
+	if (cpu.f & FZ) { native_continue_at(0x8077); return; }
+	call(0x4C28);                      // "Direction:"
+	if (prompt(0x8499, 0x4C3C)) { native_continue_at(0x8081); return; }
+	cpu.cycles += 19 + 17 + 100;       // $40B9: HL = the step that way
+	cpu.a = mem_read(SLOT + 0x1A);
+	SET_HL(rd16(0x40BF + 2 * cpu.a));
+	cpu.cycles += 13 + 4 + 4 + 13 + 4 + 4;
+	cpu.l = (uint8_t)(mem_read(PARTY_XY) + cpu.l);
+	cpu.a = mem_read(PARTY_XY + 1);
+	op_add8(cpu.h, 0);
+	cpu.h = cpu.a;
+	call(0x42E3);                      // whoever stands there
+	cpu.cycles += 7;
+	if (!(cpu.f & FC)) {
+		call(0x48F7);                  // IY = them
+		cpu.cycles += 19 + 10 + 10;
+		cpu.a = mem_read(cpu.iy + 3);
+		int n = 0, found = 0;          // cpir over the five that can't be attacked
+		for (;;) {
+			uint8_t v = mem_read(0x85CD + n++);
+			if (v == cpu.a) { found = 1; break; }
+			if (n == 5) break;
+			cpu.cycles += 21;
+		}
+		cpu.cycles += 16;
+		SET_HL(0x85CD + n);
+		SET_BC(5 - n);
+		cpu.cycles += 7;
+		if (!found) {
+			cpu.cycles += 13 + 7 + 7;
+			if (mem_read(MAP_KIND) == 1) {   // in towns: the guards turn on the party
+				cpu.cycles += 15 + 14 + 10 + 7;
+				push16(cpu.iy);
+				SET_DE(0x0008);
+				cpu.b = 0x20;
+				for (uint16_t p = 0xC651; ; p += 8) {
+					cpu.iy = p;
+					cpu.cycles += 19 + 7 + 7;
+					uint8_t who = mem_read(p + 3);
+					cpu.a = who;
+					if (who == 0x50) cpu.cycles += 5;
+					else { cpu.cycles += 7 + 7; if (who != 0x5E) cpu.cycles += 5; }
+					if (who == 0x50 || who == 0x5E) {
+						cpu.cycles += 19 + 19;
+						mem_write(p + 6, 0xFF);
+						mem_write(p + 7, 0x00);
+					}
+					cpu.cycles += 15;
+					if (--cpu.b == 0) { cpu.cycles += 8; break; }
+					cpu.cycles += 13;
+				}
+				cpu.cycles += 14 + 12;
+				cpu.iy = pop16();
+				cpu.cycles += 17;
+				karma_cost();
+			} else {
+				cpu.cycles += 5 + 19 + 17;
+				cpu.a = mem_read(cpu.iy + 3);
+				call_original(0x430A);     // carry: hostile anyway
+				cpu.cycles += 7;
+				if (cpu.f & FC) cpu.cycles += 5;
+				else { cpu.cycles += 17; karma_cost(); }
+			}
+			cpu.cycles += 10;
+			native_continue_at(0x3BD9);    // the fight
+			return;
+		}
+		cpu.cycles += 5;
+	} else cpu.cycles += 5;
+	cpu.cycles += 13 + 4 + 10;             // $8504: nobody to attack
+	if (mem_read(MAP_KIND) != 0) { attack_nothing(); return; }
+	cpu.cycles += 13 + 10 + 17;            // switch on the transport: ships fire
+	uint8_t t = mem_read(0xC959);
+	cpu.a = t;
+	if (t < 0x10 || t > 0x13) {
+		cpu.cycles += 58 * 4 + 22 + 10;
+		cpu.b = 0;
+		SET_HL(0x8523);
+		attack_nothing();
+		return;
+	}
+	cpu.cycles += 58 * (t - 0x10) + 79 + 20 + 10;
+	cpu.b = (uint8_t)(t + 1);
+	SET_HL((t & 1) ? 0x852D : 0x8524);
+	cpu.a = 0x85;                      // (the switch pops its return address into AF)
+	int odd = mem_read(SLOT + 0x1A) & 1;   // broadside: the direction across the ship
+	if ((t & 1) ? odd : !odd) { attack_nothing(); return; }
+	if (!(t & 1)) cpu.cycles += 12;
+	native_continue_at(0x8534);
+}
+Native native_attack = { "attack", 0x848A, 2, attack, 0, 0, 0, .task = 1 };
