@@ -21,4 +21,8 @@ void task_frame_tick(uint16_t site);  // "call frame_tick" at site: ends the tur
 void task_wait_button(uint16_t site); // "call wait_button" at site: waits for button 1 or 2
 void task_wait_frames(uint16_t site, uint8_t n);   // "ld a,n / call $3046" at site: n turns
 
+// creatures.c: the creatures on the map, at the end of the party's turn
+int creatures_move(uint16_t back);   // $B5B3; back: where "call $B4CA" returns. 1: a fight began
+void creatures_appear(void);          // $BB17
+
 #endif

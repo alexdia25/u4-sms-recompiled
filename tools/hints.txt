@@ -370,3 +370,6 @@ name     02:8603 dungeon_attack
 native   02:8603 native_dungeon_attack
 name     02:8FCB dungeon_search
 native   02:8FCB native_dungeon_search
+name     02:B5B3 creatures_move
+name     02:BB17 creatures_appear
+name     02:B5E2 creature_blocked

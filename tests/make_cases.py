@@ -491,6 +491,29 @@ def main():
         for _ in range(4):
             s.press('1', 60)
         s.write(name)
+    ROAMS = {                          # long walks out in the world, from different places: the creatures
+        'roam_moonglow': (None, [], 300),
+        'roam_britain':  ((0x56, 0x6D), [], 300),
+        'roam_yew':      ((0x24, 0xE0), [], 300),
+        'roam_sea':      ((0x5B, 0x44), ['C959:11', 'C95A:00'], 200),
+        'roam_horse':    ((0x9F, 0x16), ['C959:14', 'C95A:00'], 300),
+    }
+    for name, (at, pokes, n) in ROAMS.items():
+        rnd = random.Random(name)
+        s = Script()
+        if at:
+            s.poke('C96D:%02X' % at[0])
+            s.poke('C96E:%02X' % at[1])
+        s.press('L', 40)
+        s.press('L', 70)
+        for p in pokes:
+            s.poke(p)
+        for _ in range(n):
+            r = rnd.random()
+            s.press(rnd.choice('UDLR') if r < 0.9 else '1', rnd.choice((20, 30, 40)))
+        for _ in range(6):
+            s.press('1', 60)
+        s.write(name)
     for seed in range(2):              # anything at all
         rnd = random.Random('play%d' % seed)
         s = Script()

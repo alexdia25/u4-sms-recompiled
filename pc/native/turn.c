@@ -195,7 +195,7 @@ static void effect_wears(void) {
 }
 
 // $B4CA: the end of the turn: food, statuses, levels, the creatures
-static void end_of_turn(void) {
+static int end_of_turn(uint16_t back) {
 	tcall(0x465D, 0xB4CA);             // everyone dead: game over
 	cpu.cycles += 17 + 10 + 7 + 7;     // $B55E: the ship's hull mends, slowly
 	SET_HL(0xC961);
@@ -212,14 +212,17 @@ static void end_of_turn(void) {
 	call(0x957C);                      // Z: in a dungeon
 	cpu.cycles += 7;
 	if (!(cpu.f & FZ)) {
-		tcall(0xB5B3, 0xB4DB);         // the creatures move
-		tcall(0xBB17, 0xB4DE);
+		cpu.cycles += 17;
+		if (creatures_move(back)) return 1;   // a monster attacks: the fight takes over
+		cpu.cycles += 17;
+		creatures_appear();
 	} else cpu.cycles += 5;
 	count_move();
 	effect_wears();
 	call(0x4324);                      // the status window
 	relock_door();
 	cpu.cycles += 10;
+	return 0;
 }
 
 typedef struct TurnLoop {
@@ -271,7 +274,7 @@ static void turn_loop(const TurnLoop *t) {
 		}
 		tcall(0x3F14, t->end_at);      // the ground's hazards
 		cpu.cycles += 17;              // call $B4CA
-		end_of_turn();
+		if (end_of_turn((uint16_t)(t->after_end + 3))) return;
 		cpu.cycles += 12;              // jr back to the top
 	}
 }
