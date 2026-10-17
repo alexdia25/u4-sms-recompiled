@@ -690,6 +690,338 @@ static uint8_t sign_of(uint8_t a) {    // call $ABF8: -1, 0 or 1
 	return 0xFF;
 }
 
+// ------------------------------------------------------------ the shots --
+// A blow shown on the field ($A7B0), a foe's missile flying at a member
+// ($A888) and a member hit ($A802). The blow and the missile wait for
+// frames with their return kept in the slot ($0AD5, back by $0ADE). The
+// shot is a sprite: its position is 16-bit fixed point in the slot (+$0A/+$0B
+// x, +$0C/+$0D y), moved by +$0E..+$11 each frame.
+
+#define SHOT_KIND   (SLOT + 0x22)
+#define HIT_MEMBER  (SLOT + 0x08)
+
+static void keep_return(uint16_t back) {   // call $0AD5
+	cpu.cycles += 17 + 10 + 19 + 19 + 19 + 10;
+	mem_write(SLOT + 0x2A, (uint8_t)back);
+	mem_write(SLOT + 0x2B, (uint8_t)(back >> 8));
+	SET_HL(back);
+}
+
+static void kept_return(void) {        // jp $0ADE
+	cpu.cycles += 10 + 19 + 19 + 4;
+	SET_HL(rd16(SLOT + 0x2A));
+}
+
+static uint8_t times_12(uint8_t a) {   // call $B860
+	cpu.cycles += 17 + 11 + 4 * 5 + 10 + 10;
+	return (uint8_t)(a * 12);
+}
+
+static void shot_flips(void) {         // call $A482: the sprite's other frame, drawn
+	cpu.cycles += 17 + 19 + 7 + 19 + 19 + 19 + 10;
+	cpu.a = mem_read(SLOT + 0x09);
+	op_xor(1);
+	mem_write(SLOT + 0x09, cpu.a);
+	cpu.e = mem_read(SLOT + 0x0B);
+	cpu.d = mem_read(SLOT + 0x0D);
+	call_original(0x7F26);
+}
+
+static void shot_cell(void) {          // call $A43E: L, H = the cell under the shot
+	cpu.cycles += 17 + 19 + 7 + 4 + 7;
+	cpu.a = mem_read(SLOT + 0x0D);
+	op_add8(6, 0);
+	cpu.l = cpu.a;
+	cpu.h = 0x0C;
+	call(0x7E3C);
+	cpu.cycles += 4 + 19 + 7 + 4 + 7;
+	cpu.b = cpu.l;
+	cpu.a = mem_read(SLOT + 0x0B);
+	op_add8(6, 0);
+	cpu.l = cpu.a;
+	cpu.h = 0x0C;
+	call(0x7E3C);
+	cpu.cycles += 4 + 10;
+	cpu.h = cpu.b;
+}
+
+static void shot_moves(int back) {     // call $0BA4 (or $0BC9: back)
+	cpu.cycles += 17 + 12 * 19 + 10;
+	for (int i = 0; i < 4; i += 2) {
+		uint16_t at = rd16(SLOT + 0x0A + i), by = rd16(SLOT + 0x0E + i);
+		uint32_t r = back ? (uint32_t)at - by : (uint32_t)at + by;
+		mem_write(SLOT + 0x0A + i, (uint8_t)r);
+		mem_write(SLOT + 0x0B + i, (uint8_t)(r >> 8));
+		uint8_t hi = mem_read(SLOT + 0x0F + i), carry;
+		uint8_t ahi = (uint8_t)(at >> 8);
+		cpu.a = ahi;
+		if (back) { carry = (uint8_t)at < (uint8_t)by; op_sub8(hi, carry, 1); }
+		else { carry = (uint8_t)((uint8_t)at + (uint8_t)by) < (uint8_t)at; op_add8(hi, carry); }
+	}
+}
+
+static uint8_t field_tile(void) {      // call $A460: A = the tile at (L, H) on the field's map
+	uint16_t hl = HL;
+	cpu.cycles += 17 + 11;
+	cell_index();
+	cpu.cycles += 7 + 7 + 10 + 10;
+	cpu.a = mem_read(0xD800 | cpu.l);
+	SET_HL(hl);
+	return cpu.a;
+}
+
+// call $A7DA: carry clear and A = the member standing at (L, H), if any
+static void member_at(void) {
+	cpu.cycles += 17 + 11 + 15 + 13 + 4 + 7;
+	uint16_t bc = BC, iy = cpu.iy;
+	uint8_t n = mem_read(0xC957);
+	cpu.a = n; cpu.b = n; cpu.c = 0;
+	for (;;) {
+		call(0x7ED2);                  // can't act: not there
+		cpu.cycles += 7;
+		if (!(cpu.f & FC)) {
+			call(0x7E90);
+			cpu.cycles += 4 + 19 + 7;
+			cpu.a = cpu.l;
+			op_sub8(mem_read(cpu.iy + 0), 0, 0);
+			if (cpu.f & FZ) {
+				cpu.cycles += 4 + 19 + 7;
+				cpu.a = cpu.h;
+				op_sub8(mem_read(cpu.iy + 1), 0, 0);
+				if (cpu.f & FZ) { cpu.cycles += 4 + 12; cpu.a = cpu.c; break; }
+			}
+		}
+		cpu.cycles += 5 + 4;
+		cpu.c++;
+		if (--cpu.b) cpu.cycles += 13;
+		else { cpu.cycles += 8 + 4; cpu.f |= FC; break; }
+	}
+	cpu.cycles += 14 + 10 + 10;
+	cpu.iy = iy;
+	SET_BC(bc);
+}
+
+static void pushw(uint16_t v, int c) { cpu.cycles += c; push16(v); }
+
+// $A802: member C hit by foe B: damage by the foe's strength; killed?
+static void member_hit(void) {
+	cpu.cycles += 17;
+	pushw(DE, 11); pushw(HL, 11); pushw(cpu.iy, 15);
+	cpu.cycles += 7;
+	cpu.a = 0x12;
+	call(0x05F1);                      // the sound
+	call(0x7E66);
+	call(0x041C);
+	tcall(0x7F4D, 0xA811);
+	pushw(BC, 11);
+	cpu.cycles += 4;
+	cpu.c = cpu.b;
+	call(0x7E8D);                      // IY = the foe
+	cpu.cycles += 19;
+	cpu.a = mem_read(cpu.iy + 5);
+	call(0xA42A);                      // its kind
+	cpu.cycles += 10 + 48 + 8;         // ld hl,$AC00 / rst $28 / srl a
+	SET_HL(0xAC00 + cpu.a);
+	cpu.a = op_rot(7, mem_read(HL));
+	call(0x7EDB);                      // a random number below it
+	cpu.cycles += 4 + 4 * 4 + 7 + 4 + 7;
+	cpu.d = cpu.a;
+	for (int i = 0; i < 4; i++) op_rrca();
+	op_and(0x0F);
+	cpu.l = cpu.a; cpu.h = 0x0A;
+	call(0x7EC3);
+	cpu.cycles += 4 + 4 + 7;
+	cpu.e = cpu.l; cpu.l = cpu.d; cpu.h = 0x0A;
+	call(0x7E3C);                      // in decimal: tens * 10 + ones
+	cpu.cycles += 4 + 4 + 4 + 7;
+	cpu.a = cpu.h;
+	op_add8(cpu.e, 0);
+	cpu.l = cpu.a; cpu.h = 0;
+	cpu.cycles += 10;
+	SET_BC(pop16());
+	tcall(0x7E63, 0xA842);             // the damage
+	tcall(0x7F38, 0xA845);             // carry: killed
+	cpu.cycles += 7;
+	if (cpu.f & FC) {
+		call(0x7E96);
+		cpu.cycles += 15 + 10 + 10 + 11;
+		SET_DE(0x000D);
+		SET_HL(op_add16(cpu.iy, 0x000D));
+		tcall(0x7F62, 0xA854);         // the name
+		say_inline_v(0xA85A);          // " is Killed!"
+		cpu.cycles += 7 + 7;
+		cpu.a = 1; cpu.c = 4;
+		call(0x7E00);                  // karma
+		tcall(0x7EC6, 0xA86E);
+		cpu.cycles += 4;
+		op_scf();
+	} else cpu.cycles += 5;
+	cpu.cycles += 14 + 10 + 10 + 10;
+	cpu.iy = pop16();
+	SET_HL(pop16());
+	SET_DE(pop16());
+}
+
+// $A7B0: a blow at (L, H) with sound B and graphic C
+static void blow(uint16_t site) {
+	cpu.cycles += 17 + 4;
+	cpu.a = cpu.b;
+	call(0x05F1);
+	cpu.cycles += 4;
+	cpu.a = cpu.c;
+	tcall(0x7EF6, 0xA7B5);
+	cpu.cycles += 17 + 4 + 4 + 4 + 4 + 10;   // $A477: the cell to pixels
+	uint8_t l = times_12(cpu.l);
+	cpu.l = l;
+	cpu.a = cpu.h;
+	cpu.h = times_12(cpu.h);
+	cpu.a = cpu.h;
+	cpu.cycles += 19 + 19 + 19;
+	mem_write(SLOT + 0x0B, cpu.l);
+	mem_write(SLOT + 0x0D, cpu.h);
+	mem_write(SLOT + 0x09, 8);
+	keep_return((uint16_t)(site + 3));
+	cpu.cycles += 19;
+	mem_write(SLOT + 0x19, 5);
+	for (;;) {
+		shot_flips();
+		tcall(0x7F59, 0xA7CF);
+		cpu.cycles += 23 + 7;
+		uint8_t n = (uint8_t)(mem_read(SLOT + 0x19) - 1);
+		mem_write(SLOT + 0x19, n);
+		op_dec8((uint8_t)(n + 1));
+		if (!n) break;
+		cpu.cycles += 5;
+	}
+	kept_return();
+}
+
+// $A888: foe B's missile (kind D, graphic E) at member C
+static void missile(uint16_t site) {
+	cpu.cycles += 17;
+	keep_return((uint16_t)(site + 3));
+	cpu.cycles += 19 + 19;
+	mem_write(SHOT_KIND, cpu.d);
+	mem_write(SLOT + 0x23, cpu.e);
+	call(0x7E90);                      // IY = the member
+	cpu.cycles += 19 + 19 + 4;
+	cpu.e = mem_read(cpu.iy + 0);
+	cpu.d = mem_read(cpu.iy + 1);
+	cpu.c = cpu.b;
+	call(0x7E8D);                      // IY = the foe
+	cpu.cycles += 19 + 19 + 19;
+	cpu.l = mem_read(cpu.iy + 0);
+	cpu.h = mem_read(cpu.iy + 1);
+	cpu.a = mem_read(SLOT + 0x23);
+	tcall(0x7EBD, 0xA8A7);             // the shot, from the foe to the member
+	for (;;) {
+		shot_moves(0);
+		shot_flips();
+		tcall(0x7F59, 0xA8B0);
+		shot_cell();
+		member_at();
+		cpu.cycles += 7;
+		if (!(cpu.f & FC)) break;      // it hits a member
+		field_tile();
+		tcall(0x7EB7, 0xA8BE);         // carry: something stops it
+		cpu.cycles += 7;
+		if (!(cpu.f & FC)) { cpu.cycles += 5; continue; }
+		cpu.cycles += 19 + 7 + 7;
+		cpu.a = mem_read(SHOT_KIND);
+		op_sub8(0x4C, 0, 0);
+		if (cpu.a != 0x4C) { cpu.cycles += 5; goto end; }
+		shot_moves(1);                 // lava: a pool of it where it stops
+		shot_cell();
+		cell_index();
+		cpu.cycles += 17 + 7 + 10 + 10 + 4 + 10 + 12;
+		cpu.h = 0xD8;
+		mem_write(HL, 0x4C);
+		cpu.l++;
+		mem_write(HL, 0x89);
+		goto end;
+	}
+	cpu.cycles += 5 + 19 + 4;          // $A8DA
+	mem_write(HIT_MEMBER, cpu.a);
+	cpu.c = cpu.a;
+	tcall(0x7F6E, 0xA8DE);
+	tcall(0x7ECC, 0xA8E1);
+	cpu.cycles += 7;
+	cpu.a = 0x20;
+	tcall(0x7E33, 0xA8E6);
+	cpu.cycles += 19 + 10 + 17 + 10;   // ld a / ld hl / call switch_on_a by its vector
+	{
+		static const uint8_t kinds[6] = { 0x44, 0x45, 0x46, 0x47, 0x4C, 0x4E };
+		uint8_t kind = mem_read(SHOT_KIND);
+		int i;
+		for (i = 0; i < 6 && kinds[i] != kind; i++) {}
+		cpu.a = kind;
+		if (i == 6) {
+			cpu.cycles += 58 * 6 + 22;
+			cpu.b = 0;
+			SET_HL(0xA922);
+			say_inline_v(0xA8F5);      // "Hit!"
+		} else {
+			cpu.cycles += 58 * i + 79;
+			cpu.b = (uint8_t)(kind + 1);
+			SET_HL(rd16(0xA911 + 3 * i));
+			cpu.a = 0xA8; cpu.f = 0xF2;   // (the switch pops its return address into AF)
+			static const uint16_t text[6] = { 0xA926, 0xA954, 0xA968, 0xA97A, 0xA9B1, 0xA9C2 };
+			say_inline_v(text[i]);
+			if (kind == 0x44 || kind == 0x47) {   // poison or sleep: half the time, if well
+				cpu.cycles += 19;
+				cpu.c = mem_read(HIT_MEMBER);
+				cpu.cycles += 17 + 7;      // $A877: the sound, the bar, the damage
+				cpu.a = 0x12;
+				call(0x05F1);
+				call(0x7E66);
+				call(0x041C);
+				tcall(0x7F4D, 0xA882);
+				cpu.cycles += 10;
+				task_call(0x7E63, kind == 0x44 ? 0xA937 : 0xA988);
+				random_v();
+				cpu.cycles += 7 + (kind == 0x44 ? 10 : 7);   // and 1 / jp z or jr z
+				op_and(1);
+				int failed = 1;
+				if (cpu.a) {
+					call(0x7E96);
+					cpu.cycles += 19 + 7 + (kind == 0x44 ? 10 : 7);
+					cpu.a = mem_read(cpu.iy + 0x1C);
+					op_sub8('G', 0, 0);
+					failed = cpu.a != 'G';
+				}
+				if (failed) {
+					if (kind == 0x47) cpu.cycles += 5;   // the jr taken
+					say_inline_v(0xA9D6);      // $A9D3: "Failed."
+					cpu.cycles += 10;
+				} else if (kind == 0x44) {
+					cpu.cycles += 19 + 10;
+					mem_write(cpu.iy + 0x1C, 'P');
+				} else {
+					cpu.cycles += 19 + 19;
+					mem_write(cpu.iy + 0x1C, 'S');
+					cpu.c = mem_read(HIT_MEMBER);
+					call(0x7E90);
+					cpu.cycles += 19 + 19 + 10;
+					mem_write(cpu.iy + 2, 0x38);
+					mem_write(cpu.iy + 3, 0x38);
+				}
+				goto end;
+			}
+			cpu.cycles += 10;          // jp $A8FB
+		}
+	}
+	cpu.cycles += 19;                  // $A8FB: the damage
+	cpu.c = mem_read(HIT_MEMBER);
+	tcall(0xABB7, 0xA8FE);
+	cpu.cycles += 19 + 19;
+	cpu.b = mem_read(FOE_INDEX);
+	cpu.c = mem_read(HIT_MEMBER);
+	member_hit();
+end:
+	tcall(0x7F29, 0xA90A);             // $A90A
+	kept_return();
+}
+
 // $A74E: it strikes at the member: armour may turn the blow
 static void foe_strikes(void) {
 	cpu.cycles += 19;
@@ -699,7 +1031,7 @@ static void foe_strikes(void) {
 	cpu.l = mem_read(cpu.iy + 0);
 	cpu.h = mem_read(cpu.iy + 1);
 	SET_BC(0x1806);
-	tcall(0xA7B0, 0xA75D);             // the blow, shown
+	blow(0xA75D);                      // the blow, shown
 	cpu.cycles += 13 + 7 + 7;
 	if (mem_read(EFFECT) == 0x50) {    // protection: half the blows miss
 		random_v();
@@ -723,7 +1055,7 @@ static void foe_strikes(void) {
 	cpu.cycles += 19 + 19;
 	cpu.b = mem_read(FOE_INDEX);
 	cpu.c = mem_read(TARGET_MEMBER);
-	tcall(0xA802, 0xA78E);             // monster_hits_member
+	member_hit();
 done:
 	cpu.cycles += 10;                  // jp task_return_3
 }
@@ -781,7 +1113,7 @@ static void foe_acts(void) {
 				cpu.cycles += 19 + 19;
 				cpu.b = mem_read(FOE_INDEX);
 				cpu.c = mem_read(TARGET_MEMBER);
-				tcall(0xA888, 0xA61C);
+				missile(0xA61C);
 				call(0x7F4D);
 				cpu.cycles += 10 + 10;    // jp $A74B / jp task_return_3
 				return;
@@ -901,7 +1233,7 @@ static void foe_acts(void) {
 				cpu.cycles += 19 + 10;
 				mem_write(SLOT + 0x22, cpu.a);
 				SET_BC(0x1208);
-				tcall(0xA7B0, 0xA79A);
+				blow(0xA79A);
 				random_v();
 				cpu.cycles += 7 + 7 + 19;
 				op_and(0x3F);

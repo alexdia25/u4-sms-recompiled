@@ -421,6 +421,8 @@ def main():
         STEER['cspell_' + sp.lower()] = '2D2' + 'D' * i + '2' + '2' + 'U2' + '2'
     for i, g in enumerate((0x90, 0xA4, 0xB0, 0xC0, 0xD0, 0xDC, 0xE0, 0xE8, 0xEC, 0xF0, 0xF8, 0xFC)):
         FIGHTS['foe_%02x' % g] = (('p15', 'p28', 'p19')[i % 3], ['C957:04', 'person+3:%02X' % g], 20 + i, 120)
+    for i, g in enumerate((0xB8, 0x84, 0xE8, 0xE8, 0xB8)):   # missiles: sleep, lava (and where they stop)
+        FIGHTS['shot_%02x_%d' % (g, i)] = (('p15', 'p28', 'p19')[i % 3], ['C957:04', 'person+3:%02X' % g], 60 + i, 200)
     # the ends of a fight: every foe gone, or the party down
     NOFOES = ['%04X:00' % (0xC83E + 8 * i) for i in range(16)]
     AFTER = {'fight_won': NOFOES, 'fight_lost': ['C751:00', 'C752:00', 'C76D:44']}
