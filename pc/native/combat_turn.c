@@ -642,10 +642,9 @@ static void combat_attack(void) {
 // foes_turn ($A493): after the party, each of the 16 foes in turn, one per
 // frame: asleep ones may wake, the energy-draining kind ($EC) negates magic,
 // the phantom kind ($DC) may blink elsewhere; each picks the nearest member
-// who can act and goes for them ($A5BC, original code); then the field it
+// who can act and goes for them (foe_acts); then the field it
 // stands on may hurt it (fire, poison) or put it to sleep. Called with its
 // return kept in the slot (task_enter_2).
-#define FOE_ACTS    0xA5BC
 
 static void yield_at(uint16_t site) {  // "call yield" at site: the next turn goes on after it
 	cpu.cycles += 17 + 58;
@@ -671,6 +670,287 @@ static void foe_burns(void) {
 	op_and(0x7F);
 	tcall(0x7E36, 0xA59C);             // damage_monster
 	cpu.cycles += 12;
+}
+
+// ------------------------------------------------------- a foe's action --
+#define TARGET_MEMBER (SLOT + 0x1C)     // the member it goes for
+#define DISTANCE      (SLOT + 0x1D)
+#define FOE_INDEX     (SLOT + 0x1B)
+#define STEP_X        (SLOT + 0x20)
+#define STEP_Y        (SLOT + 0x21)
+#define EFFECT        0xC976            // $4A jinx, $4E negate, $50 protection
+
+static uint8_t sign_of(uint8_t a) {    // call $ABF8: -1, 0 or 1
+	cpu.cycles += 17 + 4;
+	if (!a) { cpu.cycles += 11; cpu.a = 0; return 0; }
+	cpu.cycles += 5 + 7;
+	if (!(a & 0x80)) { cpu.cycles += 11; cpu.a = 1; return 1; }
+	cpu.cycles += 5 + 7 + 10;
+	cpu.a = 0xFF;
+	return 0xFF;
+}
+
+// $A74E: it strikes at the member: armour may turn the blow
+static void foe_strikes(void) {
+	cpu.cycles += 19;
+	cpu.c = mem_read(TARGET_MEMBER);
+	call(0x7E90);
+	cpu.cycles += 19 + 19 + 10;
+	cpu.l = mem_read(cpu.iy + 0);
+	cpu.h = mem_read(cpu.iy + 1);
+	SET_BC(0x1806);
+	tcall(0xA7B0, 0xA75D);             // the blow, shown
+	cpu.cycles += 13 + 7 + 7;
+	if (mem_read(EFFECT) == 0x50) {    // protection: half the blows miss
+		random_v();
+		cpu.cycles += 7 + 7;
+		op_and(1);
+		if (!cpu.a) { cpu.cycles += 5; goto done; }
+	} else cpu.cycles += 5;
+	random_v();
+	cpu.cycles += 4 + 19;
+	cpu.b = cpu.a;
+	cpu.c = mem_read(TARGET_MEMBER);
+	call(0x7E96);                      // IY = the member's record
+	cpu.cycles += 19 + 10 + 48 + 4 + 7;
+	SET_HL(0xAC44 + mem_read(cpu.iy + 0x0C));   // the armour's defence
+	cpu.a = mem_read(HL);
+	op_sub8(cpu.b, 0, 0);
+	if (!(cpu.f & FC)) { cpu.cycles += 5; goto done; }
+	cpu.cycles += 19;
+	cpu.c = mem_read(TARGET_MEMBER);
+	tcall(0xABB7, 0xA785);
+	cpu.cycles += 19 + 19;
+	cpu.b = mem_read(FOE_INDEX);
+	cpu.c = mem_read(TARGET_MEMBER);
+	tcall(0xA802, 0xA78E);             // monster_hits_member
+done:
+	cpu.cycles += 10;                  // jp task_return_3
+}
+
+// foe_acts ($A5BC): the foe goes for the member it picked: casts or breathes
+// at them from afar, puts the party to sleep, flees when hurt, steps
+// towards them (around what's in the way), or strikes when next to them.
+static void foe_acts(void) {
+	cpu.cycles += 17 + 77;             // task_enter_3
+	wr16(SLOT + 0x28, 0xA548);
+	cpu.cycles += 19;
+	cpu.c = mem_read(TARGET_MEMBER);
+	call(0x7E90);
+	cpu.cycles += 19 + 19 + 19;
+	cpu.l = mem_read(cpu.iy + 0);
+	cpu.h = mem_read(cpu.iy + 1);
+	cpu.c = mem_read(FOE_INDEX);
+	call(0x7E8D);                      // IY = the foe
+	cpu.cycles += 4 + 19;
+	cpu.a = cpu.l;
+	op_sub8(mem_read(cpu.iy + 0), 0, 1);
+	mem_write(STEP_X, sign_of(cpu.a));
+	cpu.cycles += 19 + 4 + 19;
+	cpu.a = cpu.h;
+	op_sub8(mem_read(cpu.iy + 1), 0, 1);
+	mem_write(STEP_Y, sign_of(cpu.a));
+	cpu.cycles += 19 + 19 + 7 + 7;
+	uint8_t kind = mem_read(cpu.iy + 5);
+	int ranged_try = 1;
+	if (kind == 0xAC) {                // the mimic: a chest until the party comes close
+		cpu.cycles += 19 + 19 + 7 + 7;
+		mem_write(cpu.iy + 6, 0x3C);
+		if (mem_read(DISTANCE) >= 5) { cpu.cycles += 5; ranged_try = 0; }
+		else { cpu.cycles += 19; mem_write(cpu.iy + 6, 0xAC); }
+	} else cpu.cycles += 5;
+	if (ranged_try) {                  // $A5FB: one time in four, magic or breath
+		random_v();
+		cpu.cycles += 7 + 7;
+		op_and(3);
+		if (!cpu.a) {
+			cpu.cycles += 19;
+			cpu.a = mem_read(cpu.iy + 5);
+			call(0xAAC7);              // carry: it has none; D = what
+			cpu.cycles += 7;
+			int none = cpu.f & FC;
+			if (!none) {
+				cpu.cycles += 4 + 7 + 7;
+				cpu.a = cpu.d;
+				if (cpu.d == 0x4E) {   // magic, but magic is negated
+					cpu.cycles += 13 + 7 + 7;
+					if (mem_read(EFFECT) == 0x4E) { cpu.cycles += 5; none = 1; }
+				} else cpu.cycles += 5;
+			} else cpu.cycles += 5;
+			if (!none) {
+				cpu.cycles += 19 + 19;
+				cpu.b = mem_read(FOE_INDEX);
+				cpu.c = mem_read(TARGET_MEMBER);
+				tcall(0xA888, 0xA61C);
+				call(0x7F4D);
+				cpu.cycles += 10 + 10;    // jp $A74B / jp task_return_3
+				return;
+			}
+		} else cpu.cycles += 5;
+	}
+	// $A625: the reapers and the gazers put members to sleep
+	cpu.cycles += 19 + 7 + 7;
+	kind = mem_read(cpu.iy + 5);
+	cpu.a = kind;
+	int sleeper = kind == 0xFC;
+	if (sleeper) cpu.cycles += 5;
+	else { cpu.cycles += 7 + 7; sleeper = kind == 0xB0; if (!sleeper) cpu.cycles += 5; }
+	if (sleeper) {
+		cpu.cycles += 13 + 7 + 7;
+		if (mem_read(EFFECT) == 0x4E) { cpu.cycles += 5; sleeper = 0; }
+		else {
+			random_v();
+			cpu.cycles += 7 + 7;
+			op_and(3);
+			if (cpu.a) { cpu.cycles += 5; sleeper = 0; }
+		}
+	}
+	if (sleeper) {
+		call(0x7F4D);
+		cpu.cycles += 7;
+		cpu.a = 0x15;
+		call(0x05F1);
+		call(0x7E69);
+		call(0x7E69);
+		cpu.cycles += 13 + 4 + 7;
+		cpu.b = mem_read(0xC957);
+		cpu.c = 0;
+		do {
+			call(0x7E90);
+			cpu.cycles += 19 + 4 + 7;
+			if (!mem_read(cpu.iy + 2)) { cpu.cycles += 5; goto next_member; }
+			call(0x7E96);
+			cpu.cycles += 19 + 7 + 7;
+			if (mem_read(cpu.iy + 0x1C) != 'G') { cpu.cycles += 5; goto next_member; }
+			random_v();
+			cpu.cycles += 7 + 7;
+			op_and(1);
+			if (!cpu.a) { cpu.cycles += 5; goto next_member; }
+			cpu.cycles += 19;
+			mem_write(cpu.iy + 0x1C, 'S');
+			call(0x7E90);
+			cpu.cycles += 19 + 19;
+			mem_write(cpu.iy + 2, 0x38);   // lying down
+			mem_write(cpu.iy + 3, 0x38);
+		next_member:
+			cpu.cycles += 4;
+			cpu.c++;
+			cpu.cycles += --cpu.b ? 13 : 8;
+		} while (cpu.b);
+		call(0x7F29);
+		cpu.cycles += 10 + 10;
+		return;
+	}
+	// $A684: hurt, it runs away; next to the member, it strikes
+	cpu.cycles += 19 + 7 + 7;
+	if (mem_read(cpu.iy + 4) < 0x18) {
+		cpu.cycles += 19 + 8 + 19 + 19 + 8 + 19 + 12;
+		mem_write(STEP_X, (uint8_t)-mem_read(STEP_X));
+		mem_write(STEP_Y, (uint8_t)-mem_read(STEP_Y));
+	} else {
+		cpu.cycles += 5 + 19 + 7 + 7;
+		if (mem_read(DISTANCE) < 2) {
+			cpu.cycles += 19 + 7;
+			if (mem_read(cpu.iy + 5) == 0xA8) tcall(0xAB38, 0xA6A9);
+			else cpu.cycles += 10;
+			cpu.cycles += 19 + 7;
+			if (mem_read(cpu.iy + 5) == 0xC8) tcall(0xAB54, 0xA6B1);
+			else cpu.cycles += 10;
+			cpu.cycles += 10;
+			foe_strikes();
+			return;
+		}
+		cpu.cycles += 5;
+	}
+	// $A6B7: the mimic and the gazers don't move
+	cpu.cycles += 19 + 7 + 10;
+	kind = mem_read(cpu.iy + 5);
+	if (kind == 0xAC) { cpu.cycles += 10; return; }
+	cpu.cycles += 7 + 10;
+	if (kind == 0xB0) { cpu.cycles += 10; return; }
+	cpu.cycles += 19;
+	mem_write(SLOT + 0x17, 2);         // two tries
+	for (;;) {
+		random_v();                    // $A6C8: across or along, at random
+		cpu.cycles += 7 + 7;
+		op_and(1);
+		int along_x = cpu.a != 0;
+		if (!along_x) {
+			cpu.cycles += 5 + 19 + 4 + 7;
+			if (!mem_read(STEP_Y)) { cpu.cycles += 5; along_x = 1; }
+		} else {
+			cpu.cycles += 19 + 4 + 7;
+			if (!mem_read(STEP_X)) { cpu.cycles += 5; along_x = 0; }
+		}
+		if (along_x) {
+			cpu.cycles += 19 + 19 + 4 + 19 + 12;
+			cpu.l = (uint8_t)(mem_read(cpu.iy + 0) + mem_read(STEP_X));
+			cpu.a = cpu.l;
+			cpu.h = mem_read(cpu.iy + 1);
+		} else {
+			cpu.cycles += 19 + 19 + 4 + 19;
+			cpu.h = (uint8_t)(mem_read(cpu.iy + 1) + mem_read(STEP_Y));
+			cpu.a = cpu.h;
+			cpu.l = mem_read(cpu.iy + 0);
+		}
+		cpu.cycles += 13 + 7 + 7;      // $A6F1: jinxed, it may strike another foe
+		if (mem_read(EFFECT) == 0x4A) {
+			call(0x7E24);              // carry clear: a foe there
+			cpu.cycles += 10;
+			if (!(cpu.f & FC)) {       // $A794
+				cpu.cycles += 19 + 10;
+				mem_write(SLOT + 0x22, cpu.a);
+				SET_BC(0x1208);
+				tcall(0xA7B0, 0xA79A);
+				random_v();
+				cpu.cycles += 7 + 7 + 19;
+				op_and(0x3F);
+				cpu.b = 0xFF;
+				cpu.c = mem_read(SLOT + 0x22);
+				tcall(0x7E36, 0xA7A7);   // damage_monster
+				call(0x7F4D);
+				cpu.cycles += 10;
+				return;
+			}
+		} else cpu.cycles += 5;
+		cpu.cycles += 19;              // $A6FE: is the way free?
+		cpu.c = mem_read(FOE_INDEX);
+		call(0xA9E2);
+		cpu.cycles += 7;
+		if (!(cpu.f & FC)) break;
+		random_v();                    // blocked: another way at random
+		mem_write(STEP_X, sign_of(cpu.a));
+		cpu.cycles += 19;
+		random_v();
+		mem_write(STEP_Y, sign_of(cpu.a));
+		cpu.cycles += 19 + 23 + 7;
+		uint8_t tries = (uint8_t)(mem_read(SLOT + 0x17) - 1);
+		mem_write(SLOT + 0x17, tries);
+		if (tries) { cpu.cycles += 5; continue; }
+		cpu.cycles += 19 + 7 + 10;
+		if (mem_read(DISTANCE) < 2) { foe_strikes(); return; }
+		cpu.cycles += 12 + 10;
+		return;
+	}
+	cpu.cycles += 5 + 19 * 6;          // $A727: it steps
+	mem_write(cpu.iy + 2, mem_read(cpu.iy + 0));
+	mem_write(cpu.iy + 3, mem_read(cpu.iy + 1));
+	cpu.e = mem_read(cpu.iy + 2);
+	cpu.d = mem_read(cpu.iy + 3);
+	mem_write(cpu.iy + 0, cpu.l);
+	mem_write(cpu.iy + 1, cpu.h);
+	cpu.cycles += 4 + 7 + 7;
+	if (cpu.l < 0x0B) {
+		cpu.cycles += 4 + 7 + 7;
+		if (cpu.h < 0x0B) {
+			call(0x7F4D);
+			cpu.cycles += 12 + 10;
+			return;
+		}
+	}
+	cpu.cycles += 5;
+	tcall(0xAB6B, 0xA748);             // off the field: gone
+	cpu.cycles += 10;
 }
 
 static void foes_turn(void) {
@@ -785,8 +1065,12 @@ static void foes_turn(void) {
 		cpu.cycles += 19 + 7;          // $A540
 		cpu.a = mem_read(SLOT + 0x1C);
 		op_sub8(0xFF, 0, 0);
-		if (cpu.a != 0xFF) tcall(FOE_ACTS, 0xA545);   // it goes for them
-		else cpu.cycles += 10;
+		if (cpu.a != 0xFF) {           // it goes for them
+			cpu.cycles += 17;
+			foe_acts();
+			cpu.cycles += 42;          // task_return_3
+			SET_HL(0xA548);
+		} else cpu.cycles += 10;
 		cpu.cycles += 19;              // $A548: the field it stands on
 		cpu.c = mem_read(SLOT + 0x1B);
 		call(0x7E8D);
