@@ -103,15 +103,10 @@ void frame_tick_work(void) {
 // the calls start at the same time as the original's.
 #define YIELD_CYCLES (10 + 58)   // jp yield, and yield itself
 
-static void task_yield(uint16_t resume) {   // yield ($0B19): continue at resume next frame
-	wr16(SLOT_RESUME, resume);
-	SET_HL(resume);   // yield leaves it in HL
-}
-
 static void frame_tick(void) {
 	frame_tick_work();
-	cpu.cycles += YIELD_CYCLES;
-	task_yield(pop16());   // the caller's return address is where the task goes on
+	cpu.cycles += 10;                  // jp yield: it runs on the machine (interrupts as usual)
+	native_continue_at(0x0B19);
 }
 Native native_frame_tick = { "frame_tick", 0x2FFB, 0, frame_tick, 0, 0, 0, .long_calls = 1 };
 
@@ -129,8 +124,9 @@ static void wait_button_start(void) {   // $3033
 	wr16(SLOT_RETURN_4, caller);       // task_enter_4
 	cpu.cycles += 17 + 77 + 17;
 	frame_tick_work();
-	cpu.cycles += YIELD_CYCLES;
-	task_yield(0x3039);
+	cpu.cycles += 10;                  // jp yield, on the machine
+	push16(0x3039);
+	native_continue_at(0x0B19);
 }
 
 static void wait_button_check(void) {   // $3039, each following frame
@@ -139,8 +135,9 @@ static void wait_button_check(void) {   // $3039, each following frame
 	if (!pressed) {
 		cpu.cycles += 13 + 7 + 12 + 17;
 		frame_tick_work();
-		cpu.cycles += YIELD_CYCLES;
-		task_yield(0x3039);
+		cpu.cycles += 10;
+		push16(0x3039);
+		native_continue_at(0x0B19);
 		return;
 	}
 	cpu.cycles += 13 + 7 + 7 + 17;

@@ -441,6 +441,39 @@ def main():
         for _ in range(4):
             s.press('1', 60)
         s.write(name)
+    # dungeons: leave Moonglow to just south of one (the town's way out is
+    # set by RAM) and step in
+    DUNGEON_DOOR = {'deceit': (0xF0, 0x4A), 'despise': (0x5B, 0x44), 'destard': (0x48, 0xA9),
+                    'wrong': (0x7E, 0x15), 'covetous': (0x9C, 0x1C), 'shame': (0x3A, 0x67)}
+    DUNGEON_SPELLS = 'ACDEHLORVXYZ'          # the spell list in dungeons
+    DUNGEONS = {}
+    for i, d in enumerate(DUNGEON_DOOR):
+        DUNGEONS['dungeon_' + d] = (d, ['C95B:FF', 'C913:05'], '', 150)
+        DUNGEONS['dungeon_dark_' + d] = (d, ['C913:00'], '', 60)
+    for sp in 'DELXYZ':
+        DUNGEONS['dspell_' + sp.lower()] = ('despise', MAGIC, '2DD222' + 'D' * DUNGEON_SPELLS.index(sp) + '2U2', 20)
+    DUNGEONS['dspell_y_top'] = ('wrong', MAGIC, '2DD222' + 'D' * DUNGEON_SPELLS.index('Y') + '2', 20)
+    for name, (d, pokes, steer, n) in DUNGEONS.items():
+        rnd = random.Random(name)
+        x, y = DUNGEON_DOOR[d]
+        s = Script()
+        s.poke('C96D:%02X' % x)
+        s.poke('C96E:%02X' % y)
+        s.press('L', 40)
+        s.press('L', 70)
+        s.press('U', 400)              # in: the level is drawn
+        for p in pokes:
+            s.poke(p)
+        s.f += 60
+        for k in steer:
+            s.press(k, 40)
+        for _ in range(n):
+            r = rnd.random()
+            k = rnd.choice('UDLR') if r < 0.6 else '2' if r < 0.9 else '1'
+            s.press(k, rnd.choice((20, 30, 40, 60)))
+        for _ in range(4):
+            s.press('1', 60)
+        s.write(name)
     for seed in range(2):              # anything at all
         rnd = random.Random('play%d' % seed)
         s = Script()

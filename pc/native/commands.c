@@ -1966,7 +1966,7 @@ static void change_level(int up) {
 		cpu.cycles += 10 + 11 + 10;
 		uint8_t lv = (uint8_t)(mem_read(LEVEL) - 1);
 		mem_write(LEVEL, lv);
-		if (lv & 0x80) { spell_done(); return; }   // up from the top: out
+		if (lv & 0x80) { cast_end(1); return; }    // up from the top: out (jp m,$5D49)
 	} else {
 		cpu.cycles += 13 + 7 + 10;
 		uint8_t lv = mem_read(LEVEL);

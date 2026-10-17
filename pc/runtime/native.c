@@ -379,15 +379,18 @@ static void run_task(Native *n) {
 	switch_to(f);
 }
 
-// From a C task: end this turn like yield ($0B19) does, with the slot
-// resuming at `resume`, and come back here when run_tasks jumps there with IX
-// on this slot (the task's next turn).
+// From a C task: end this turn with yield ($0B19), the slot resuming at
+// `resume`, and come back here when run_tasks jumps there with IX on this
+// slot (the task's next turn).
 void task_wait_turn(uint16_t resume) {
-	wr16(cpu.ix + 2, resume);
+	// the caller has counted yield's own time; yield itself runs on the
+	// machine, so that an interrupt due meanwhile comes at the same place
+	cpu.cycles -= 58;
+	push16(resume);
+	cpu.pc = 0x0B19;
 	current->wait_pc = resume;
 	current->wait_sp = 0;
 	native_tasks_waiting++;
-	cpu.pc = pop16();          // back to run_tasks
 	to_main();
 }
 
