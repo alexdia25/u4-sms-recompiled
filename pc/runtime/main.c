@@ -148,15 +148,15 @@ static int headless(int frames, const char *shot, const char *keys) {
 	for (int i = 0; i < 0x2000; i++) h = (h ^ sms.ram[i]) * 16777619u;
 	printf("frames %d pc %04X ram-hash %08X state-hash %08X interpreted %llu\n", frames, cpu.pc, h,
 		state_hash(), (unsigned long long)recomp_fallbacks);
-	// U4_SETTLE=n: n more frames with no input, each one's pc and state-hash.
-	// A frame can end in the middle of a rewritten routine's work (the CPU
-	// parked at PARK_PC) while the original is half way through it: tests
-	// compare the two at the first frame where both are at the same place.
+	// U4_SETTLE=n: n more frames with no input, printing the state at each
+	// pass of the task scheduler (native.c). A frame can end while a
+	// rewritten routine has done at once work the original is half way
+	// through; at the scheduler neither is in the middle of anything.
 	int settle = getenv("U4_SETTLE") ? atoi(getenv("U4_SETTLE")) : 0;
+	native_settle = settle > 0;
 	for (int f = 0; f < settle; f++) {
 		sms.pad1 = 0;
 		sms_run_frame();
-		printf("settle %d pc %04X state-hash %08X\n", frames + f + 1, cpu.pc, state_hash());
 	}
 	return 0;
 }

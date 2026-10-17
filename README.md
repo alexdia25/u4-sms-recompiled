@@ -126,7 +126,7 @@ alone runs the game.
   - menus, number entry and yes/no prompts;
   - talking to people;
   - every kind of shop;
-  - map loading and walking, the creatures on the map, and the screen refresh with the line of sight in the world and towns;
+  - map loading and walking, the creatures on the map, the screen refresh with the line of sight in the world and towns, and drawing the view into video memory;
   - the party's turn in a dungeon, its Attack and Search (orbs, fountains, altars);
   - the player's turn, moving, and all eight commands (Talk, Attack, Magic with spell mixing, casting and every spell, Get Chest, Use, Ready, Search, Camp);
   - combat: a member's turn (moving, fleeing, passing, the menu and its commands) and the foes' turn;
@@ -150,9 +150,9 @@ tests/run.sh food_buy    # one case
 Each case is a key script that starts from power-on (`tests/start.keys`, which
 plays through creating a character to Moonglow) and then shops, talks to
 townsfolk or plays at random (`tests/make_cases.py` writes them). Every case
-must end in the same state with the C rewrites as without (compared, if the
-run ends in the middle of some work, at the next frame where both are at the
-same instruction: `tests/same_state.py`), and in shadow mode
+must end in the same state with the C rewrites as without (compared at the
+task scheduler's next passes, where neither is in the middle of anything:
+`tests/same_state.py`), and in shadow mode
 every call of a rewrite must match the original, time included. The C tasks,
 which shadow mode can't step through, must be entered at the same cycles as
 the original code (`tests/entry_times.py`). It needs only

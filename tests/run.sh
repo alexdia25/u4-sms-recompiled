@@ -22,7 +22,7 @@ frames() { tail -1 "$1" | cut -d' ' -f1; }
 TASKS=$(grep -h '\.task = 1' pc/native/*.c | sed 's/.*{ "\([a-z0-9_]*\)".*/\1/' | paste -sd, -)
 # run frames keys out trace: the end state (and a few frames after it) to
 # out, the C tasks' entries to trace
-run() { U4_SETTLE=30 U4_TRACE=$TASKS "$EXE" build/u4.pak --headless "$1" --keys "$2" >"$3" 2>"$4"; }
+run() { U4_SETTLE=10 U4_TRACE=$TASKS "$EXE" build/u4.pak --headless "$1" --keys "$2" >"$3" 2>"$4"; }
 
 check() {
 	k=tests/cases/$1.keys

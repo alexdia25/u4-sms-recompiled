@@ -78,11 +78,24 @@ static int reg_ok(unsigned before, unsigned orig, unsigned nat, int is_output) {
 static int task_in_call(void);
 void native_sync(void);
 
+// U4_SETTLE (main.c): after the run, the state each time the task scheduler
+// starts a pass ($0AE5): no rewritten routine is half way through its work
+// there, so the original's and the rewrites' states compare exactly.
+int native_settle;
+static void settle_nothing(void) {}
+Native native_settle_point = { "settle_point", 0x0AE5, 0, settle_nothing, .hook = 1 };
+
 int native_call(Native *n) {
 	int m = get_mode();
 	static const char *trace = (const char *)-1;   // U4_TRACE=<names>: log entry times
 	if (trace == (const char *)-1) trace = getenv("U4_TRACE");
 	if (trace && strstr(trace, n->name)) fprintf(stderr, "enter %s %lld\n", n->name, (long long)cpu.cycles);
+	if (native_settle && n == &native_settle_point) {   // tests: the state between turns
+		uint32_t g = 2166136261u;
+		for (int i = 0; i < 0x2000; i++)
+			if (i < 0x1E00 || i >= 0x1FF0) g = (g ^ sms.ram[i]) * 16777619u;
+		printf("settle %d at %lld state-hash %08X\n", native_settle++, (long long)cpu.cycles, g);
+	}
 	if (m == MODE_OFF) return 0;
 	if (skip_once == n) { skip_once = NULL; return 0; }
 	if (n->hook) { n->fn(); return 0; }   // looks, and the original runs

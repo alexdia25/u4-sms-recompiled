@@ -374,3 +374,6 @@ name     02:B5B3 creatures_move
 name     02:BB17 creatures_appear
 name     02:B5E2 creature_blocked
 native   00:129D native_refresh
+name     00:1A7C compose_screen
+native   00:1A7C native_compose_screen
+native   00:0AE5 native_settle_point

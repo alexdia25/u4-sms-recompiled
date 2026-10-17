@@ -79,4 +79,6 @@ void call_original(uint16_t addr);
 // on a fiber: let interrupts due during the C so far happen (native.c)
 void native_sync(void);
 
+extern int native_settle;      // > 0: print the state at each scheduler pass (tests)
+
 #endif
