@@ -1114,6 +1114,8 @@ static void spell_page(void) {
 	call(0x2E54);                      // menu_window_show
 }
 
+static void run_spell(uint8_t spell);
+
 static void cast_spell(void) {
 	uint16_t back = pop16();
 	cpu.cycles += 17 + 77;             // task_enter_2
@@ -1225,7 +1227,7 @@ static void cast_spell(void) {
 		cpu.cycles += 19 + 10 + 10 + 52;
 		cpu.a = spell;
 		SET_HL(rd16(0x5DFB + 2 * spell));
-		native_continue_at(HL);
+		run_spell(spell);
 		return;
 	}
 	cpu.cycles += 5;
@@ -1236,3 +1238,292 @@ static void cast_spell(void) {
 	cast_end(1);
 }
 Native native_cast_spell = { "cast_spell", 0x5B8C, 1, cast_spell, 0, 0, 0, .task = 1 };
+
+// -------------------------------------------------------------- spells --
+// The spells cast outside combat ($5DFB table). Each ends at $5D49 (done),
+// or $5D3A ("Failed!") - both reached by jp, here cast_end / spell_failed.
+// The others (combat, dungeon) are still original code.
+#define VIEW_XY    0xC985
+#define EFFECT     0xC976               // a timed effect in combat; $4E = negated
+
+static void spell_done(void) { cpu.cycles += 10; cast_end(1); }   // jp $5D49
+
+static void spell_failed(void) {       // $5D3A (the caller counts its jump there)
+	call(0x40D1);
+	say_inline(0x5D40);                // "Failed!"
+	op_or(cpu.a);
+	cast_end(1);
+}
+
+// $6304: the caster pays the M.P.; a flash. 0 when magic is negated.
+static int spend_mp(void) {
+	cpu.cycles += 17 + 20;
+	SET_BC(rd16(CASTER));
+	call(0x48B6);                      // member_record
+	cpu.cycles += 19 + 19 + 19;
+	uint8_t mp = (uint8_t)(mem_read(cpu.iy + 9) - mem_read(SLOT + 0x1F));
+	mem_write(cpu.iy + 9, mp);
+	call(0x5DCE);                      // the caster's status
+	cpu.cycles += 7;
+	cpu.a = 0x15;
+	call(0x05F1);                      // sound
+	call(0x041C);                      // wait_vblank
+	call(0x41A9);
+	call(0x041C);
+	call(0x41A9);
+	call(0x041C);
+	cpu.cycles += 13 + 7;
+	cpu.a = mem_read(EFFECT);
+	op_sub8(0x4E, 0, 0);
+	if (cpu.a != 0x4E) { cpu.cycles += 11; return 1; }
+	cpu.cycles += 5 + 10 + 10;         // pop af / jp $5D3A
+	spell_failed();
+	return 0;
+}
+
+// $6335 / $6350 / $6369: "Outdoors Only!" etc. unless the map mode fits
+static int only_here(int ok, uint16_t text) {
+	cpu.cycles += 17 + 13 + 7;
+	if (ok) { cpu.cycles += 11; return 1; }
+	cpu.cycles += 5;
+	say_inline(text);
+	cpu.cycles += 12 + 10 + 10;        // jr / pop af / jp $5D3A
+	spell_failed();
+	return 0;
+}
+static int only_outdoors(void) { return only_here(mem_read(MAP_KIND) == 0, 0x633E); }
+
+// $641F: "Who: " and a member; the call's return kept (task_enter_3)
+static int spell_who(uint16_t back) {
+	cpu.cycles += 17 + 17 + 77;
+	wr16(SLOT + 0x28, back);
+	say_inline(0x6425);
+	call(0x4BCB);
+	if (prompt(0x642E, 0x4BD2)) { cast_cancel(); return 0; }
+	cpu.cycles += 10 + 42;             // jp task_return_3
+	SET_HL(back);
+	return 1;
+}
+
+// $643C: "Direction:"; the step that way in (ix+$0E), (ix+$10)
+static int spell_direction(uint16_t back) {
+	cpu.cycles += 17 + 17 + 77;
+	wr16(SLOT + 0x28, back);
+	call(0x4C28);
+	if (prompt(0x6442, 0x4C3C)) { cast_cancel(); return 0; }
+	cpu.cycles += 19 + 17 + 100 + 19 + 19;
+	cpu.a = mem_read(SLOT + 0x1A);
+	SET_HL(rd16(0x40BF + 2 * cpu.a));
+	mem_write(SLOT + 0x0E, cpu.l);
+	mem_write(SLOT + 0x10, cpu.h);
+	cpu.cycles += 10 + 42;
+	SET_HL(back);
+	return 1;
+}
+
+// Awaken, Cure, Resurrect: a member with status `from` (S, P, D) is good
+// again (G). Awakened in combat, the figure stands up.
+static void restore_status(uint16_t back, uint8_t from) {
+	if (!spell_who(back) || !spend_mp()) return;
+	cpu.cycles += 19;
+	cpu.c = mem_read(SLOT + 0x08);
+	call(0x48B6);
+	cpu.cycles += 19 + 7 + 10;
+	cpu.a = mem_read(cpu.iy + 0x1C);
+	op_sub8(from, 0, 0);
+	if (cpu.a != from) { spell_failed(); return; }
+	cpu.cycles += 19;
+	mem_write(cpu.iy + 0x1C, 'G');
+	if (from != 'S') { spell_done(); return; }
+	cpu.cycles += 13 + 7 + 10;
+	cpu.a = mem_read(MAP_KIND);
+	op_sub8(3, 0, 0);
+	if (cpu.f & FC) { cast_end(1); return; }
+	call(0x42F3);
+	cpu.cycles += 4;
+	cpu.b = cpu.a;
+	call(0x48D5);                      // member_object
+	cpu.cycles += 19 + 19;
+	mem_write(cpu.iy + 2, cpu.b);
+	mem_write(cpu.iy + 3, cpu.b);
+	spell_done();
+}
+
+static int on_land(void) {             // not on a ship or in the balloon
+	cpu.cycles += 13 + 7 + 10;
+	uint8_t t = mem_read(0xC959);
+	cpu.a = t;
+	op_sub8(0x14, 0, 0);
+	if (t < 0x14) { spell_failed(); return 0; }
+	cpu.cycles += 7 + 10;
+	op_sub8(0x18, 0, 0);
+	if (t == 0x18) { spell_failed(); return 0; }
+	return 1;
+}
+
+// Blink ($5E5F): jump as far as the view allows that way, back off to
+// ground the party can stand on
+static void blink(void) {
+	if (!on_land() || !only_outdoors() || !spell_direction(0x5E72) || !spend_mp()) return;
+	cpu.cycles += 13 + 10 + 7 + 7 + 10;
+	cpu.a = mem_read(PARTY_XY) & mem_read(PARTY_XY + 1);
+	op_sub8(0xC0, 0, 0);
+	if (!(cpu.f & FC)) { spell_failed(); return; }
+	cpu.cycles += 19 + 19 + 16 + 4 + 4;
+	cpu.e = mem_read(SLOT + 0x0E);
+	cpu.d = mem_read(SLOT + 0x10);
+	SET_HL(rd16(VIEW_XY));
+	cpu.c = cpu.l;
+	cpu.b = cpu.h;
+	for (;;) {                         // out to the edge of the view
+		cpu.cycles += 4 + 4 + 4 + 4 + 4 + 4 + 4 + 7 + 7;
+		cpu.l = (uint8_t)(cpu.l + cpu.e);
+		cpu.h = (uint8_t)(cpu.h + cpu.d);
+		if (cpu.l >= 0x20) { cpu.cycles += 5; break; }
+		cpu.cycles += 4 + 7 + 7;
+		if (cpu.h >= 0x20) break;
+		cpu.cycles += 5;
+	}
+	for (;;) {                         // back until there is ground
+		cpu.cycles += 4 + 4 + 4 + 4 + 4 + 4 + 4 + 4 + 7;
+		cpu.l = (uint8_t)(cpu.l - cpu.e);
+		cpu.h = (uint8_t)(cpu.h - cpu.d);
+		cpu.a = cpu.l;
+		op_sub8(cpu.c, 0, 0);
+		if (cpu.l == cpu.c) {
+			cpu.cycles += 4 + 4 + 10;
+			cpu.a = cpu.h;
+			op_sub8(cpu.b, 0, 0);
+			if (cpu.h == cpu.b) { spell_failed(); return; }   // back where it started
+		} else cpu.cycles += 5;
+		cpu.cycles += 11;
+		uint16_t at = HL;
+		push16(at);
+		call(0xB5A4);                  // the map cell
+		cpu.cycles += 7 + 10;
+		cpu.a = mem_read(HL);
+		SET_HL(pop16());
+		call(0x3EB7);                  // carry: can't stand there
+		cpu.cycles += 7;
+		if (!(cpu.f & FC)) break;
+		cpu.cycles += 5;
+	}
+	cpu.cycles += 13 + 4 + 4 + 13 + 13 + 4 + 4 + 13;
+	mem_write(PARTY_XY, (uint8_t)(mem_read(PARTY_XY) + cpu.l - cpu.c));
+	cpu.a = (uint8_t)(mem_read(PARTY_XY + 1) + cpu.h - cpu.b);
+	mem_write(PARTY_XY + 1, cpu.a);
+	call(0x0E22);                      // recenter_map_view
+	spell_done();
+}
+
+// Gate ($5FF7): to one of the eight moongates
+static void gate(void) {
+	if (!on_land() || !only_outdoors()) return;
+	cpu.cycles += 10;
+	SET_HL(0x64A5);
+	call(0x2E7F);                      // the menu of phases
+	say_inline(0x6010);                // "To phase: "
+	cpu.cycles += 19;
+	mem_write(SLOT + 0x1A, 0);
+	for (;;) {
+		task_frame_tick(0x601F);
+		cpu.cycles += 7 + 10;
+		cpu.c = 8;
+		SET_DE(0x0102);
+		call(0x49F9);
+		cpu.cycles += 7;
+		if (!(cpu.f & FZ)) break;
+		cpu.cycles += 5;
+	}
+	cpu.cycles += 10;
+	if (cpu.f & FC) { cast_cancel(); return; }
+	cpu.cycles += 19 + 7 + 17;
+	uint8_t phase = mem_read(SLOT + 0x1A);
+	text_char((uint8_t)('1' + phase));
+	newline();
+	if (!spend_mp()) return;
+	cpu.cycles += 19 + 10 + 91 + 16;
+	cpu.a = mem_read(SLOT + 0x1A);
+	SET_HL(rd16(0x7CA3 + 2 * cpu.a));
+	wr16(PARTY_XY, HL);
+	call(0x0E22);
+	spell_done();
+}
+
+// Heal ($604D): 75-99 hit points
+static void heal(void) {
+	if (!spell_who(0x6050) || !spend_mp()) return;
+	cpu.cycles += 19;
+	cpu.c = mem_read(SLOT + 0x08);
+	call(0x4445);                      // member_can_act
+	cpu.cycles += 10;
+	if (cpu.f & FC) { spell_failed(); return; }
+	cpu.cycles += 7;
+	cpu.a = 0x19;
+	call(0x2BEB);                      // random_below
+	cpu.cycles += 7 + 4 + 7;
+	cpu.a = (uint8_t)(cpu.a + 0x4B);
+	SET_HL(cpu.a);
+	call(0x4221);                      // member_heal
+	spell_done();
+}
+
+// Open ($609D): a chest, without its trap; not from the balloon
+static void open_chest(void) {
+	if (!spend_mp()) return;
+	cpu.cycles += 13 + 7 + 7;
+	uint8_t mode = mem_read(MAP_KIND);
+	if (mode == 0) {
+		cpu.cycles += 13 + 7 + 10;
+		if (mem_read(0xC959) == 0x18) { spell_failed(); return; }
+	} else cpu.cycles += 5;
+	cpu.cycles += 13 + 7 + 7;
+	cpu.a = mode;
+	op_sub8(3, 0, 0);
+	if (mode >= 3) { call(0x5978); cpu.cycles += 12; }
+	else {
+		cpu.cycles += 5 + 19;
+		mem_write(SLOT + 0x08, 0xFF);
+		call(0x5B13);
+	}
+	spell_done();
+}
+
+// View ($61EB): the map (its own task routine, which waits for frames)
+static void view(void) {
+	if (!spend_mp()) return;
+	cpu.cycles += 13 + 7 + 10;
+	if (mem_read(MAP_KIND) >= 3) { spell_failed(); return; }
+	cpu.cycles += 17;
+	push16(0x61F9);
+	native_continue_at(0x61FC);
+}
+
+// Winds ($6263): the wind blows the way chosen
+static void winds(void) {
+	if (!only_outdoors() || !spell_direction(0x6269) || !spend_mp()) return;
+	cpu.cycles += 19 + 13;
+	cpu.a = mem_read(SLOT + 0x1A);
+	mem_write(0xC98A, cpu.a);
+	spell_done();
+}
+
+// the spell's routine: C where rewritten, else the original's
+static void run_spell(uint8_t spell) {
+	switch (spell) {
+	case 0: restore_status(0x5E32, 'S'); break;   // Awaken
+	case 1: blink(); break;
+	case 2: restore_status(0x5ECF, 'P'); break;   // Cure
+	case 6: gate(); break;
+	case 7: heal(); break;
+	case 14: open_chest(); break;
+	case 17:                                      // Resurrect: not in combat
+		cpu.cycles += 13 + 7 + 10;
+		if (mem_read(MAP_KIND) >= 3) { spell_failed(); break; }
+		restore_status(0x60DA, 'D');
+		break;
+	case 21: view(); break;
+	case 22: winds(); break;
+	default: native_continue_at(rd16(0x5DFB + 2 * spell)); break;
+	}
+}

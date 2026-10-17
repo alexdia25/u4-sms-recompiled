@@ -127,7 +127,7 @@ alone runs the game.
   - talking to people;
   - every kind of shop;
   - map loading and walking;
-  - the player's turn, moving, and all eight commands (Talk, Attack, Magic with spell mixing and the casting menu, Get Chest, Use, Ready, Search, Camp);
+  - the player's turn, moving, and all eight commands (Talk, Attack, Magic with spell mixing, the casting menu and the spells cast outside combat, Get Chest, Use, Ready, Search, Camp);
   - combat and karma rules;
   - the task system.
 

@@ -351,6 +351,43 @@ def main():
         for _ in range(4):
             s.press('1', 60)
         s.write(name)
+    MAGIC = ['C75A:63'] + ALL_MIX      # 99 M.P. and three of each mixture
+    SPELLS = {                         # each spell outside combat: RAM writes, outdoors?, Downs in the list, then presses
+        'spell_awaken':    (['C957:02', 'C78A:53'], False, 0, '2D2'),   # Iolo asleep
+        'spell_cure':      (['C76D:50'], False, 2, '22'),
+        'spell_cure_none': ([], False, 2, '22'),                 # nobody poisoned: it fails
+        'spell_resurrect': (['C957:02', 'C78A:44'], False, 7, '2D2'),
+        'spell_heal':      (['C751:10', 'C752:00'], False, 5, '22'),
+        'spell_open':      ([], False, 6, '2'),
+        'spell_view':      ([], False, 8, '2' + '2'),
+        'spell_blink':     ([], True, 1, '2U2'),
+        'spell_blink_in':  ([], False, 1, '2'),                  # outdoors only
+        'spell_gate':      ([], True, 4, '2DDD2'),
+        'spell_winds':     ([], True, 9, '2R2'),
+        'spell_negated':   (['C976:4E', 'C76D:50'], False, 2, '22'),
+    }
+    for name, (pokes, world, downs, keys) in SPELLS.items():
+        rnd = random.Random(name)
+        s = Script()
+        if world:
+            for k in 'LLLLLL':
+                s.press(k, 30)
+        for p in MAGIC + pokes:
+            s.poke(p)
+        s.f += 10
+        for k in '2DD22':              # command menu, Magic, Cast
+            s.press(k, 30)
+        s.f += 30
+        s.press('2', 40)               # the Avatar casts
+        for _ in range(downs):
+            s.press('D', 30)
+        for k in keys:
+            s.press(k, 40)
+        s.f += 200
+        random_presses(s, rnd, 12, menu=False)
+        for _ in range(4):
+            s.press('1', 60)
+        s.write(name)
     for seed in range(2):              # anything at all
         rnd = random.Random('play%d' % seed)
         s = Script()
