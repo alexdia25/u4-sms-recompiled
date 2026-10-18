@@ -396,3 +396,9 @@ native   03:9DB7 native_round_over
 native   03:9DBF native_combat_end
 native   03:8220 native_opening
 native   03:8305 native_title
+native   03:87AD native_title_figures
+native   03:894D native_interlude
+native   03:89A4 native_ripple
+code     03:8A61                       # the interlude's button task (started by address)
+native   03:8A61 native_interlude_button
+native   03:8EBD native_new_game

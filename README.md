@@ -122,7 +122,7 @@ alone runs the game.
 - **`pc/native/`** holds readable C rewrites of the game's routines, which
   replace the translated originals one by one through `native` lines in
   `tools/hints.txt`:
-  - the opening words and the title screen (the logo, the demo, the Options menu);
+  - the opening words, the title screen (the logo, the demo, the Options menu), the interlude after the demo, and naming the Avatar;
   - text printing and the text window;
   - menus, number entry and yes/no prompts;
   - talking to people;

@@ -564,11 +564,25 @@ def main():
     # the title: the demo to its end (no buttons); Journey Onward; Return
     # to the view, then the menu again (up wraps round to the last choice)
     TITLES = {
-        'title_demo':    [('7600', '-')],
+        'title_demo':    [('9000', '-')],                 # and the interlude after it, and the opening again
+        'interlude_skip': [('8100', '1'), ('8700', '-')],
         'title_journey': [('1200', '1'), ('1300', 'D'), ('1330', 'U'), ('1360', '2'), ('2000', '-')],
         'title_view':    [('1200', '1'), ('1300', 'D'), ('1330', 'D'), ('1360', '1'),
                           ('1700', '1'), ('1800', 'U'), ('1830', 'U'), ('1860', '2'), ('2500', '-')],
     }
+    # a new game: every key in naming (up and left wrap round, the hand on
+    # End, End with no name, a thirteenth letter), she, and on into the
+    # story; and the name SOUND (the sound test)
+    def create(keys, start=1400, gap=24, end=900):
+        out = [('1200', '1'), ('1272', '1')]
+        f = start
+        for k in keys:
+            out.append((str(f), k))
+            f += gap
+        out.append((str(f + end), '-'))
+        return out
+    TITLES['create_keys'] = create('UL2' + 'UUR' + 'RL' + 'DRRR2' + '11' + '2' * 13 + 'D' + 'R' * 8 + 'LR' + 'RL' + '2' + 'DUD2')
+    TITLES['create_sound'] = create('D' + 'R' * 5 + '2' + 'L' * 4 + '2' + 'R' * 6 + '2' + 'L' * 7 + '2' + 'U' + 'RRR2' + 'U' + 'LLLL2', end=600)
     for name, keys in TITLES.items():
         lines = []
         for f, k in keys:
