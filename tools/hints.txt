@@ -402,3 +402,8 @@ native   03:89A4 native_ripple
 code     03:8A61                       # the interlude's button task (started by address)
 native   03:8A61 native_interlude_button
 native   03:8EBD native_new_game
+native   03:92D4 native_story
+native   03:9441 native_gate_task
+native   03:945C native_gypsy
+native   03:96E7 native_cards_down
+native   03:9A8D native_sound_test

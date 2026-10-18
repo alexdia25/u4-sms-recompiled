@@ -583,6 +583,23 @@ def main():
         return out
     TITLES['create_keys'] = create('UL2' + 'UUR' + 'RL' + 'DRRR2' + '11' + '2' * 13 + 'D' + 'R' * 8 + 'LR' + 'RL' + '2' + 'DUD2')
     TITLES['create_sound'] = create('D' + 'R' * 5 + '2' + 'L' * 4 + '2' + 'R' * 6 + '2' + 'L' * 7 + '2' + 'U' + 'RRR2' + 'U' + 'LLLL2', end=600)
+    # the sound test: a song, quiet, the sound's number down past 1 and up,
+    # the sound, then Exit
+    TITLES['sound_test'] = create('D' + 'R' * 5 + '2' + 'L' * 4 + '2' + 'R' * 6 + '2' + 'L' * 7 + '2' + 'U' + 'RRR2' + 'U' + 'LLLL2'
+                                  + '-' * 12 + 'D2' + '-' * 4 + '1UUL' + 'LLR2' + '-' * 4 + 'D2', end=600)
+    # the gypsy answered the other way: B every time, and A and B in turn
+    # (the start script answers A); the draws differ with the timing
+    for name, pick in (('gypsy_b', lambda i: 'D'), ('gypsy_mixed', lambda i: 'DU'[i % 2])):
+        keys, i = [], 0
+        for line in START:
+            f, k = line.split()
+            if k == '2' and int(f) >= 5800:
+                keys.append((str(int(f) - 30), pick(i)))
+                i += 1
+            if k != '-':
+                keys.append((f, k))
+        keys.append(('9000', '-'))
+        TITLES[name] = keys
     for name, keys in TITLES.items():
         lines = []
         for f, k in keys:

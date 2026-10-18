@@ -1263,3 +1263,956 @@ static void new_game(void) {
 	mem_write(GAME_MODE, 7);
 }
 Native native_new_game = { "new_game", 0x8EBD, 3, new_game, 0, 0, 0, .task = 1 };
+
+// ------------------------------------------------------------ the story --
+// $92D4 (game mode 7): the story, a page at a time ($9903: the page's text
+// scrolled up into the window; $99FC: a button for the next). Some pages
+// first change the picture above ($935A: faded out, a new one loaded and
+// faded in) or the music, or show the moongate rising ($93D8) and sinking
+// ($9418); after page $17, the gypsy (mode 8).
+
+#define PAGE        (SLOT + 0x1A)
+
+static void keep_return_24(uint16_t site) {   // call $0AA5 at site: its return kept in the slot
+	cpu.cycles += 17 + 10 + 19 + 19 + 19 + 10;
+	wr16(SLOT + 0x24, (uint16_t)(site + 3));
+	SET_HL((uint16_t)(site + 3));
+}
+
+static void kept_return_24(void) {     // jp $0AAE
+	cpu.cycles += 10 + 19 + 19 + 4;
+	SET_HL(rd16(SLOT + 0x24));
+}
+
+// call $9964 (the story's window) or $9982 (the gypsy's, `small`): the
+// text window cleared, the text to start at (1, $0F) or (1, $10)
+static void window_clear(int small) {
+	uint16_t at = small ? 0xCE00 : 0xCDC0, n = small ? 0x0200 : 0x0240;
+	cpu.cycles += 17 + 10 + 10 + 10 + 10;
+	SET_HL(at); SET_DE(at + 1); SET_BC(n - 1);
+	mem_write(at, 0);
+	ldir();
+	cpu.cycles += 10 + 10 + 10;
+	SET_HL(at); SET_DE(small ? 0x3C00 : 0x3BC0); SET_BC(n);
+	tcall(0x0463, small ? 0x9998 : 0x997A);
+	cpu.cycles += 10 + (small ? 0 : 12) + 19 * 4 + 10;   // ld hl (/ jr $999E)
+	uint8_t row = small ? 0x10 : 0x0F;
+	SET_HL((uint16_t)(row << 8 | 0x01));
+	mem_write(SLOT + 0x0A, 0x01);
+	mem_write(SLOT + 0x0C, row);
+	mem_write(SLOT + 0x0E, 0x01);
+	mem_write(SLOT + 0x10, row);
+}
+
+// $99BF: the text at HL (in bank +$07) into the buffer at +$0A/+$0C: 1 is
+// a new line, 0 the end; the cursor left after it
+static void text_at(void) {
+	for (;;) {
+		cpu.cycles += 19 + 19;         // $99BF: the line's start
+		cpu.e = mem_read(SLOT + 0x0A);
+		cpu.d = mem_read(SLOT + 0x0C);
+		call(0x7EEA);
+		for (;;) {
+			cpu.cycles += 19 + 11;     // $99C8
+			cpu.a = mem_read(SLOT + 0x07);
+			push16(HL);
+			call(0x0815);              // A = the byte
+			cpu.cycles += 10 + 6 + 4 + 7;
+			SET_HL((uint16_t)(pop16() + 1));
+			uint8_t c = cpu.a;
+			cpu.a = op_dec8(c);
+			if (c == 1) {              // $99E4: a new line
+				cpu.cycles += 5 + 23 + 19 + 19 + 12;
+				mem_write(SLOT + 0x0C, (uint8_t)(mem_read(SLOT + 0x0C) + 1));
+				cpu.a = mem_read(SLOT + 0x0E);
+				mem_write(SLOT + 0x0A, cpu.a);
+				break;
+			}
+			cpu.cycles += 4 + 7;
+			cpu.a = op_inc8(cpu.a);
+			if (c == 0) {              // $99EF: the end
+				cpu.cycles += 5 + 19 + 13 + 19 + 13 + 10;
+				mem_write(0xC639, mem_read(SLOT + 0x0A));
+				cpu.a = mem_read(SLOT + 0x0C);
+				mem_write(0xC63A, cpu.a);
+				return;
+			}
+			cpu.cycles += 7 + 7 + 4 + 7 + 7 + 4 + 23 + 12;
+			cpu.a = c;
+			op_add8(0x40, 0);
+			mem_write(DE, cpu.a);
+			cpu.e++;
+			cpu.a = 0x09;
+			mem_write(DE, 0x09);
+			cpu.e++;
+			mem_write(SLOT + 0x0A, (uint8_t)(mem_read(SLOT + 0x0A) + 1));
+		}
+	}
+}
+
+// call $99AB: text A of the story's (table $A6A6 in bank $15), or with
+// `gypsy` ($99B2) of the gypsy's (table $9E1E in bank $18)
+static void page_text(int gypsy, uint8_t page) {
+	cpu.cycles += 17 + 7 + 10 + (gypsy ? 0 : 12) + 4 + 19 + 4;
+	uint8_t bank = gypsy ? 0x18 : 0x15;
+	cpu.b = bank;
+	SET_HL(gypsy ? 0x9E1E : 0xA6A6);
+	cpu.c = page;
+	mem_write(SLOT + 0x07, bank);
+	cpu.a = bank;
+	call(0x0807);                      // HL = the text
+	text_at();
+}
+
+// $992E: the text in the buffer scrolled up into the window a row a turn
+static void scroll_up(void) {
+	cpu.cycles += 19 + 4 + 7;
+	cpu.b = mem_read(SLOT + 0x10);
+	cpu.d = cpu.b;
+	cpu.e = 0;
+	call(0x7EEA);
+	cpu.cycles += 19 + 19 + 7 + 4 + 19;
+	mem_write(SLOT + 0x1B, cpu.e);
+	mem_write(SLOT + 0x1C, cpu.d);
+	cpu.a = 0x18;
+	op_sub8(cpu.b, 0, 1);
+	mem_write(SLOT + 0x17, cpu.a);
+	for (;;) {
+		cpu.cycles += 19 + 19 + 10 + 11 + 19 + 19 + 10;   // $9943
+		SET_DE((uint16_t)(mem_read(SLOT + 0x1B) | mem_read(SLOT + 0x1C) << 8));
+		SET_HL(op_add16(0x0040, DE));
+		mem_write(SLOT + 0x1B, cpu.l);
+		mem_write(SLOT + 0x1C, cpu.h);
+		SET_BC(0x0120);
+		tcall(0x0499, 0x9956);
+		yield_at(0x9959);
+		cpu.cycles += 23 + 7;
+		uint8_t n = op_dec8(mem_read(SLOT + 0x17));
+		mem_write(SLOT + 0x17, n);
+		if (!n) break;
+		cpu.cycles += 5;
+	}
+	kept_return_24();
+}
+
+// call $9903 at site (or $9917 for the gypsy's): text A in a cleared
+// window, scrolled up into it (the call counted by the caller)
+static void page_in(int gypsy, uint8_t page, uint16_t site) {
+	cpu.cycles += 19;
+	mem_write(SLOT + 0x21, page);
+	keep_return_24(site);
+	window_clear(gypsy);
+	yield_at(gypsy ? 0x9920 : 0x990C);
+	cpu.cycles += 19;
+	page_text(gypsy, mem_read(SLOT + 0x21));
+	cpu.cycles += 12;                  // jr $992E
+	scroll_up();
+}
+
+static void scroll_in(uint16_t site) { // call $992B at site: the buffer scrolled up into the window
+	cpu.cycles += 17;
+	keep_return_24(site);
+	scroll_up();
+}
+
+static void wait_next(uint16_t site) { // call $99FC at site: the cursor blinks until a button
+	cpu.cycles += 17;
+	keep_return_24(site);
+	for (;;) {
+		tcall(0x7F5C, 0x99FF);
+		yield_at(0x9A02);
+		cpu.cycles += 13 + 7 + 7;
+		cpu.a = mem_read(JOY_PRESSED);
+		op_and(0x30);
+		if (cpu.a) break;
+		cpu.cycles += 5;
+	}
+	tcall(0x7F14, 0x9A0C);
+	kept_return_24();
+}
+
+static void picture_out(uint16_t site) {   // call $93A7 at site: the picture faded out, the screen cleared
+	cpu.cycles += 17;
+	keep_return_24(site);
+	cpu.cycles += 10 + 10 + 10 + 10;
+	SET_HL(0xCA00); SET_DE(0xCA01); SET_BC(0x03BF);
+	mem_write(0xCA00, 0);
+	ldir();
+	cpu.cycles += 10;
+	SET_BC(0x8101);
+	tcall(0x0A22, 0x93BA);
+	tcall(0x0A82, 0x93BD);
+	kept_return_24();
+}
+
+// call $938E (returning to back): the picture from bank A at HL: its
+// palette, tiles and map ($D000)
+static void load_picture(uint8_t bank, uint16_t at, uint16_t back) {
+	cpu.cycles += 17 + 10 + 10 + 11;
+	cpu.a = bank;
+	SET_HL(at);
+	SET_DE(0xC043); SET_BC(0x0010);
+	uint16_t af = (uint16_t)(cpu.a << 8 | cpu.f);
+	push16(af);
+	tcall(0x07EC, 0x9395);             // the palette
+	cpu.cycles += 10 + 10 + 11;
+	af = pop16();
+	cpu.a = (uint8_t)(af >> 8); cpu.f = (uint8_t)af;
+	SET_DE(0x0000);
+	push16(af);
+	tcall(0x0788, 0x939D);             // the tiles
+	cpu.cycles += 10 + 10 + 10;
+	af = pop16();
+	cpu.a = (uint8_t)(af >> 8); cpu.f = (uint8_t)af;
+	SET_DE(0xD000);
+	task_call(0x071A, back);           // jp $071A: the map
+}
+
+// $936F: the picture into the screen's top 15 rows, faded in; then on to
+// the page
+static void picture_in(uint8_t bank, uint16_t at) {
+	load_picture(bank, at, 0x9372);
+	cpu.cycles += 10 + 10 + 7;
+	SET_HL(0xD000); SET_DE(0xCA0A);
+	cpu.a = 0x0F;
+	for (;;) {
+		cpu.cycles += 10;
+		SET_BC(0x002C);
+		ldir();
+		cpu.cycles += 10 + 4 + 11 + 4 + 4 + 7;
+		SET_BC(0x0014);
+		SET_DE(op_add16(DE, BC));
+		cpu.a = op_dec8(cpu.a);
+		if (!cpu.a) break;
+		cpu.cycles += 5;
+	}
+	cpu.cycles += 17 + 10 + 10 + 10;   // call $93C3
+	SET_HL(0xCA00); SET_DE(0x3800); SET_BC(0x03C0);
+	tcall(0x0463, 0x93CC);
+	cpu.cycles += 10 + 10 + 10;
+	SET_HL(0xC043); SET_BC(0x0101);
+	task_call(0x0A22, 0x938B);         // jp $0A22: faded in
+	cpu.cycles += 10;                  // jp $92EA
+}
+
+// $9441: the moongate's two sprites, the top one at row +$1B
+static void gate_sprites(void) {
+	cpu.cycles += 10 + 7 + 10;
+	SET_DE(0x3850);
+	cpu.a = 0x11;
+	SET_HL(0xBD66);
+}
+static void gate_top(void) {         // and its jp $09BE
+	cpu.cycles += 19 + 7 + 4 + 7 + 7 + 10 + 10;
+	cpu.a = mem_read(SLOT + 0x1B);
+	op_add8(0x30, 0);
+	cpu.d = cpu.a;
+	cpu.e = 0x50;
+	cpu.a = 0x11;
+	SET_HL(0xBD5F);
+}
+static void gate(uint16_t site) {      // call $9441 at site
+	cpu.cycles += 17;
+	gate_sprites();
+	tcall(0x09BE, 0x9449);
+	gate_top();
+	task_call(0x09BE, (uint16_t)(site + 3));   // jp $09BE
+}
+static void gate_task(void) {          // $9441 as a task of its own: each turn
+	gate_sprites();
+	tcall(0x09BE, 0x9449);
+	gate_top();
+	native_continue_at(0x09BE);        // jp $09BE: its ret ends the turn
+}
+Native native_gate_task = { "gate_task", 0x9441, 3, gate_task, 0, 0, 0, .task = 1 };
+
+static void story(void) {
+	cpu.cycles += 10;
+	SET_HL(0x9C58);
+	tcall(0x083B, 0x92D7);
+	yield_at(0x92DA);
+	cpu.cycles += 19;
+	mem_write(PAGE, 0);
+	static const uint8_t pages[11] = { 0x00, 0x03, 0x05, 0x06, 0x0B, 0x0E, 0x0F, 0x11, 0x14, 0x15, 0x17 };
+	for (;;) {
+		cpu.cycles += 19 + 10 + 17 + 10;   // $92E1: ld a / ld hl / call switch_on_a by its vector
+		uint8_t p = mem_read(PAGE);
+		int i;
+		for (i = 0; i < 11 && pages[i] != p; i++) {}
+		if (i == 11) {
+			cpu.cycles += 58 * 11 + 22;
+			cpu.b = 0;
+			SET_HL(0x931F);
+			cpu.a = p;
+			op_inc8(0xFF);
+		} else {
+			cpu.cycles += 58 * i + 79;
+			cpu.b = (uint8_t)(p + 1);
+			uint16_t to = rd16(0x92FF + 3 * i);
+			SET_HL(to);
+			cpu.a = (uint8_t)to;
+			cpu.f = 0xEA;              // (the switch pops its return address into AF)
+			switch (p) {
+			case 0x17:                 // $92F8: the end: the gypsy
+				cpu.cycles += 7 + 13 + 10;
+				cpu.a = 8;
+				mem_write(GAME_MODE, 8);
+				return;
+			case 0x0E:                 // $9320: the music
+				cpu.cycles += 7;
+				cpu.a = 1;
+				call(0x0621);
+				cpu.cycles += 10;
+				break;
+			case 0x03:                 // $93D8: the moongate rises
+				cpu.cycles += 7;
+				cpu.a = 0x1D;
+				call(0x05F1);
+				cpu.cycles += 7 + 10 + 10;
+				cpu.a = 0x11;
+				SET_HL(0xBD34); SET_DE(0x2000);
+				tcall(0x0788, 0x93E5);
+				cpu.cycles += 10 + 10;
+				SET_DE(0xCC14); SET_BC(0x0201);
+				tcall(0x7F05, 0x93EE);
+				cpu.cycles += 19 + 19;
+				mem_write(SLOT + 0x1B, 0x0C);
+				mem_write(SLOT + 0x17, 0x0C);
+				for (;;) {
+					gate(0x93F9);
+					yield_at(0x93FC);
+					gate(0x93FF);
+					yield_at(0x9402);
+					cpu.cycles += 23 + 23 + 7;
+					mem_write(SLOT + 0x1B, (uint8_t)(mem_read(SLOT + 0x1B) - 1));
+					uint8_t n = op_dec8(mem_read(SLOT + 0x17));
+					mem_write(SLOT + 0x17, n);
+					if (!n) break;
+					cpu.cycles += 5;
+				}
+				cpu.cycles += 7 + 10;
+				cpu.c = 0x40;
+				SET_DE(0x9441);
+				call(0x0B35);          // it stays, drawn by a task of its own
+				cpu.cycles += 10;
+				break;
+			case 0x05:                 // $9418: and sinks
+				cpu.cycles += 7;
+				cpu.a = 0x1D;
+				call(0x05F1);
+				cpu.cycles += 7;
+				cpu.a = 0x40;
+				call(0x0B6D);          // its task ended
+				cpu.cycles += 19 + 19;
+				mem_write(SLOT + 0x1B, 0x00);
+				mem_write(SLOT + 0x17, 0x0C);
+				for (;;) {
+					gate(0x942A);
+					yield_at(0x942D);
+					gate(0x9430);
+					yield_at(0x9433);
+					cpu.cycles += 23 + 23 + 7;
+					mem_write(SLOT + 0x1B, (uint8_t)(mem_read(SLOT + 0x1B) + 1));
+					uint8_t n = op_dec8(mem_read(SLOT + 0x17));
+					mem_write(SLOT + 0x17, n);
+					if (!n) break;
+					cpu.cycles += 5;
+				}
+				cpu.cycles += 10;
+				break;
+			case 0x00:                 // $9328: the first picture (no fade out)
+				cpu.cycles += 7 + 10 + 10;
+				picture_in(0x12, 0xA8A9);
+				break;
+			default: {                 // a new picture
+				static const uint8_t bank[] = { 0x12, 0x13, 0x12, 0x11, 0x12, 0x1A };
+				static const uint16_t at[] = { 0xA8A9, 0x8000, 0x9490, 0xA5AB, 0x8000, 0xAF91 };
+				int k = p == 0x0B ? 0 : p == 0x06 ? 1 : p == 0x0F ? 2 : p == 0x11 ? 3 : p == 0x14 ? 4 : 5;
+				cpu.cycles += 7 + 10 + 12 + 19 + 19 + 19;
+				cpu.a = bank[k];
+				SET_HL(at[k]);
+				mem_write(SLOT + 0x1F, bank[k]);
+				mem_write(SLOT + 0x20, (uint8_t)at[k]);
+				mem_write(SLOT + 0x21, (uint8_t)(at[k] >> 8));
+				picture_out(0x9363);
+				cpu.cycles += 19 + 19 + 19;
+				picture_in(mem_read(SLOT + 0x1F), rd16(SLOT + 0x20));
+				break;
+			}
+			}
+		}
+		cpu.cycles += 19 + 17;         // $92EA
+		page_in(0, mem_read(PAGE), 0x92ED);
+		wait_next(0x92F0);
+		cpu.cycles += 23 + 12;
+		mem_write(PAGE, (uint8_t)(mem_read(PAGE) + 1));
+	}
+}
+Native native_story = { "story", 0x92D4, 3, story, 0, 0, 0, .task = 1 };
+
+// ------------------------------------------------------------ the gypsy --
+// $945C (game mode 8): the gypsy's seven questions. Each sets two of the
+// eight virtues still in play against each other (cards drawn at random
+// from those left, $C623: 0 in play, 1 chosen, $FF not); the one chosen
+// gains 5 ($C62B) and adds to strength, dexterity and intelligence by the
+// table at $96CF; after the third and fifth questions, the losers' cards
+// come back. Then the party is made ($9724) and the game begins (mode $10).
+
+#define CARDS       0xC623          // 8 virtues: 0 in play, 1 chosen, $FF lost
+#define VIRTUE      0xC62B          // 8 virtues' starting values
+#define STATS       0xC633          // strength, dexterity, intelligence
+#define QUESTION    0xC636
+#define PAIR        0xC637          // the two cards (lower first; swapped if the second is chosen)
+
+static uint16_t rst20(uint16_t t, uint8_t a) {   // ld hl,t / rst $20: HL = the word t[A]
+	cpu.cycles += 10 + 91;
+	SET_HL(rd16((uint16_t)(t + 2 * a)));
+	cpu.a = cpu.l;
+	return HL;
+}
+
+static uint8_t random_below(uint8_t n) {   // ld a,n / call random_below by its vector
+	cpu.cycles += 7;
+	cpu.a = n;
+	call(0x7EDB);
+	return cpu.a;
+}
+
+static uint8_t card(uint8_t i) {       // ld hl,$C623 / rst $28 / or a
+	cpu.cycles += 10 + 48 + 4;
+	SET_HL(CARDS + i);
+	cpu.a = mem_read(HL);
+	op_or(cpu.a);
+	return cpu.a;
+}
+
+// call $96B3: the mark B (two tiles) in the column of card A, on this question's row
+static void mark(uint8_t c, uint8_t b) {
+	cpu.cycles += 17 + 7 + 4 + 13 + 4 + 4 + 4;
+	cpu.a = (uint8_t)(c + 0x0C);
+	cpu.e = cpu.a;
+	cpu.a = (uint8_t)(mem_read(QUESTION) * 2 + 1);
+	cpu.d = cpu.a;
+	cpu.b = b;
+	call(0x7EEA);
+	cpu.cycles += 4 + 7 + 10 + 11 + 4 + 7 + 10;
+	uint16_t t = DE; SET_DE(HL); SET_HL(t);
+	mem_write(HL, cpu.b);
+	SET_DE(0x0040);
+	SET_HL(op_add16(HL, DE));
+	cpu.b = op_inc8(cpu.b);
+	mem_write(HL, cpu.b);
+}
+
+// $9724: the party: the eight companions ($9797, $980B), the Avatar's
+// class, place and virtues by the first card chosen, the name and sex,
+// strength, dexterity and intelligence; then on (jp $7E1E)
+static void make_party(void) {
+	cpu.cycles += 17 + 10 + 10 + 10;
+	SET_DE(0xC8FD); SET_HL(0x9797); SET_BC(0x0074);
+	ldir();
+	cpu.cycles += 10 + 10 + 10;
+	SET_DE(0xC751); SET_HL(0x980B); SET_BC(0x00E8);
+	ldir();
+	cpu.cycles += 13;
+	cpu.a = mem_read(PAIR);
+	rst20(0x98F3, cpu.a);              // the start: the town of the class
+	cpu.cycles += 16;
+	wr16(0xC953, HL);
+	cpu.cycles += 10 + 10 + 10;
+	SET_HL(VIRTUE); SET_DE(0xC90B); SET_BC(0x0008);
+	ldir();
+	cpu.cycles += 13 + 4 + 10 + 10;
+	cpu.a = op_inc8(mem_read(PAIR));
+	SET_HL(0xC734); SET_DE(0x001D);
+	for (;;) {                         // the class's companion record
+		cpu.cycles += 11 + 4 + 7;
+		SET_HL(op_add16(HL, DE));
+		cpu.a = op_dec8(cpu.a);
+		if (!cpu.a) break;
+		cpu.cycles += 5;
+	}
+	cpu.cycles += 10 + 7;
+	SET_DE(0xC751);
+	cpu.b = 0x1D;
+	call(0x7F3B);                      // made the Avatar's
+	cpu.cycles += 10 + 10;
+	SET_HL(0xC75E); SET_BC(0x0D00);
+	tcall(0x7E57, 0x976B);
+	cpu.cycles += 10 + 10 + 20 + 7;
+	SET_HL(NAME + 1); SET_DE(0xC75E);
+	SET_BC(mem_read(NAME));
+	ldir();
+	cpu.cycles += 13 * 8;
+	mem_write(0xC76B, mem_read(SEX));
+	mem_write(0xC757, mem_read(STATS + 0));
+	mem_write(0xC759, mem_read(STATS + 1));
+	cpu.a = mem_read(STATS + 2);
+	mem_write(0xC758, cpu.a);
+	cpu.cycles += 10;
+	task_call(0x7E1E, 0x96AD);         // jp $7E1E
+}
+
+// call $96F6 at site: a card slid down into place (from HL, a row a turn)
+static void card_down(uint16_t from, uint16_t site) {
+	cpu.cycles += 10 + 17 + 19 + 19;   // ld hl / the call / ld (ix+$1A),l / ld (ix+$1B),h
+	SET_HL(from);
+	mem_write(SLOT + 0x1A, (uint8_t)from);
+	mem_write(SLOT + 0x1B, (uint8_t)(from >> 8));
+	keep_return_24(site);
+	cpu.cycles += 19;
+	mem_write(SLOT + 0x16, 4);
+	for (;;) {
+		cpu.cycles += 19 + 19 + 10 + 11 + 19 + 19 + 10;
+		SET_DE((uint16_t)(mem_read(SLOT + 0x1A) | mem_read(SLOT + 0x1B) << 8));
+		SET_HL(op_add16(0x0100, DE));
+		mem_write(SLOT + 0x1A, cpu.l);
+		mem_write(SLOT + 0x1B, cpu.h);
+		SET_BC(0x0406);
+		tcall(0x0499, 0x9716);
+		yield_at(0x9719);
+		cpu.cycles += 23 + 7;
+		uint8_t n = op_dec8(mem_read(SLOT + 0x16));
+		mem_write(SLOT + 0x16, n);
+		if (!n) break;
+		cpu.cycles += 5;
+	}
+	kept_return_24();
+}
+
+// $96E7: the task that slides both cards down
+static void cards_down(void) {
+	card_down(0xCA06, 0x96EA);
+	card_down(0xCA2E, 0x96F0);
+	cpu.cycles += 10;                  // jp end_task
+	native_continue_at(0x0B5A);
+}
+Native native_cards_down = { "cards_down", 0x96E7, 3, cards_down, 0, 0, 0, .task = 1 };
+
+static void text(uint8_t n, uint16_t site) {   // ld a,n / call $99B2 at site
+	cpu.cycles += 7;
+	cpu.a = n;
+	page_text(1, n);
+	(void)site;
+}
+
+static void gypsy(void) {
+	picture_out(0x945C);
+	cpu.cycles += 7 + 10;
+	load_picture(0x11, 0xBBE2, 0x9467);
+	cpu.cycles += 10 + 10 + 10;
+	SET_HL(0xD000); SET_DE(0xCA00); SET_BC(0x0400);
+	ldir();
+	cpu.cycles += 10 + 10 + 10;
+	SET_HL(0xCA00); SET_DE(0x3800); SET_BC(0x0400);
+	tcall(0x0463, 0x947B);
+	cpu.cycles += 10 + 10;
+	SET_HL(0xC043); SET_BC(0x0101);
+	tcall(0x0A22, 0x9484);             // faded in
+	cpu.cycles += 7 + 17;
+	cpu.a = 0x38;
+	page_in(1, 0x38, 0x9489);
+	wait_next(0x948C);
+	yield_at(0x948F);
+	cpu.cycles += 10 + 10;
+	SET_HL(CARDS); SET_BC(0x0800);
+	tcall(0x7E57, 0x9498);             // all in play
+	cpu.cycles += 10;
+	SET_BC(0x0832);
+	tcall(0x7E57, 0x949E);             // the virtues at 50
+	cpu.cycles += 10;
+	SET_BC(0x030F);
+	tcall(0x7E57, 0x94A4);             // the stats at 15
+	cpu.cycles += 10;
+	mem_write(HL, 0);                  // the first question
+	for (;;) {
+		cpu.cycles += 13 + 4 + 7;      // $94A9
+		cpu.a = mem_read(QUESTION);
+		op_or(cpu.a);
+		if (cpu.a) {                   // the last cards away
+			cpu.cycles += 10 + 10 + 10;
+			SET_HL(0x0001); SET_DE(0xCA46); SET_BC(0x0E06);
+			tcall(0x7E0F, 0x94B8);
+			cpu.cycles += 10 + 10 + 10;
+			SET_HL(0x0001); SET_DE(0xCA6E); SET_BC(0x0E06);
+			tcall(0x7E0F, 0x94C4);
+			cpu.cycles += 19 * 3;
+			mem_write(SLOT + 0x1B, 0x46);
+			mem_write(SLOT + 0x1C, 0xCD);
+			mem_write(SLOT + 0x17, 0x07);
+			for (;;) {
+				cpu.cycles += 19 + 19 + 10 + 11 + 19 + 19 + 10;
+				SET_DE((uint16_t)(mem_read(SLOT + 0x1B) | mem_read(SLOT + 0x1C) << 8));
+				SET_HL(op_add16(0xFF80, DE));
+				mem_write(SLOT + 0x1B, cpu.l);
+				mem_write(SLOT + 0x1C, cpu.h);
+				SET_BC(0x021A);
+				tcall(0x0499, 0x94E6);
+				yield_at(0x94E9);
+				cpu.cycles += 23 + 7;
+				uint8_t n = op_dec8(mem_read(SLOT + 0x17));
+				mem_write(SLOT + 0x17, n);
+				if (!n) break;
+				cpu.cycles += 5;
+			}
+		} else cpu.cycles += 5;
+		cpu.cycles += 13 + 7 + 7;      // $94F1: before the 4th and 6th, the lost cards back
+		uint8_t q = mem_read(QUESTION);
+		cpu.a = q;
+		op_sub8(4, 0, 0);
+		int back = q == 4;
+		if (back) cpu.cycles += 5;
+		else {
+			cpu.cycles += 7 + 7;
+			op_sub8(6, 0, 0);
+			if (q == 6) back = 1; else cpu.cycles += 5;
+		}
+		if (back) {
+			cpu.cycles += 10 + 7;
+			SET_HL(CARDS);
+			cpu.b = 8;
+			for (;;) {
+				cpu.cycles += 12 + 7;
+				if (mem_read(HL) & 0x80) cpu.cycles += 5;
+				else { cpu.cycles += 10; mem_write(HL, 0); }
+				cpu.cycles += 6;
+				SET_HL(HL + 1);
+				if (--cpu.b) cpu.cycles += 13; else { cpu.cycles += 8; break; }
+			}
+		}
+		uint8_t e, d;                  // $950A: two cards still in play
+		for (;;) {
+			e = random_below(8);
+			cpu.cycles += 4;
+			cpu.e = e;
+			if (!card(e)) break;
+			cpu.cycles += 7 + 5;
+		}
+		cpu.cycles += 7;
+		for (;;) {
+			d = random_below(8);
+			cpu.cycles += 4 + 7;
+			op_sub8(e, 0, 0);
+			if (d == e) { cpu.cycles += 5; continue; }
+			cpu.cycles += 4;
+			cpu.d = d;
+			if (!card(d)) break;
+			cpu.cycles += 7 + 5;
+		}
+		cpu.cycles += 7 + 4 + 4 + 7;
+		cpu.a = e;
+		op_sub8(d, 0, 0);
+		if (e < d) cpu.cycles += 5;
+		else { cpu.cycles += 4 + 4; cpu.a = e; cpu.e = d; cpu.d = e; }
+		cpu.cycles += 20;
+		wr16(PAIR, DE);
+		cpu.cycles += 13 + 10 + 10 + 7;
+		cpu.a = mem_read(PAIR);
+		SET_HL(0xCA46); SET_DE(0x0200); cpu.c = 0x10;
+		tcall(0x7EF9, 0x953C);         // the cards drawn
+		cpu.cycles += 13 + 10 + 10 + 7;
+		cpu.a = mem_read(PAIR + 1);
+		SET_HL(0xCA6E); SET_DE(0x0C00); cpu.c = 0x60;
+		tcall(0x7EF9, 0x954A);
+		window_clear(1);
+		yield_at(0x9550);
+		cpu.cycles += 10;
+		SET_DE(0x96E7);
+		call(0x0B33);                  // and slid down
+		cpu.cycles += 13 + 7 + 4 + 7;  // $9559: the question
+		q = mem_read(QUESTION);
+		cpu.a = q;
+		cpu.b = 0x3C;
+		op_or(q);
+		if (q) {
+			cpu.cycles += 7 + 7 + 7;
+			cpu.b = 0x3E;
+			op_sub8(6, 0, 0);
+			if (q == 6) cpu.cycles += 5;
+			else { cpu.cycles += 7; cpu.b = 0x3D; }
+		} else cpu.cycles += 5;
+		cpu.cycles += 4;
+		cpu.a = cpu.b;
+		page_text(1, cpu.b);
+		text(0x3F, 0x956F);
+		cpu.cycles += 13 + 7;
+		page_text(1, (uint8_t)(mem_read(PAIR) + 0x40));
+		text(0x48, 0x957C);
+		cpu.cycles += 13 + 7;
+		page_text(1, (uint8_t)(mem_read(PAIR + 1) + 0x40));
+		text(0x49, 0x9589);
+		scroll_in(0x958C);
+		wait_next(0x958F);
+		cpu.cycles += 13 + 10 + 48 + 10 + 7 + 4 + 19 + 17;   // $9592: the question itself
+		uint8_t t = mem_read((uint16_t)(0x96C8 + mem_read(PAIR)));
+		uint8_t n = (uint8_t)((uint8_t)(t + mem_read(PAIR + 1)) * 2);
+		SET_HL(PAIR + 1);
+		cpu.a = (uint8_t)(t + mem_read(PAIR + 1));
+		op_add8(cpu.a, 0);
+		mem_write(SLOT + 0x1A, n);
+		page_in(1, n, 0x95A1);
+		wait_next(0x95A4);
+		window_clear(1);
+		yield_at(0x95AA);
+		text(0x39, 0x95AF);
+		cpu.cycles += 19;
+		mem_write(SLOT + 0x0A, 2);
+		text(0x3A, 0x95B8);
+		cpu.cycles += 19 + 19 + 4;
+		mem_write(SLOT + 0x0E, 5);
+		page_text(1, (uint8_t)(mem_read(SLOT + 0x1A) + 1));
+		push(HL);
+		cpu.cycles += 19 + 23 + 19 + 19;
+		mem_write(SLOT + 0x0A, 2);
+		mem_write(SLOT + 0x0C, (uint8_t)(mem_read(SLOT + 0x0C) + 1));
+		cpu.a = mem_read(SLOT + 0x0C);
+		mem_write(SLOT + 0x0D, cpu.a);
+		text(0x3B, 0x95D6);
+		SET_HL(pop());
+		cpu.cycles += 17;              // call $99BF: the rest of the text
+		text_at();
+		scroll_in(0x95DD);
+		cpu.cycles += 19;              // $95E0: A or B
+		mem_write(SLOT + 0x1A, 0);
+		for (;;) {
+			cpu.cycles += 10 + 20 + 7;
+			SET_HL(0x1101);
+			if (mem_read(SLOT + 0x1A) & 1) { cpu.cycles += 19; cpu.h = mem_read(SLOT + 0x0D); }
+			else cpu.cycles += 5;
+			cpu.cycles += 16;
+			wr16(0xC639, HL);
+			tcall(0x7F5C, 0x95F3);
+			yield_at(0x95F6);
+			cpu.cycles += 13 + 8 + 7;
+			uint8_t joy = mem_read(JOY_PRESSED);
+			cpu.a = joy;
+			if (joy & 1) {
+				tcall(0x7F14, 0x9600);
+				cpu.cycles += 19 + 12;
+				mem_write(SLOT + 0x1A, 0);
+				continue;
+			}
+			cpu.cycles += 5 + 8 + 7;
+			if (joy & 2) {
+				tcall(0x7F14, 0x960D);
+				cpu.cycles += 19 + 12;
+				mem_write(SLOT + 0x1A, 1);
+				continue;
+			}
+			cpu.cycles += 5 + 7 + 7;
+			op_and(0x30);
+			if (!cpu.a) { cpu.cycles += 5; continue; }
+			break;
+		}
+		tcall(0x7F17, 0x961A);
+		cpu.cycles += 20 + 7;
+		if (mem_read(SLOT + 0x1A) & 1) {   // the second: first in the pair
+			cpu.cycles += 16 + 4 + 4 + 4 + 16;
+			uint16_t pr = rd16(PAIR);
+			wr16(PAIR, (uint16_t)(pr << 8 | pr >> 8));
+			cpu.a = (uint8_t)(pr >> 8);
+		} else cpu.cycles += 5;
+		cpu.cycles += 20 + 7 + 20 + 4 + 10 + 11 + 10 + 10 + 11 + 10 + 10 + 11 + 7 + 7 + 7;
+		uint8_t won = mem_read(PAIR), lost = mem_read(PAIR + 1);
+		mem_write(CARDS + won, 1);
+		mem_write(CARDS + lost, 0xFF);
+		SET_HL(VIRTUE + won);
+		cpu.a = mem_read(HL);
+		op_add8(5, 0);
+		mem_write(HL, cpu.a);
+		cpu.cycles += 4 + 4 + 4 + 4 + 10 + 11 + 10 + 7;
+		SET_BC(won);
+		SET_DE((uint16_t)(won * 3));
+		SET_HL((uint16_t)(0x96CF + won * 3));
+		cpu.a = (uint8_t)(won * 3);
+		SET_DE(STATS);
+		cpu.b = 3;
+		for (;;) {                     // its strength, dexterity, intelligence
+			cpu.cycles += 7 + 7 + 7 + 6 + 6;
+			cpu.a = mem_read(DE);
+			op_add8(mem_read(HL), 0);
+			mem_write(DE, cpu.a);
+			SET_HL(HL + 1); SET_DE(DE + 1);
+			if (--cpu.b) cpu.cycles += 13; else { cpu.cycles += 8; break; }
+		}
+		cpu.cycles += 13 + 7;
+		mark(mem_read(PAIR), 0x0B);
+		cpu.cycles += 13 + 7;
+		mark(mem_read(PAIR + 1), 0x09);
+		cpu.cycles += 10 + 10;
+		SET_DE(0xCA58); SET_BC(0x0E08);
+		tcall(0x0499, 0x9675);
+		yield_at(0x9678);
+		cpu.cycles += 10 + 11 + 7 + 7 + 10;
+		SET_HL(QUESTION);
+		q = (uint8_t)(mem_read(QUESTION) + 1);
+		mem_write(QUESTION, q);
+		cpu.a = q;
+		op_sub8(7, 0, 0);
+		if (q >= 7) break;
+	}
+	cpu.cycles += 19 + 19;             // $9685: the gypsy's last words
+	mem_write(SLOT + 0x1A, 0x4A);
+	mem_write(SLOT + 0x16, 0x02);
+	for (;;) {
+		cpu.cycles += 19 + 17;
+		page_in(1, mem_read(SLOT + 0x1A), 0x9690);
+		wait_next(0x9693);
+		cpu.cycles += 23 + 23 + 7;
+		mem_write(SLOT + 0x1A, (uint8_t)(mem_read(SLOT + 0x1A) + 1));
+		uint8_t k = op_dec8(mem_read(SLOT + 0x16));
+		mem_write(SLOT + 0x16, k);
+		if (!k) break;
+		cpu.cycles += 5;
+	}
+	tcall(0x0605, 0x969E);
+	cpu.cycles += 10;
+	SET_BC(0x8301);
+	tcall(0x0A22, 0x96A4);
+	tcall(0x0A82, 0x96A7);
+	make_party();
+	cpu.cycles += 7 + 13 + 10;
+	cpu.a = 0x10;
+	mem_write(GAME_MODE, 0x10);
+}
+Native native_gypsy = { "gypsy", 0x945C, 3, gypsy, 0, 0, 0, .task = 1 };
+
+// ------------------------------------------------------- the sound test --
+// $9A8D (game mode 9, after the name SOUND): rows 0 Exit, 1-9 the songs,
+// $0A a sound effect, picked by number (1-$17) with left and right; button 2
+// plays it, button 1 stops.
+
+static void digit(uint8_t *a, uint8_t b) {   // ld b,n / call $9B74: the digit of A in tens or ones
+	cpu.cycles += 7 + 17 + 7;
+	cpu.b = b;
+	cpu.c = 0xFF;
+	cpu.a = *a;
+	for (;;) {
+		cpu.cycles += 4 + 4 + 7;
+		op_sub8(b, 0, 1);
+		cpu.c++;
+		if (cpu.f & FC) break;
+		cpu.cycles += 5;
+	}
+	cpu.cycles += 4 + 11 + 4 + 7 + 7 + 4 + 10 + 10;
+	op_add8(b, 0);
+	uint8_t keep = cpu.a, f = cpu.f;
+	cpu.a = (uint8_t)(cpu.c + 0x30);
+	mem_write(HL, cpu.a);
+	cpu.l++;
+	cpu.a = keep; cpu.f = f;
+	*a = keep;
+}
+
+static void sound_test(void) {
+	cpu.cycles += 19 + 19 + 10;
+	mem_write(SLOT + 0x1A, 0);
+	mem_write(SLOT + 0x1B, 1);
+	SET_HL(0x201C);
+	tcall(0x06DA, 0x9A98);
+	cpu.cycles += 10 + 10;
+	SET_HL(0x9C18); SET_BC(0x0301);
+	tcall(0x0A22, 0x9AA1);
+	tcall(0x0A82, 0x9AA4);
+	for (;;) {
+		cpu.cycles += 19 + 4 + 7 + 4 + 7 + 16;   // $9AA7: the hand at the row
+		cpu.a = (uint8_t)(mem_read(SLOT + 0x1A) * 2);
+		op_add8(3, 0);
+		cpu.h = cpu.a; cpu.l = 0x0B;
+		wr16(0xC639, HL);
+		tcall(0x7F5C, 0x9AB3);
+		yield_at(0x9AB6);
+		cpu.cycles += 13 + 7 + 10;
+		cpu.a = mem_read(JOY_PRESSED);
+		op_and(0x3F);
+		int k = switch_on(0x9AC6, 6, 0x9AC4);
+		uint8_t row = mem_read(SLOT + 0x1A);
+		switch (k) {
+		case 0:                        // up
+			cpu.cycles += 23 + 10;
+			row = op_dec8(row);
+			mem_write(SLOT + 0x1A, row);
+			if (row & 0x80) { cpu.cycles += 19 + 12; mem_write(SLOT + 0x1A, 0x0A); }
+			cpu.cycles += 10;
+			continue;
+		case 1:                        // down
+			cpu.cycles += 23 + 19 + 7 + 7;
+			row = (uint8_t)(row + 1);
+			mem_write(SLOT + 0x1A, row);
+			cpu.a = row;
+			op_sub8(0x0B, 0, 0);
+			if (row < 0x0B) cpu.cycles += 5;
+			else { cpu.cycles += 19; mem_write(SLOT + 0x1A, 0); }
+			cpu.cycles += 10;
+			continue;
+		case 2:                        // left: the sound's number down
+		case 3: {                      // right: up
+			cpu.cycles += 19 + 7 + 10;
+			cpu.a = row;
+			op_sub8(0x0A, 0, 0);
+			if (row != 0x0A) continue;
+			uint8_t n = mem_read(SLOT + 0x1B);
+			if (k == 2) {
+				cpu.cycles += 23 + 7;
+				n = op_dec8(n);
+				mem_write(SLOT + 0x1B, n);
+				if (!n) { cpu.cycles += 19 + 12; mem_write(SLOT + 0x1B, 0x17); }
+				else cpu.cycles += 5;
+			} else {
+				cpu.cycles += 23 + 19 + 7 + 7;
+				n = (uint8_t)(n + 1);
+				mem_write(SLOT + 0x1B, n);
+				cpu.a = n;
+				op_sub8(0x18, 0, 0);
+				if (n < 0x18) cpu.cycles += 5;
+				else { cpu.cycles += 19; mem_write(SLOT + 0x1B, 1); }
+			}
+			cpu.cycles += 19 + 10;     // $9B1F: its number shown
+			uint8_t a = mem_read(SLOT + 0x1B);
+			SET_HL(0xC065);
+			digit(&a, 0x0A);
+			digit(&a, 0x01);
+			cpu.cycles += 10 + 10;
+			SET_HL(0xC065); SET_DE(0x1712);
+			tcall(0x7EB4, 0x9B35);
+			cpu.cycles += 10;
+			continue;
+		}
+		case 4:                        // button 1: quiet
+			call(0x05E3);
+			cpu.cycles += 10;
+			continue;
+		case 5:                        // button 2
+			cpu.cycles += 19 + 4 + 7;
+			cpu.a = row;
+			op_or(row);
+			if (!row) break;           // Exit
+			cpu.cycles += 5 + 7 + 7;
+			op_sub8(0x0A, 0, 0);
+			if (row != 0x0A) {         // a song
+				cpu.cycles += 10 + 48;
+				cpu.a = mem_read(0x9BF7 + row);
+				call(0x0621);
+			} else {                   // the sound
+				cpu.cycles += 5 + 19 + 10 + 48;
+				cpu.a = mem_read(0x9C00 + mem_read(SLOT + 0x1B));
+				call(0x05F1);
+			}
+			cpu.cycles += 10;
+			continue;
+		default:
+			cpu.cycles += 12;
+			continue;
+		}
+		break;
+	}
+	tcall(0x0605, 0x9B47);             // back to the opening
+	cpu.cycles += 10;
+	SET_BC(0x8301);
+	tcall(0x0A22, 0x9B4D);
+	tcall(0x0A82, 0x9B50);
+	cpu.cycles += 7 + 13 + 10;
+	cpu.a = 2;
+	mem_write(GAME_MODE, 2);
+}
+Native native_sound_test = { "sound_test", 0x9A8D, 3, sound_test, 0, 0, 0, .task = 1 };
