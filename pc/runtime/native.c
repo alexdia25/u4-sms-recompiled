@@ -43,24 +43,51 @@ static int get_mode(void) {
 // with nothing happening, the CPU is parked at PARK_PC and the cycles are
 // spent there slice by slice, so interrupts (frame counter, sound, VRAM
 // queue) still come at their times, as they would during the original.
+// An interrupt can come while time is being spent, and a rewritten routine
+// in its handler can have time of its own to spend: sinks nest. A sink is
+// spent at PARK_PC while no fiber parked after it began is waiting.
 static int sinking;
 static int64_t sink_left;
 static uint16_t sink_pc;
+static int sink_base;          // fibers parked when this sink began (its own included)
+static struct { int64_t left; uint16_t pc; int base; } sink_outer[8];
+static int sink_depth;
+static int nparked;
+
+static void start_sink(int64_t left, uint16_t pc, int base) {
+	if (sinking) {
+		if (sink_depth == 8) { fprintf(stderr, "native: sinks nested too deep%c", 10); exit(2); }
+		sink_outer[sink_depth].left = sink_left;
+		sink_outer[sink_depth].pc = sink_pc;
+		sink_outer[sink_depth].base = sink_base;
+		sink_depth++;
+	}
+	sink_left = left;
+	sink_pc = pc;
+	sink_base = base;
+	sinking = 1;
+	cpu.pc = PARK_PC;
+}
 
 static void spend_overshoot(void) {
 	if (cpu.cycles <= cpu.budget) return;
-	sink_left = cpu.cycles - cpu.budget;
+	int64_t left = cpu.cycles - cpu.budget;
 	cpu.cycles = cpu.budget;
-	sink_pc = cpu.pc;
-	cpu.pc = PARK_PC;
-	sinking = 1;
+	start_sink(left, cpu.pc, nparked);
 }
 
 static void sink_step(void) {   // the dispatcher is at PARK_PC with time to spend
 	int64_t room = cpu.budget - cpu.cycles;
 	int64_t s = sink_left < room ? sink_left : room;
 	if (s > 0) { cpu.cycles += s; sink_left -= s; }
-	if (sink_left <= 0) { cpu.pc = sink_pc; sinking = 0; }
+	if (sink_left > 0) return;
+	cpu.pc = sink_pc;
+	if (sink_depth) {              // back to the sink this one interrupted
+		sink_depth--;
+		sink_left = sink_outer[sink_depth].left;
+		sink_pc = sink_outer[sink_depth].pc;
+		sink_base = sink_outer[sink_depth].base;
+	} else sinking = 0;
 }
 
 static void track(Native *n) {
@@ -260,7 +287,6 @@ typedef struct Fiber {
 static Fiber pool[POOL], task_fiber[SLOTS];
 static Fiber *current;       // the fiber running now; NULL: the machine
 static Fiber *parked[POOL + SLOTS];   // fibers parked at PARK_PC, innermost last
-static int nparked;
 int native_tasks_waiting;    // C tasks waiting for their turn
 
 #ifdef _WIN32
@@ -436,7 +462,7 @@ Native native_hook_clear_tasks = { "hook_clear_tasks", 0x0B21, 0, hook_clear_tas
 // the dispatcher reached PARK_PC, or a C task may be waiting for this turn
 int native_special(void) {
 	if (cpu.pc == PARK_PC) {
-		if (sinking) { sink_step(); return 1; }
+		if (sinking && nparked <= sink_base) { sink_step(); return 1; }
 		if (!nparked) return 0;
 		switch_to(parked[--nparked]);
 		return 1;
@@ -462,11 +488,9 @@ int native_special(void) {
 // PARK_PC before the fiber goes on - as the time sink does for other natives.
 void native_sync(void) {
 	if (!current || cpu.cycles <= cpu.budget) return;
-	sink_left = cpu.cycles - cpu.budget;
+	int64_t left = cpu.cycles - cpu.budget;
 	cpu.cycles = cpu.budget;
-	sink_pc = PARK_PC;
-	cpu.pc = PARK_PC;
-	sinking = 1;
+	start_sink(left, PARK_PC, nparked + 1);   // then this fiber goes on
 	park();
 }
 

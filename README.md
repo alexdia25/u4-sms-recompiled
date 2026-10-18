@@ -132,6 +132,7 @@ alone runs the game.
   - the player's turn, moving, and all eight commands (Talk, Attack, Magic with spell mixing, casting and every spell, Get Chest, Use with the gem's map and the special things (the stones at the Abyss's altars, bell, book and candle, the key, horn, wheel and skull), Ready, Search, Camp with its Status pages and Save);
   - combat: starting a fight (the battlefield, the foes rolled), a member's turn (moving, fleeing, passing, the menu and its commands), the foes' turn, the blows and missiles shown on the field, the rounds, and the end of a fight (victory, a lost battle, fleeing, leaving a dungeon room, the chest left behind);
   - combat and karma rules;
+  - the sound driver (bank $1F): the frame update, its sequencer and commands, envelopes, modulation, slides and fades, starting tunes and sounds, and the PSG's (and FM unit's) registers;
   - the task system.
 
   Each rewrite takes exactly the original's time and leaves the machine
