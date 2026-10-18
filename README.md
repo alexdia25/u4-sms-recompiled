@@ -134,6 +134,7 @@ alone runs the game.
   - camping (rest, healing, ambushes) and meditating at the shrines (the mantra, the cycles, the visions);
   - combat and karma rules;
   - the sound driver (bank $1F): the frame update, its sequencer and commands, envelopes, modulation, slides and fades, starting tunes and sounds, and the PSG's (and FM unit's) registers;
+  - every game mode's set-up (the screen, graphics and task for the title, the story, the world, towns, dungeons, fights, camping, shrines, the ending);
   - the task system.
 
   Each rewrite takes exactly the original's time and leaves the machine
