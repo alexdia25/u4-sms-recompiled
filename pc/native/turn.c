@@ -284,6 +284,61 @@ static void town_turn(void) { turn_loop(&town); }     // $AF85
 Native native_world_turn = { "world_turn", 0xACB1, 2, world_turn, 0, 0, 0, .task = 1 };
 Native native_town_turn = { "town_turn", 0xAF85, 2, town_turn, 0, 0, 0, .task = 1 };
 
+// $AC8C (game mode $11, the world) and $AF69 (mode $12, a town): the map
+// set up, drawn, the music started, the turn count cleared; then the turns
+static void world_start(void) {
+	cpu.cycles += 4 + 13;
+	cpu.a = 0;
+	op_xor(0);
+	mem_write(0xC9A0, 0);              // no location: the world
+	tcall(0x323D, 0xAC90);
+	tcall(0x0E22, 0xAC93);
+	tcall(0x0E17, 0xAC96);
+	tcall(0x129D, 0xAC99);
+	tcall(0x4324, 0xAC9C);
+	tcall(0x30F6, 0xAC9F);
+	cpu.cycles += 7;
+	cpu.a = 5;
+	tcall(0x0621, 0xACA4);             // the world's music
+	cpu.cycles += 4 + 13 + 10 + 16;
+	cpu.a = 0;
+	op_xor(0);
+	mem_write(TURN_DONE, 0);
+	SET_HL(0x0000);
+	wr16(0xC99C, 0);
+	world_turn();
+}
+Native native_world_start = { "world_start", 0xAC8C, 2, world_start, 0, 0, 0, .task = 1 };
+
+static void town_start(void) {
+	tcall(0x323D, 0xAF69);
+	tcall(0x129D, 0xAF6C);
+	tcall(0x4324, 0xAF6F);
+	tcall(0x30F6, 0xAF72);
+	tcall(0x33E5, 0xAF75);             // A = the place's music
+	tcall(0x0621, 0xAF78);
+	cpu.cycles += 4 + 13 + 10 + 16;
+	cpu.a = 0;
+	op_xor(0);
+	mem_write(TURN_DONE, 0);
+	SET_HL(0x0000);
+	wr16(0xC99C, 0);
+	town_turn();
+}
+Native native_town_start = { "town_start", 0xAF69, 2, town_start, 0, 0, 0, .task = 1 };
+
+// $AC62 (game mode $10): the screen faded in; then the world (mode $11)
+static void game_fade_in(void) {
+	cpu.cycles += 10 + 10;
+	SET_HL(0x7C83); SET_BC(0x0301);
+	tcall(0x0A22, 0xAC68);
+	tcall(0x0A82, 0xAC6B);
+	cpu.cycles += 7 + 13 + 10;
+	cpu.a = 0x11;
+	mem_write(0xC600, 0x11);
+}
+Native native_game_fade_in = { "game_fade_in", 0xAC62, 2, game_fade_in, 0, 0, 0, .task = 1 };
+
 // ------------------------------------------------------------ commands --
 // command_menu ($8000): "Command-" and the menu of eight; button 1 leaves
 // ($8081), button 2 goes to the command (original code, from the table at
