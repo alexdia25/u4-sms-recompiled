@@ -410,3 +410,6 @@ native   03:9441 native_gate_task
 native   03:945C native_gypsy
 native   03:96E7 native_cards_down
 native   03:9A8D native_sound_test
+native   03:B127 native_ending
+native   03:B63F native_credits
+native   03:B7CF native_ankh

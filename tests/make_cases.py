@@ -680,6 +680,11 @@ def main():
                 lines.append('%d -' % (int(f) + 6))
         with open(os.path.join(HERE, 'cases', name + '.keys'), 'w', newline=chr(10)) as out:
             out.write(chr(10).join(lines) + chr(10))
+    # the end of the game: fixed scripts (made by answering each prompt as
+    # it comes): won, and each way to fail before the Codex
+    import shutil
+    for f in sorted(os.listdir(os.path.join(HERE, 'endings'))):
+        shutil.copy(os.path.join(HERE, 'endings', f), os.path.join(HERE, 'cases', f))
     for seed in range(2):              # anything at all
         rnd = random.Random('play%d' % seed)
         s = Script()
