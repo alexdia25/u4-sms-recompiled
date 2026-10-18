@@ -14,6 +14,8 @@
 
 static void call(uint16_t addr) { cpu.cycles += 17; call_original(addr); }
 static void newline(void) { cpu.cycles += 17; text_newline(); }
+static void tcall(uint16_t addr, uint16_t site);
+static void yield_at(uint16_t site);
 static void done(void) { cpu.cycles += 10; native_continue_at(0x8084); }       // jp $8084
 static void go(uint16_t addr) { cpu.cycles += 10; native_continue_at(addr); }  // jp addr
 
@@ -164,6 +166,316 @@ static void ready(void) {
 Native native_ready = { "ready", 0x8B28, 2, ready, 0, 0, 0, .task = 1 };
 
 // ---------------------------------------------------------------- camp --
+// call $7588 at site (bank 1): the status pages: 0 a member's (left and
+// right pick the member), 1-5 the party's things, 6 the reagents or the
+// mixtures (left and right); up and down turn the pages, button 2 starts
+// over, button 1 leaves
+static void status(uint16_t site) {
+	cpu.cycles += 17 + 17 + 10 + 19 + 19 + 19 + 10;   // call $0AB5: its return kept in the slot
+	wr16(SLOT + 0x26, (uint16_t)(site + 3));
+	SET_HL((uint16_t)(site + 3));
+start:
+	cpu.cycles += 19 * 3 + 13 + 7 + 7;   // $758B
+	mem_write(SLOT + 0x1A, 0);
+	mem_write(SLOT + 0x1B, 0);
+	mem_write(SLOT + 0x1C, 0);
+	cpu.a = mem_read(0xC99F);
+	op_sub8(3, 0, 0);
+	if (cpu.a < 3) cpu.cycles += 5;
+	else {                             // in combat: the member whose turn it is
+		cpu.cycles += 13 + 19;
+		cpu.a = mem_read(0xC97F);
+		mem_write(SLOT + 0x1B, cpu.a);
+	}
+page:
+	cpu.cycles += 19 + 4 + 7;          // $75A4: the page drawn
+	{
+		uint8_t pg = mem_read(SLOT + 0x1A);
+		cpu.a = pg;
+		op_or(pg);
+		if (!pg) { cpu.cycles += 5 + 19 + 12; cpu.a = mem_read(SLOT + 0x1B); }
+		else {
+			cpu.cycles += 7 + 7;
+			op_sub8(6, 0, 0);
+			if (pg == 6) {
+				cpu.cycles += 5 + 19 + 7;
+				cpu.a = mem_read(SLOT + 0x1C);
+				op_add8(0x0D, 0);
+			} else {
+				cpu.cycles += 7 + 12;
+				cpu.a = pg;
+				op_add8(0x07, 0);
+			}
+		}
+	}
+	tcall(0x7552, 0x75BC);
+	for (;;) {
+		task_frame_tick(0x75BF);
+		cpu.cycles += 13 + 10 + 17;    // ld a / ld hl / call switch_on_a
+		uint8_t joy = mem_read(0xC0B0);
+		cpu.a = joy;
+		static const uint8_t keys[6] = { 0x01, 0x02, 0x04, 0x08, 0x10, 0x20 };
+		int k;
+		for (k = 0; k < 6 && keys[k] != joy; k++) {}
+		if (k == 6) {
+			cpu.cycles += 58 * 6 + 22 + 12;
+			cpu.b = 0;
+			SET_HL(0x75DF);
+			op_inc8(0xFF);
+			continue;
+		}
+		cpu.cycles += 58 * k + 79;
+		cpu.b = (uint8_t)(joy + 1);
+		SET_HL(rd16(0x75CE + 3 * k));
+		cpu.a = cpu.l;
+		cpu.f = 0xCB;                  // (the switch pops its return address into AF)
+		switch (k) {
+		case 0: case 1:                // up, down: the page
+			cpu.cycles += 7 + (k == 0 ? 12 : 0) + 19 + 4 + 4 + 7;
+			cpu.b = k == 0 ? 6 : 8;
+			cpu.a = mem_read(SLOT + 0x1A);
+			op_add8(cpu.b, 0);
+			cpu.l = cpu.a; cpu.h = 7;
+			call(0x2AFC);              // H = it mod 7
+			cpu.cycles += 19;
+			mem_write(SLOT + 0x1A, cpu.h);
+			call(0x40D9);
+			cpu.cycles += 12;
+			goto page;
+		case 2: case 3: {              // left, right
+			cpu.cycles += 7 + (k == 2 ? 12 : 0) + 19 + 7 + 7;
+			uint8_t b = k == 2 ? 0xFF : 0x01;
+			cpu.b = b;
+			uint8_t pg = mem_read(SLOT + 0x1A);
+			cpu.a = pg;
+			op_sub8(6, 0, 0);
+			if (pg == 6) {             // reagents or mixtures
+				cpu.cycles += 5 + 19 + 7 + 19;
+				cpu.a = mem_read(SLOT + 0x1C);
+				op_xor(1);
+				mem_write(SLOT + 0x1C, cpu.a);
+			} else {
+				cpu.cycles += 4 + 7;
+				cpu.a = pg;
+				op_or(pg);
+				if (pg) { cpu.cycles += 5; continue; }
+				cpu.cycles += 13 + 4 + 4 + 19 + 4;   // the member
+				uint8_t n = mem_read(0xC957);
+				cpu.h = n;
+				cpu.a = (uint8_t)(n + b);
+				op_add8(mem_read(SLOT + 0x1B), 0);
+				cpu.l = cpu.a;
+				call(0x2AFC);          // H = L mod the party's size
+				cpu.cycles += 19 + 12;
+				mem_write(SLOT + 0x1B, cpu.h);
+			}
+			call(0x40D9);
+			cpu.cycles += 10;
+			goto page;
+		}
+		case 4:                        // button 1: back
+			call(0x40D1);
+			cpu.cycles += 10 + 19 + 19 + 4;   // jp $0ABE
+			SET_HL(rd16(SLOT + 0x26));
+			return;
+		default:                       // button 2: from the start
+			call(0x40C9);
+			cpu.cycles += 10;
+			goto start;
+		}
+	}
+}
+
+static void ldir(void) {
+	uint16_t n = BC;
+	cpu.cycles += 21 * (n - 1) + 16;
+	for (; n; n--) { mem_write(DE, mem_read(HL)); SET_HL(HL + 1); SET_DE(DE + 1); }
+	SET_BC(0);
+	cpu.f &= ~(FH | FN | FP);
+}
+
+// call $951B: DE, BC = the place of save slot +$1A in the menu
+static void slot_place(void) {
+	cpu.cycles += 17 + 19 + 4 + 4 + 7 + 4 + 7 + 10 + 10;
+	cpu.a = (uint8_t)(mem_read(SLOT + 0x1A) * 4);
+	op_add8(5, 0);
+	cpu.d = cpu.a;
+	cpu.e = 0x12;
+	SET_BC(0x040E);
+}
+
+static void slot_highlight(int on, uint16_t site) {   // call $950F (on) / $9515 at site
+	cpu.cycles += 17;
+	slot_place();
+	cpu.cycles += 10;                  // jp $2DE3 / $2DC4
+	task_call(on ? 0x2DE3 : 0x2DC4, (uint16_t)(site + 3));
+}
+
+// call $94BC at back - 3: the save in SRAM at HL, if any, shown at DE: the
+// Avatar's name, level, sex, class, and the turn count
+static void slot_summary(uint16_t back) {
+	cpu.cycles += 17 + 11 + 10 + 10;
+	push16(DE);
+	SET_DE(0xC1C0); SET_BC(0x0040);
+	tcall(0x0C49, 0x94C3);             // the save's head, out of SRAM
+	cpu.cycles += 10 + 13 + 4;
+	SET_DE(pop16());
+	cpu.a = mem_read(0xC1C0);
+	op_or(cpu.a);
+	if (!cpu.a) { cpu.cycles += 11; return; }   // none
+	cpu.cycles += 5 + 11 + 10;
+	push16(DE);
+	SET_HL(0xC1C1);
+	tcall(0x2D6C, 0x94D0);             // the name
+	cpu.cycles += 10 + 10 + 11 + 4 + 13;
+	uint16_t at = pop16();             // ld hl,n / add hl,de / ex de,hl: on along the line
+	SET_DE(op_add16(0x0040, at)); SET_HL(at);
+	cpu.a = mem_read(0xC1D6);
+	tcall(0x2D9A, 0x94DC);
+	cpu.cycles += 10 + 11 + 4 + 13;
+	at = DE;
+	SET_DE(op_add16(0x0004, at)); SET_HL(at);
+	cpu.a = mem_read(0xC1CE);
+	tcall(0x2D9A, 0x94E7);
+	cpu.cycles += 10;
+	SET_HL(0x9529);
+	tcall(0x2D6C, 0x94ED);
+	cpu.cycles += 13 + 7;
+	cpu.a = mem_read(0xC1CF);
+	op_add8(0x30, 0);
+	tcall(0x2D9A, 0x94F5);
+	cpu.cycles += 10 + 11 + 4 + 10;
+	at = DE;
+	SET_DE(op_add16(0x0028, at));
+	SET_HL(0xC1D1);
+	tcall(0x36FF, 0x9500);             // the turns
+	cpu.cycles += 10;
+	SET_HL(0xC068);
+	tcall(0x2D6C, 0x9506);
+	cpu.cycles += 10 + 10;
+	SET_HL(0x9531);
+	task_call(0x2D6C, back);           // jp $2D6C
+}
+
+static void save_slots(uint16_t site) {   // call $9498 at site: the menu of the three saves
+	cpu.cycles += 17 + 10;
+	SET_HL(0x9537);
+	tcall(0x2E79, 0x949B);
+	static const uint16_t from[3] = { 0x8040, 0x8080, 0x80C0 }, at[3] = { 0xCBA6, 0xCCA6, 0xCDA6 };
+	static const uint16_t back[3] = { 0x94A7, 0x94B0, 0x94B9 };
+	for (int i = 0; i < 3; i++) {
+		cpu.cycles += 10 + 10;
+		SET_HL(from[i]); SET_DE(at[i]);
+		slot_summary(back[i]);
+	}
+	cpu.cycles += 10;                  // jp $2E54
+	task_call(0x2E54, (uint16_t)(site + 3));
+}
+
+// $9370: Save: not in towns ($46DF says so); else the slot picked (up,
+// down; button 1 cancels) and the game written to SRAM: $C500-$C5FF,
+// $C651-$C9BC and a head with the Avatar's name, level, sex, class and turns
+static void camp_save(void) {
+	newline();
+	cpu.cycles += 13 + 4 + 7;
+	cpu.a = mem_read(0xC99F);
+	op_or(cpu.a);
+	if (cpu.a) {
+		tcall(0x46DF, 0x9379);
+		done();
+		return;
+	}
+	cpu.cycles += 5;
+	say_inline(0x9382);                // "Save game. Please select a number:"
+	cpu.cycles += 10;
+	SET_HL(0x8100);
+	tcall(0x0C3D, 0x93AB);             // the last one used
+	cpu.cycles += 19;
+	mem_write(SLOT + 0x1A, cpu.a);
+	save_slots(0x93B1);
+	slot_highlight(1, 0x93B4);
+	for (;;) {
+		task_frame_tick(0x93B7);
+		cpu.cycles += 13 + 10 + 17;    // ld a / ld hl / call switch_on_a
+		uint8_t joy = mem_read(0xC0B0);
+		cpu.a = joy;
+		static const uint8_t keys[4] = { 0x01, 0x02, 0x10, 0x20 };
+		int k;
+		for (k = 0; k < 4 && keys[k] != joy; k++) {}
+		if (k == 4) {
+			cpu.cycles += 58 * 4 + 22 + 12;
+			cpu.b = 0;
+			SET_HL(0x93D1);
+			op_inc8(0xFF);
+			continue;
+		}
+		cpu.cycles += 58 * k + 79;
+		cpu.b = (uint8_t)(joy + 1);
+		SET_HL(rd16(0x93C6 + 3 * k));
+		cpu.a = cpu.l;
+		cpu.f = 0xC3;                  // (the switch pops its return address into AF)
+		if (k == 2) { native_continue_at(0x8081); return; }   // cancelled
+		if (k == 3) break;
+		call(0x40D9);                  // up or down: the click
+		slot_highlight(0, k == 0 ? 0x93D5 : 0x93DF);
+		cpu.cycles += 7 + (k == 0 ? 12 : 0) + 19 + 4 + 7;
+		cpu.a = (uint8_t)(k == 0 ? 2 : 4);
+		op_add8(mem_read(SLOT + 0x1A), 0);
+		cpu.l = cpu.a; cpu.h = 3;
+		call(0x2AFC);                  // H = it mod 3
+		cpu.cycles += 19;
+		mem_write(SLOT + 0x1A, cpu.h);
+		slot_highlight(1, 0x93F0);
+		cpu.cycles += 12;
+	}
+	call(0x40C9);                      // $93F5: saved
+	cpu.cycles += 19 + 13 + 10;
+	cpu.a = mem_read(SLOT + 0x1A);
+	mem_write(0xC0CD, cpu.a);
+	SET_HL(0x8100);
+	tcall(0x0C43, 0x9401);             // the last one used, kept
+	cpu.cycles += 7;
+	op_add8(0x31, 0);
+	call(0x548F);                      // its number
+	newline();
+	cpu.cycles += 7 + 13 + 10 + 10 + 10;
+	mem_write(0xC1C0, 0xFF);
+	SET_HL(0xC75E); SET_DE(0xC1C1); SET_BC(0x000D);
+	ldir();
+	cpu.cycles += 13 * 6 + 10 + 10 + 10;
+	mem_write(0xC1CE, mem_read(0xC76B));
+	mem_write(0xC1CF, mem_read(0xC75B));
+	cpu.a = mem_read(0xC76C);
+	mem_write(0xC1D0, cpu.a);
+	SET_HL(0xC901); SET_DE(0xC1D1); SET_BC(0x0005);
+	ldir();
+	cpu.cycles += 13 + 13 + 19 + 4 + 4 + 4 + 7 + 14 + 15 + 10 + 19 + 19 + 10;
+	cpu.a = mem_read(0xC0CE);
+	mem_write(0xC1D6, cpu.a);
+	cpu.a = (uint8_t)(mem_read(SLOT + 0x1A) * 4);
+	op_add8(0, 0);
+	SET_DE(cpu.a);
+	cpu.iy = (uint16_t)(0x948C + cpu.a);
+	SET_HL(0xC500);
+	SET_DE(rd16(cpu.iy));
+	SET_BC(0x0100);
+	tcall(0x0C49, 0x9459);             // into SRAM
+	cpu.cycles += 10 + 10;
+	SET_HL(0xC651); SET_BC(0x036C);
+	tcall(0x0C49, 0x9462);
+	cpu.cycles += 10 + 19 + 19 + 10;
+	SET_HL(0xC1C0);
+	SET_DE(rd16(cpu.iy + 2));
+	SET_BC(0x0040);
+	tcall(0x0C49, 0x9471);
+	save_slots(0x9474);
+	slot_highlight(1, 0x9477);
+	say_inline(0x947D);                // "Done."
+	task_wait_button(0x9483);
+	newline();
+	done();
+}
+
 // camp_menu ($9254): Rest, New Order, Status, Save
 static void rest(void);
 static void new_order(void);
@@ -198,8 +510,12 @@ static void camp_menu(void) {
 	switch (choice) {
 	case 0: rest(); break;
 	case 1: new_order(); break;
-	case 2: native_continue_at(0x9367); break;   // Status (original: it waits for frames)
-	default: native_continue_at(0x9370); break;  // Save (original)
+	case 2:                            // $9367: Status
+		status(0x9367);
+		newline();
+		done();
+		break;
+	default: camp_save(); break;
 	}
 }
 Native native_camp_menu = { "camp_menu", 0x9254, 2, camp_menu, 0, 0, 0, .task = 1 };
@@ -443,14 +759,65 @@ static void use_torch(void) {
 	done();
 }
 
+
+// call $61FC at site (bank 1): the map of the land or the dungeon level,
+// the party blinking on it, until a button
+static void gem_map(uint16_t site) {
+	cpu.cycles += 17 + 17 + 10 + 19 + 19 + 19 + 10;   // call $0AC5: its return kept in the slot
+	wr16(SLOT + 0x28, (uint16_t)(site + 3));
+	SET_HL((uint16_t)(site + 3));
+	cpu.cycles += 7 + 10 + 10;
+	cpu.a = 0x13;
+	SET_HL(0xB16F); SET_DE(0x3E60);
+	tcall(0x0788, 0x6207);             // the party's mark
+	cpu.cycles += 10;
+	SET_HL(0x031F);
+	tcall(0x0843, 0x620D);
+	tcall(0x4F8A, 0x6210);             // the map
+	say_inline(0x6216);                // "PUSH BUTTON"
+	for (;;) {
+		yield_at(0x6222);
+		cpu.cycles += 13 + 7 + 7;
+		cpu.a = mem_read(0xC0B0);
+		op_and(0x30);
+		if (cpu.a) { cpu.cycles += 5; break; }
+		tcall(0x335C, 0x622C);
+		cpu.cycles += 13 + 7 + 10 + 7;
+		cpu.a = mem_read(0xC99F);
+		op_sub8(2, 0, 0);
+		SET_DE(0x4949);                // in a dungeon: the middle
+		if (cpu.a == 2) cpu.cycles += 5;
+		else {                         // on the land: where the party is
+			cpu.cycles += 13 + 4 + 4 + 7 + 4 + 13 + 4 + 4 + 7 + 4;
+			cpu.a = (uint8_t)(mem_read(0xC985) * 4);
+			op_add8(9, 0);
+			cpu.e = cpu.a;
+			cpu.a = (uint8_t)(mem_read(0xC986) * 4);
+			op_add8(9, 0);
+			cpu.d = cpu.a;
+		}
+		cpu.cycles += 7 + 23 + 20;
+		cpu.c = 0xF3;
+		uint8_t t = (uint8_t)(mem_read(SLOT + 0x1F) + 1);
+		mem_write(SLOT + 0x1F, t);
+		if (t & 2) tcall(0x09DA, 0x6252);   // the mark, every other two turns
+		else cpu.cycles += 10;
+		cpu.cycles += 12;
+	}
+	tcall(0x276D, 0x6257);             // the view back
+	tcall(0x129D, 0x625A);
+	newline();
+	cpu.cycles += 10 + 19 + 19 + 4;    // jp $0ACE
+	SET_HL(rd16(SLOT + 0x28));
+}
+
 // $8A14: a gem shows the map
 static void use_gem(void) {
 	cpu.cycles += 10 + 11;
 	mem_write(0xC914, mem_read(0xC914) - 1);
 	say_inline(0x8A1B);                // "Peer at a Gem!"
-	cpu.cycles += 17;                  // the map (it waits for frames: original code)
-	push16(0x8A2E);
-	native_continue_at(0x61FC);
+	gem_map(0x8A2B);
+	done();
 }
 
 // $8A72: a locked door ($3A) at (L, H) on the town map opens ($3B)

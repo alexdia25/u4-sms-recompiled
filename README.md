@@ -129,7 +129,7 @@ alone runs the game.
   - every kind of shop;
   - map loading and walking, the creatures on the map, the screen refresh everywhere (with the line of sight), and drawing the view into video memory;
   - the party's turn in a dungeon, its Attack and Search (orbs, fountains, altars), doors and rooms;
-  - the player's turn, moving, and all eight commands (Talk, Attack, Magic with spell mixing, casting and every spell, Get Chest, Use, Ready, Search, Camp);
+  - the player's turn, moving, and all eight commands (Talk, Attack, Magic with spell mixing, casting and every spell, Get Chest, Use with the gem's map, Ready, Search, Camp with its Status pages and Save);
   - combat: starting a fight (the battlefield, the foes rolled), a member's turn (moving, fleeing, passing, the menu and its commands), the foes' turn, the blows and missiles shown on the field, the rounds, and the end of a fight (victory, a lost battle, fleeing, leaving a dungeon room, the chest left behind);
   - combat and karma rules;
   - the task system.

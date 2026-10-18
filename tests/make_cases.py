@@ -199,11 +199,12 @@ def main():
         'camp_order':      (7, '2D2'),
         'camp_status':     (7, '2DD22222'),
         'camp_save':       (7, '2DDD2222'),
+        'camp_status_keys': (7, '2DD2' + 'D' * 7 + 'UU' + 'D' + 'LRR' + 'U' + 'LR' + 'D' + 'L' + '2' + 'LRR' + 'D' + '1'),   # every page and key
     }
     for name, (downs, presses) in COMMANDS.items():
         rnd = random.Random(name)
         s = Script()
-        if name == 'camp_order':
+        if name in ('camp_order', 'camp_status_keys'):
             s.poke('C957:03')          # three in the party, to swap
         for _ in range(2):
             s.press('2', 40)           # the command menu
@@ -214,6 +215,24 @@ def main():
             random_presses(s, rnd, 12)
             for _ in range(3):
                 s.press('1', 60)
+        s.write(name)
+    # Save out in the world (in a town it is refused): the slot moved and
+    # saved, and moved and cancelled
+    for name, keys in (('save_world', 'DD' + 'U' + '2' + '2'), ('save_cancel', 'UD' + '1')):
+        rnd = random.Random(name)
+        s = Script()
+        for k in 'LLLLLL':
+            s.press(k, 30)             # out through the west gate
+        s.f += 10
+        s.press('2', 40)               # the command menu, Camp, Save
+        for _ in range(7):
+            s.press('D', 30)
+        s.press('2', 60)
+        for k in 'DDD2':
+            s.press(k, 60)
+        for k in keys:
+            s.press(k, 60)
+        random_presses(s, rnd, 8)
         s.write(name)
     SEARCHES = {                       # Search where something is to be found (the table at $8C07)
         'search_town_1':  (False, ['C953:08', 'C985:08', 'C954:06', 'C986:06']),   # Moonglow is 6
