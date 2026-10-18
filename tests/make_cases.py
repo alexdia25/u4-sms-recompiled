@@ -472,6 +472,8 @@ def main():
     DUNGEONS['dungeon_room'] = ('despise', ['C95B:FF'], 'RRDRR', 60)       # through a door into a room
     DUNGEONS['dungeon_attack'] = ('despise', ['C95B:FF'], '2D2D2' + '2D2R2', 30)   # at nothing, twice
     DUNGEONS['dungeon_fight'] = ('despise', ['C95B:FF', 'C652:04', 'C653:02', 'C654:90'], '2D2R2', 80)   # an orc east of the party
+    DUNGEONS['dungeon_door'] = ('despise', ['C95B:FF', 'D023:C0'], 'RR', 20)        # a door east, nothing behind it
+    DUNGEONS['dungeon_room_cell'] = ('despise', ['C95B:FF', 'D023:D1'], 'R', 20)    # a room's cell east, no door
     # the room's foes gone: the party walks out the way it came
     DUNGEONS['dungeon_room_exit'] = ('despise', ['C95B:FF'], 'RRDRR', 0)
     DUNGEON_AFTER = {'dungeon_room_exit': (100, NOFOES, 'L' * 12)}
@@ -556,6 +558,9 @@ def main():
         for _ in range(6):
             s.press('1', 60)
         s.write(name)
+    # the opening words cut short by a button, then the title
+    with open(os.path.join(HERE, 'cases', 'opening_skip.keys'), 'w', newline=chr(10)) as f:
+        f.write(chr(10).join(('60 1', '66 -', '900 -')) + chr(10))
     for seed in range(2):              # anything at all
         rnd = random.Random('play%d' % seed)
         s = Script()

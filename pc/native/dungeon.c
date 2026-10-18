@@ -3,7 +3,7 @@
 // direction steps ($6B58), button 1 passes, button 2 opens the command menu
 // ($8000, a C task of its own, so this one hands over to it). Then the end
 // of the turn: the creatures ($3F14) and the dungeon's own ($6AEA). Entering
-// a room or a door, and "Blocked!", are original code still (handed over).
+// a room (by a door or not) loads it and goes on to the room's fight.
 // Cycle counts are the original's.
 #include "../runtime/native.h"
 #include "../runtime/sms.h"
@@ -94,6 +94,85 @@ static void hand_over(uint16_t addr, int in_step) {
 	native_continue_at(addr);
 }
 
+// "Blocked!" ($40A6, reached by jp): back in the input step after it
+static void blocked(void) {
+	cpu.cycles += 7;
+	cpu.a = 0x10;
+	call(0x05F1);
+	say_inline(0x40AE);
+	cpu.cycles += 10;
+}
+
+// $6C07: into the room at HL (the cell kind in +$1A): the party on the
+// room's cell nearest the way in, the room loaded ($3D82), and on to the
+// room's fight (game mode $16); the stack is reset there
+static void room(void) {
+	push16(0x6A45);                    // the returns the original has on the stack
+	push16(0x6B56);
+	for (int i = 0; i < 2; i++) {      // north (else back south), then east (else back west)
+		cpu.cycles += 7;
+		cpu.a = (uint8_t)i;
+		call(0x6C59);
+		call(0x6DB9);
+		cpu.cycles += 19 + 7;
+		op_sub8(mem_read(SLOT + 0x1A), 0, 0);
+		if (cpu.f & FZ) cpu.cycles += 5;
+		else {
+			cpu.cycles += 7;
+			cpu.a = (uint8_t)(i + 2);
+			call(0x6C59);
+		}
+	}
+	cpu.cycles += 16 + 13 + 7 + 7 + 7;
+	wr16(PARTY_XY, HL);
+	cpu.a = mem_read(0xC9A0);
+	op_sub8(0x19, 0, 0);
+	cpu.b = 0;
+	if (cpu.a != 0x19) cpu.cycles += 5;
+	else {                             // the Abyss: the room by level too
+		cpu.cycles += 13 + 4 + 4 + 4 + 7 + 4;
+		cpu.a = (uint8_t)(mem_read(LEVEL) * 8);
+		op_and(0xF0);
+		cpu.b = cpu.a;
+	}
+	cpu.cycles += 19 + 7 + 4 + 13;
+	cpu.a = mem_read(SLOT + 0x1A);
+	op_and(0x0F);
+	op_or(cpu.b);
+	mem_write(0xC9B8, cpu.a);
+	tcall(0x3D82, 0x6C49);             // load_dungeon_room
+	cpu.cycles += 7 + 13 + 7 + 13 + 10;
+	mem_write(0xC975, 2);
+	mem_write(0xC600, 0x16);
+	cpu.a = 0x16;
+	native_continue_at(0x0CD2);
+}
+
+// $6BD7: a door: a room beyond it is entered at once
+static int door(void) {
+	cpu.cycles += 13 + 19 + 19;
+	cpu.a = mem_read(MOVE_DIR);
+	SET_HL(rd16(SLOT + 0x1C));
+	call(0x6C59);
+	cpu.cycles += 19 + 19;
+	mem_write(SLOT + 0x1E, cpu.l);
+	mem_write(SLOT + 0x1F, cpu.h);
+	call(0x6DB9);
+	cpu.cycles += 19 + 7 + 7 + 7;
+	mem_write(SLOT + 0x1A, cpu.a);
+	op_and(0xF0);
+	op_sub8(0xD0, 0, 0);
+	if (cpu.a != 0xD0) { cpu.cycles += 5; return 0; }
+	cpu.cycles += 19 + 19 + 16;
+	SET_HL(rd16(SLOT + 0x1C));
+	wr16(PARTY_XY, HL);
+	call(0x129D);
+	cpu.cycles += 19 + 19;
+	SET_HL(rd16(SLOT + 0x1E));
+	room();
+	return 1;
+}
+
 // $6B58: a step in direction dir. 1 when original code took over.
 static int step(uint8_t dir) {
 	cpu.cycles += 17 + 13 + 10 + 16 + 16;
@@ -117,26 +196,34 @@ static int step(uint8_t dir) {
 	call(0x55A0);                      // "North" etc.
 	newline();
 	cpu.cycles += 19 + 7 + 7;
-	if (cell == 0xC0) { cpu.cycles += 5; cpu.a = cell; hand_over(0x6BD7, 1); return 1; }
-	cpu.cycles += 7 + 7 + 7;
-	if ((cell & 0xF0) == 0xD0) {       // a room: original code sets it up
-		cpu.cycles += 19 + 19 + 19 + 19 + 12;
-		mem_write(SLOT + 0x1A, cell);
+	if (cell == 0xC0) {                // a door
+		cpu.cycles += 5;
 		cpu.a = cell;
-		SET_HL(rd16(SLOT + 0x1C));
-		hand_over(0x6C07, 1);
-		return 1;
+		if (door()) return 1;
+	} else {
+		cpu.cycles += 7 + 7 + 7;
+		cpu.a = cell & 0xF0;
+		op_sub8(0xD0, 0, 0);
+		if ((cell & 0xF0) == 0xD0) {   // a room
+			cpu.cycles += 19 + 19 + 19 + 19 + 12;
+			mem_write(SLOT + 0x1A, cell);
+			cpu.a = cell;
+			SET_HL(rd16(SLOT + 0x1C));
+			room();
+			return 1;
+		}
+		cpu.cycles += 5;
 	}
-	cpu.cycles += 5 + 19 + 19;         // $6BA2
+	cpu.cycles += 19 + 19;             // $6BA2
 	SET_HL(rd16(SLOT + 0x1C));
 	call(0x6C6A);                      // carry clear: something stands there
 	cpu.cycles += 10;
-	if (!(cpu.f & FC)) { hand_over(0x40A6, 1); return 1; }   // "Blocked!"
+	if (!(cpu.f & FC)) { blocked(); return 0; }   // something stands there
 	cpu.cycles += 19 + 7 + 10;
 	cpu.a = cell;
-	if (cell == 0xF0) { hand_over(0x40A6, 1); return 1; }    // a wall
+	if (cell == 0xF0) { blocked(); return 0; }    // a wall
 	cpu.cycles += 7 + 10;
-	if (cell == 0xA1) { hand_over(0x40A6, 1); return 1; }
+	if (cell == 0xA1) { blocked(); return 0; }
 	cpu.cycles += 7 + 7;
 	if (cell == 0xA2) {                // slow going
 		cpu.cycles += 10 + 16;
