@@ -161,6 +161,26 @@ def main():
             s.press(k, 60)
         random_presses(s, rnd, 20, menu=False)
         s.write(name)
+    for k in (0, 1, 5):                # camping out: no time to rest, healed, ambushed (by the random numbers)
+        name = 'camp_world_%d' % k
+        rnd = random.Random(name)
+        s = Script()
+        for key in 'LLLLLL':
+            s.press(key, 30)
+        s.f += 3 * k
+        if k:
+            s.poke('C965:FF'); s.poke('C966:FF')   # it is time to rest
+
+        s.press('2', 40)
+        for _ in range(7):
+            s.press('D', 30)
+        for key in '22':
+            s.press(key, 60)
+        s.f += 60 + 4 * k
+        s.poke('C0B5:%02X' % (k * 37 & 0xFF))   # the random numbers, steered
+        s.f += 840
+        random_presses(s, rnd, 6, menu=False)
+        s.write(name)
     WALKS = {                          # walking: in town, out into the world, riding, sailing
         'walk_town':  ([], 'UDLR', 120),
         'walk_world': ([], 'LLLLLLUDLR', 150),
@@ -613,6 +633,41 @@ def main():
             s.press(k, rnd.choice((20, 30, 40, 60)))
         for _ in range(4):
             s.press('1', 60)
+        s.write(name)
+    # the shrine of honesty (location $1A at $E9, $42): stepped in from the
+    # south; the virtue, the cycles, the mantra (AHM) for each cycle
+    AHM = ['2', 'R', 'R', 'D', '2', 'D', '2', 'R', 'D', 'D', 'D', '2']   # on the letter grid, then End
+    def mantra(times):
+        out = []
+        for _ in range(times):
+            out += ['wait'] + AHM + ['wait']
+        return out
+    SHRINES = {
+        'shrine_no_rune':  (['C956:00'], []),
+        'shrine_cancel':   (['C956:FF'], ['1']),
+        'shrine_wrong':    (['C956:FF'], ['D', '2', '2']),
+        'shrine_none':     (['C956:FF'], ['2', '2']),                      # no cycles
+        'shrine_quest':    (['C956:FF', 'C969:FF', 'C96A:FF'], ['2', 'D', '2'] + mantra(1)),
+        'shrine_vision':   (['C956:FF', 'C90B:63', 'C969:FF', 'C96A:FF'], ['2', 'D', 'D', 'D', '2'] + mantra(3) + ['wait', '2']),
+        'shrine_bad_mantra': (['C956:FF', 'C969:FF', 'C96A:FF'], ['2', 'D', '2', 'wait', 'R', '2', 'R', 'R', 'D', 'D', 'D', 'D', 'D', '2']),
+    }
+    for name, (pokes, keys) in SHRINES.items():
+        rnd = random.Random(name)
+        s = Script()
+        s.poke('C96D:E9')
+        s.poke('C96E:43')
+        s.press('L', 40)
+        s.press('L', 70)
+        for p in pokes:
+            s.poke(p)
+        s.press('U', 500)              # in: the shrine's picture
+        for k in keys:
+            if k == 'wait':
+                s.f += 700
+            else:
+                s.press(k, 40)
+        s.f += 600
+        random_presses(s, rnd, 4)
         s.write(name)
     ROAMS = {                          # long walks out in the world, from different places: the creatures
         'roam_moonglow': (None, [], 300),

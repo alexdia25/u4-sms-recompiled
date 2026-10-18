@@ -130,7 +130,8 @@ alone runs the game.
   - map loading and walking, the creatures on the map, the screen refresh everywhere (with the line of sight), and drawing the view into video memory;
   - the party's turn in a dungeon, its Attack and Search (orbs, fountains, altars), doors and rooms;
   - the player's turn, moving, and all eight commands (Talk, Attack, Magic with spell mixing, casting and every spell, Get Chest, Use with the gem's map and the special things (the stones at the Abyss's altars, bell, book and candle, the key, horn, wheel and skull), Ready with its weapon and armour lists, Search, Camp with its Status pages (every page drawn in C) and Save);
-  - combat: starting a fight (the battlefield, the foes rolled), a member's turn (moving, fleeing, passing, the menu and its commands), the foes' turn, the blows and missiles shown on the field, the rounds, and the end of a fight (victory, a lost battle, fleeing, leaving a dungeon room, the chest left behind);
+  - combat: starting a fight (the battlefield, the foes rolled, the field drawn and the music), a member's turn (moving, fleeing, passing, the menu and its commands), the foes' turn, the blows and missiles shown on the field, the rounds, and the end of a fight (victory, a lost battle, fleeing, leaving a dungeon room, the chest left behind);
+  - camping (rest, healing, ambushes) and meditating at the shrines (the mantra, the cycles, the visions);
   - combat and karma rules;
   - the sound driver (bank $1F): the frame update, its sequencer and commands, envelopes, modulation, slides and fades, starting tunes and sounds, and the PSG's (and FM unit's) registers;
   - the task system.

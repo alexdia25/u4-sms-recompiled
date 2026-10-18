@@ -435,3 +435,7 @@ native   1F:8F28 native_snd_fade_down
 native   1F:8B5A native_snd_pause_on
 native   1F:8B60 native_snd_pause_off
 native   01:7552 native_status_page
+native   03:9D1E native_fight_begins
+native   03:9D16 native_room_fight_begins
+native   03:AD0F native_camp
+native   03:AE63 native_shrine
