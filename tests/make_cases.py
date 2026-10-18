@@ -286,6 +286,48 @@ def main():
             s.press('2', 60)
         random_presses(s, rnd, 12)
         s.write(name)
+    # the special things (Use, then the second choice): pokes, whether out in
+    # the world, and the presses in the list for each use in turn
+    def use_things_presses(s, keys):
+        s.press('2', 40)               # the command menu, Use, the things
+        for _ in range(4):
+            s.press('D', 30)
+        s.press('2', 60)
+        s.press('D', 30)
+        s.press('2', 60)
+        for k in keys:
+            s.press(k, 40)
+        s.f += 200
+    ABYSS = ['C953:E9', 'C954:E9']
+    THINGS = {
+        'things_cancel':     (['C951:FD', 'C952:03', 'C955:03'], False, ['DDD1']),
+        'things_key':        (['C951:20'], False, ['2']),
+        'things_keys':       (['C951:60'], False, ['2']),
+        'things_stone_town': (['C955:01'], False, ['2']),
+        'things_bell_town':  (['C951:04'], False, ['2']),
+        'things_skull_town': (['C951:01'], False, ['2']),
+        'things_skull_world': (['C951:01'], True, ['2']),
+        'things_horn':       (['C952:01'], True, ['2']),
+        'things_horn_town':  (['C952:01'], False, ['2']),
+        'things_wheel':      (['C952:02', 'C959:10', 'C961:32'], True, ['2']),
+        'things_wheel_land': (['C952:02'], True, ['2']),
+        'things_wheel_whole': (['C952:02', 'C959:10', 'C961:63'], True, ['2']),
+        'things_abyss':      (['C951:1D'] + ABYSS, True, ['2', 'D2', 'DD2', 'DDD2']),
+        'things_book_first': (['C951:08'] + ABYSS, True, ['2']),
+    }
+    for name, (pokes, world, uses) in THINGS.items():
+        rnd = random.Random(name)
+        s = Script()
+        if world:
+            for k in 'LLLLLL':
+                s.press(k, 30)         # out through the west gate
+        for p in pokes:
+            s.poke(p)
+        s.f += 10
+        for keys in uses:
+            use_things_presses(s, keys)
+        random_presses(s, rnd, 6)
+        s.write(name)
     ATTACKS = {                        # Attack: where the party stands (or a person's spot), RAM writes, direction
         'attack_person':  ('p15', [], None),
         'attack_guard':   ('p28', [], None),
@@ -496,6 +538,17 @@ def main():
     # the room's foes gone: the party walks out the way it came
     DUNGEONS['dungeon_room_exit'] = ('despise', ['C95B:FF'], 'RRDRR', 0)
     DUNGEON_AFTER = {'dungeon_room_exit': (100, NOFOES, 'L' * 12)}
+    for k in (0, 2, 6, 7):             # the last altar: wrong colours, the end of the game, cancelled
+        DUNGEONS['abyss_altar_%d' % k] = ('despise', ['C95B:FF', 'C9A0:19', 'C990:B0', 'C970:07', 'D722:B0', 'C955:80'],
+                                          '2DDDD2D2' + '-' * 3 + 'D' * k + '2' + '-' * 3 + '2', 10)
+    # a lower altar (level 7): a wrong colour, and the right one (then the
+    # one stone: a ladder down)
+    for name, k in (('abyss_low_0', 0), ('abyss_low_2', 2)):
+        DUNGEONS[name] = ('despise', ['C95B:FF', 'C9A0:19', 'C990:B0', 'C970:06', 'D622:B0', 'C955:40'],
+                          '2DDDD2D2' + '-' * 3 + 'D' * k + '2' + '-' * 3 + '2', 10)
+    DUNGEONS['abyss_altar_cancel'] = ('despise', ['C95B:FF', 'C9A0:19', 'C990:B0', 'C970:02', 'D222:B0', 'C955:FF'],
+                                      '2DDDD2D2' + '-' * 3 + '1', 10)
+    DUNGEONS['dungeon_stone'] = ('despise', ['C95B:FF', 'C955:01'], '2DDDD2D2' + '-' * 3 + '2', 10)
     SEARCH6 = '2DDDDDD2'               # the command menu, Search
     DUNGEONS['dsearch_nothing'] = ('despise', ['C95B:FF'], SEARCH6, 10)
     for cell, what in ((0x70, 'orb'), (0x90, 'fountain0'), (0x91, 'fountain1'), (0x92, 'fountain2'),

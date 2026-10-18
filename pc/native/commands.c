@@ -676,9 +676,9 @@ static void use_command(void) {
 	newline();
 	cpu.cycles += 20 + 10;
 	if (mem_read(SLOT + 0x1A) & 1) {   // a stone
-		cpu.cycles += 10 + 17;         // $8B22 (it waits for frames: original code)
-		push16(0x8B25);
-		native_continue_at(0x651E);
+		cpu.cycles += 10;              // jp $8B22
+		if (use_things(0x8B22)) return;
+		done();
 		return;
 	}
 	cpu.cycles += 7;
