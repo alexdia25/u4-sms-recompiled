@@ -434,3 +434,4 @@ native   1F:8F1F native_snd_fade_up
 native   1F:8F28 native_snd_fade_down
 native   1F:8B5A native_snd_pause_on
 native   1F:8B60 native_snd_pause_off
+native   01:7552 native_status_page

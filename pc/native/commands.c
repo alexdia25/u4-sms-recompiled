@@ -131,8 +131,177 @@ static void get_chest(void) {
 Native native_get_chest = { "get_chest", 0x890D, 2, get_chest, 0, 0, 0, .task = 1 };
 
 // --------------------------------------------------------------- ready --
-// ready ($8B28): Weapon or Armour, then the original's ready routines
-// ($57D7, $5855: they wait for frames, so they run as original code).
+// $57D7 (weapons) and $5855 (armours), bank 1, called at site: who (in a
+// fight, the member whose turn it is; armour can't be changed then... it
+// asks anyway), the list of what the party has (status page $0F/$10), one
+// picked, the class allowed to use it (the table at $5960/$5970), and the
+// old one back to the party's store. Returns with carry if cancelled.
+static int ready_thing(int armour, uint16_t site) {
+	cpu.cycles += 17 + 17 + 10 + 19 + 19 + 19 + 10;   // the call; call $0AB5: its return kept in the slot
+	wr16(SLOT + 0x26, (uint16_t)(site + 3));
+	SET_HL((uint16_t)(site + 3));
+	int ask = 1;
+	if (!armour) {
+		cpu.cycles += 13 + 7 + 7;
+		cpu.a = mem_read(0xC99F);
+		op_sub8(3, 0, 0);
+		if (cpu.a >= 3) {              // in a fight: whose turn it is
+			cpu.cycles += 13 + 19 + 12;
+			cpu.a = mem_read(0xC97F);
+			mem_write(SLOT + 8, cpu.a);
+			ask = 0;
+		} else cpu.cycles += 5;
+	}
+	if (ask) {                         // $58C4: "Who: "
+		cpu.cycles += 17;
+		say_inline(0x58C7);
+		cpu.cycles += 10;
+		call_original(0x4BCB);
+		for (;;) {
+			task_frame_tick(armour ? 0x585B : 0x57EC);
+			call(0x4BD2);
+			cpu.cycles += 7;
+			if (!(cpu.f & FZ)) break;
+			cpu.cycles += 5;
+		}
+		cpu.cycles += 10;
+		if (cpu.f & FC) goto cancel;
+	}
+	cpu.cycles += 7 + 17;              // the list
+	cpu.a = armour ? 0x10 : 0x0F;
+	call_original(0x7552);
+	cpu.cycles += 10 + 7 + 17 + 7 + 4; // $58D7: how many kinds, with "none"
+	uint16_t store = armour ? 0xC917 : 0xC91F;
+	SET_HL(store);
+	cpu.b = armour ? 7 : 0x0F;
+	cpu.c = 1;
+	cpu.a = 0;
+	op_xor(0);
+	do {
+		cpu.cycles += 6 + 7 + 7;
+		SET_HL(HL + 1);
+		op_sub8(mem_read(HL), 0, 0);
+		if (cpu.f & FZ) cpu.cycles += 5;
+		else { cpu.cycles += 4; cpu.c++; }
+		if (--cpu.b) cpu.cycles += 13; else { cpu.cycles += 8; break; }
+	} while (1);
+	cpu.cycles += 19 + 10;
+	mem_write(SLOT + 0x1B, cpu.c);
+	say_inline(armour ? 0x5876 : 0x5807);   // "Weapon: " / "Armour: "
+	cpu.cycles += 19;
+	mem_write(SLOT + 0x1A, 0);
+	for (;;) {
+		task_frame_tick(armour ? 0x5883 : 0x5814);
+		cpu.cycles += 19 + 10;
+		cpu.c = mem_read(SLOT + 0x1B);
+		SET_DE(armour ? 0x0002 : 0x0001);
+		call(0x49F9);
+		cpu.cycles += 7;
+		if (!(cpu.f & FZ)) break;
+		cpu.cycles += 5;
+	}
+	cpu.cycles += 10;
+	if (cpu.f & FC) goto cancel;
+	cpu.cycles += 10 + 17 + 4 + 19 + 19 + 4 + 4;   // $58E5: the kind picked
+	SET_HL(store);
+	cpu.a = 0;
+	op_xor(0);
+	mem_write(SLOT + 0x1C, 0);
+	cpu.b = mem_read(SLOT + 0x1A);
+	if (cpu.b) {
+		cpu.cycles += 5;
+		for (;;) {
+			cpu.cycles += 6 + 23 + 7 + 7;
+			SET_HL(HL + 1);
+			mem_write(SLOT + 0x1C, (uint8_t)(mem_read(SLOT + 0x1C) + 1));
+			op_sub8(mem_read(HL), 0, 0);
+			if (cpu.f & FZ) { cpu.cycles += 5; continue; }
+			if (--cpu.b) cpu.cycles += 13; else { cpu.cycles += 8; break; }
+		}
+		cpu.cycles += 10;
+	} else cpu.cycles += 11;
+	cpu.cycles += 19 + 7;              // its name
+	cpu.a = (uint8_t)(mem_read(SLOT + 0x1C) + (armour ? 0x35 : 0x25));
+	call(0x5516);
+	newline();
+	cpu.cycles += 10 + 10 + 17 + 19;   // $58F9: may this class use it?
+	uint16_t allowed = armour ? 0x5970 : 0x5960;
+	SET_HL(allowed);
+	SET_DE(armour ? 0x3500 : 0x2501);
+	cpu.c = mem_read(SLOT + 8);
+	call(0x48B6);
+	cpu.cycles += 19 + 4 + 7;
+	cpu.b = (uint8_t)(mem_read(cpu.iy + 0x1B) + 1);
+	cpu.a = 1;
+	do {
+		cpu.cycles += 4;
+		op_rrca();
+		if (--cpu.b) cpu.cycles += 13; else { cpu.cycles += 8; break; }
+	} while (1);
+	cpu.cycles += 4 + 19 + 48 + 4;
+	cpu.b = cpu.a;
+	SET_HL((uint16_t)(allowed + mem_read(SLOT + 0x1C)));
+	cpu.a = mem_read(HL);
+	op_and(cpu.b);
+	if (!cpu.a) {                      // "A <class> may NOT use (a) <it>"
+		cpu.cycles += 5 + 10;
+		say_inline(0x5913);
+		cpu.cycles += 19 + 7;
+		cpu.a = (uint8_t)(mem_read(cpu.iy + 0x1B) + 0x4D);
+		call(0x5516);
+		say_inline(0x5921);
+		cpu.cycles += 4 + 7;
+		cpu.e--;
+		if (!cpu.e) say_inline(0x5935); else cpu.cycles += 5;
+		cpu.cycles += 19 + 4;
+		cpu.a = (uint8_t)(mem_read(SLOT + 0x1C) + cpu.d);
+		call(0x5516);
+		task_wait_button(0x593F);
+		newline();
+		cpu.cycles += 4 + 10 + 19 + 19 + 4;
+		op_or(cpu.a);
+		SET_HL(rd16(SLOT + 0x26));
+		return 0;
+	}
+	cpu.cycles += 11 + 19;             // ready: the old one back in the store
+	cpu.c = mem_read(SLOT + 8);
+	call(0x48B6);
+	cpu.cycles += 19 + 10 + 17 + 19;
+	uint8_t old = mem_read(cpu.iy + (armour ? 0x0C : 0x0B));
+	SET_HL(store);
+	cpu.a = old;
+	uint8_t pick = mem_read(SLOT + 0x1C);
+	op_sub8(pick, 0, 0);
+	if (old == pick) cpu.cycles += 11;
+	else {
+		cpu.cycles += 5 + 11 + 11 + 4 + 4 + 11 + 11 + 7 + 7 + 7;
+		uint16_t at = (uint16_t)(store + old);
+		uint8_t n = (uint8_t)(mem_read(at) + 1);
+		mem_write(at, n);
+		cpu.a = n;
+		op_sub8(0x64, 0, 0);
+		if (n < 0x64) cpu.cycles += 5;
+		else { cpu.cycles += 10; mem_write(at, 0x63); }
+		cpu.cycles += 10 + 19 + 11 + 11 + 4 + 4 + 11 + 11 + 10 + 10;
+		at = (uint16_t)(store + pick);
+		mem_write(at, (uint8_t)(mem_read(at) - 1));
+		SET_HL(at);
+		cpu.a = pick;
+	}
+	cpu.cycles += 19 + 4 + 10 + 19 + 19 + 4;
+	mem_write(cpu.iy + (armour ? 0x0C : 0x0B), cpu.a);
+	op_or(cpu.a);
+	SET_HL(rd16(SLOT + 0x26));
+	return 0;
+cancel:
+	call(0x472D);                      // $58D0
+	cpu.cycles += 4 + 10 + 19 + 19 + 4;
+	op_scf();
+	SET_HL(rd16(SLOT + 0x26));
+	return 1;
+}
+
+// ready ($8B28): Weapon or Armour
 static void ready(void) {
 	cpu.cycles += 10;
 	SET_HL(0x9613);
@@ -159,9 +328,14 @@ static void ready(void) {
 	text_print(name);
 	newline();
 	cpu.cycles += 20 + 7;
-	cpu.cycles += 17;                  // call $57D7 / $5855
-	if (!(mem_read(SLOT + 0x1A) & 1)) { push16(0x8B59); native_continue_at(0x57D7); }
-	else { cpu.cycles += 5; push16(0x8B5E); native_continue_at(0x5855); }
+	if (!(mem_read(SLOT + 0x1A) & 1)) {
+		ready_thing(0, 0x8B56);
+		cpu.cycles += 12;              // jr $8B5E
+	} else {
+		cpu.cycles += 5;
+		ready_thing(1, 0x8B5B);
+	}
+	done();
 }
 Native native_ready = { "ready", 0x8B28, 2, ready, 0, 0, 0, .task = 1 };
 

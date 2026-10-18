@@ -199,6 +199,10 @@ def main():
         'camp_order':      (7, '2D2'),
         'camp_status':     (7, '2DD22222'),
         'camp_save':       (7, '2DDD2222'),
+        'ready_swap':      (5, '2' + '2' + 'D2' + '2'),        # a dagger readied, the hands' put away
+        'ready_not_allowed': (5, '2' + '2' + 'D2' + '22'),     # a mage may not use an axe
+        'ready_armour_not_allowed': (5, '2D2' + '2' + 'D2' + '22'),
+        'ready_cancel':    (5, '2' + '1' + '2' + '2' + '2' + '1'),   # at who, then at the list
         'camp_status_keys': (7, '2DD2' + 'D' * 7 + 'UU' + 'D' + 'LRR' + 'U' + 'LR' + 'D' + 'L' + '2' + 'LRR' + 'D' + '1'),   # every page and key
     }
     for name, (downs, presses) in COMMANDS.items():
@@ -206,6 +210,9 @@ def main():
         s = Script()
         if name in ('camp_order', 'camp_status_keys'):
             s.poke('C957:03')          # three in the party, to swap
+        for p in {'ready_swap': ['C921:01'], 'ready_not_allowed': ['C924:01'],
+                  'ready_armour_not_allowed': ['C91A:01'], 'ready_cancel': ['C921:01']}.get(name, []):
+            s.poke(p)                  # something to ready
         for _ in range(2):
             s.press('2', 40)           # the command menu
             for _ in range(downs):
