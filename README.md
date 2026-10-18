@@ -122,12 +122,13 @@ alone runs the game.
 - **`pc/native/`** holds readable C rewrites of the game's routines, which
   replace the translated originals one by one through `native` lines in
   `tools/hints.txt`:
+  - the opening words and the title screen (the logo, the demo, the Options menu);
   - text printing and the text window;
   - menus, number entry and yes/no prompts;
   - talking to people;
   - every kind of shop;
   - map loading and walking, the creatures on the map, the screen refresh everywhere (with the line of sight), and drawing the view into video memory;
-  - the party's turn in a dungeon, its Attack and Search (orbs, fountains, altars);
+  - the party's turn in a dungeon, its Attack and Search (orbs, fountains, altars), doors and rooms;
   - the player's turn, moving, and all eight commands (Talk, Attack, Magic with spell mixing, casting and every spell, Get Chest, Use, Ready, Search, Camp);
   - combat: starting a fight (the battlefield, the foes rolled), a member's turn (moving, fleeing, passing, the menu and its commands), the foes' turn, the blows and missiles shown on the field, the rounds, and the end of a fight (victory, a lost battle, fleeing, leaving a dungeon room, the chest left behind);
   - combat and karma rules;

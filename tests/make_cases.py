@@ -561,6 +561,22 @@ def main():
     # the opening words cut short by a button, then the title
     with open(os.path.join(HERE, 'cases', 'opening_skip.keys'), 'w', newline=chr(10)) as f:
         f.write(chr(10).join(('60 1', '66 -', '900 -')) + chr(10))
+    # the title: the demo to its end (no buttons); Journey Onward; Return
+    # to the view, then the menu again (up wraps round to the last choice)
+    TITLES = {
+        'title_demo':    [('7600', '-')],
+        'title_journey': [('1200', '1'), ('1300', 'D'), ('1330', 'U'), ('1360', '2'), ('2000', '-')],
+        'title_view':    [('1200', '1'), ('1300', 'D'), ('1330', 'D'), ('1360', '1'),
+                          ('1700', '1'), ('1800', 'U'), ('1830', 'U'), ('1860', '2'), ('2500', '-')],
+    }
+    for name, keys in TITLES.items():
+        lines = []
+        for f, k in keys:
+            lines.append(f + ' ' + k)
+            if k != '-':
+                lines.append('%d -' % (int(f) + 6))
+        with open(os.path.join(HERE, 'cases', name + '.keys'), 'w', newline=chr(10)) as out:
+            out.write(chr(10).join(lines) + chr(10))
     for seed in range(2):              # anything at all
         rnd = random.Random('play%d' % seed)
         s = Script()
