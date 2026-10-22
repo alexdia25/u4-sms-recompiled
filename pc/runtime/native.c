@@ -269,7 +269,7 @@ void native_report(void) {
 //   routine to return to the call's return address.
 // Fibers can park inside each other (a C task calls an original routine that
 // uses a blocking native), so parked fibers are kept on a stack.
-#define POOL   8
+#define POOL   16
 #define SLOTS  10
 #define TASK_SLOTS 0xC300
 #define FIBER_STACK (256 * 1024)
@@ -492,6 +492,19 @@ void native_sync(void) {
 	cpu.cycles = cpu.budget;
 	start_sink(left, PARK_PC, nparked + 1);   // then this fiber goes on
 	park();
+}
+
+// From rewritten code on a fiber, after "ei" and the instruction after it:
+// an interrupt pending now is taken here, as the machine takes it there.
+void native_irq_point(void) {
+	if (!current) return;
+	if (cpu.irq_line && cpu.iff1 && cpu.cycles <= cpu.budget) {
+		cpu.budget = cpu.cycles;   // the dispatcher takes it, then this fiber goes on
+		start_sink(0, PARK_PC, nparked + 1);
+		park();
+		return;
+	}
+	native_sync();
 }
 
 // Run an original routine from C and come back when it returns. Used by

@@ -88,6 +88,7 @@ name     00:2A5C load_dungeon               # location $12-$19 -> 8 levels of 16
 name     00:2A6E dungeon_header_address     # -> a = bank, hl = header (table at $2A81)
 
 # --- rewritten in C (pc/native) ------------------------------------------------------
+native   00:0038 native_interrupt
 native   00:06FF native_decode_rle
 native   00:06F6 native_decode_rle_far
 native   00:0E22 native_recenter_map_view

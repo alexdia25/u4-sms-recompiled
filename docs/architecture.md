@@ -110,6 +110,12 @@ main code fills: VRAM uploads queued by `queue_vram_copy` ($0465: bank, source,
 VRAM address, length at $C200…) and the sound driver (bank 31, `sound_vectors`).
 NMI (`$0066`, the Pause button) only sets a flag.
 
+The handler is rewritten in C (`pc/native/irq.c`). The queue turns
+interrupts back on between its VDP address writes, so a line interrupt can
+come in the middle of it; the C calls `native_irq_point()` after each `ei`
+and the instruction after it, which lets an interrupt pending then be taken
+there, as on the machine.
+
 ## Banks
 
 - Slot 0: bank 0 (code, fixed). Slot 1: bank 1 (code) — temporarily banks 4/5 for the
