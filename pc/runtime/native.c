@@ -492,6 +492,8 @@ void native_sync(void) {
 	park();
 }
 
+int native_on_fiber(void) { return current != NULL; }
+
 // From rewritten code on a fiber, at the end of each instruction of code
 // that copies the original step by step: the machine stops at the first
 // instruction that reaches the line's end, with the time as it is (not

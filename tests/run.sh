@@ -31,7 +31,7 @@ check() {
 	run "$n" "$k" "$t/on.out" "$t/on"
 	U4_NATIVE=off run "$n" "$k" "$t/off.out" "$t/off"
 	state=$(python tests/same_state.py "$t/off.out" "$t/on.out" 2>&1 | tail -1)
-	bad=$(U4_NATIVE=shadow U4_SHADOW_CYCLES=1 "$EXE" build/u4.pak --headless "$n" --keys "$k" 2>&1 | grep -c "differs")
+	bad=$(U4_NATIVE=shadow U4_SHADOW_CYCLES=1 "$EXE" build/u4.pak --headless "$n" --keys "$k" 2>&1 | grep -c "differs\|never returned\|^native:")
 	late=$(python tests/entry_times.py "$t/off" "$t/on" 2>&1 | tail -1)
 	rm -rf "$t"
 	if [ -z "$state" ] && [ "$bad" = 0 ] && [ -z "$late" ]; then echo "ok    $1"

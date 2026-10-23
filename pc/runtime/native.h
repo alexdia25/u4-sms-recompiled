@@ -82,6 +82,8 @@ void native_sync(void);
 void native_irq_point(void);
 // ... at an instruction's end that reaches the line's end exactly, too
 void native_boundary(void);
+// whether rewritten code runs on a fiber (so it can wait for frames)
+int native_on_fiber(void);
 
 extern int native_settle;      // > 0: print the state at each scheduler pass (tests)
 

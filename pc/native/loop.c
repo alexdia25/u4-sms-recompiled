@@ -162,6 +162,7 @@ static void main_loop(void) {
 
 // $0D06: the rest of the pass: its frames, the vertical blank, a pause
 static void pass_end(void) {
+	if (!native_on_fiber()) { native_decline(); return; }   // shadow mode: it waits for frames
 	SET_HL(0xC00A); I(10);
 	SET_BC(rd16(0xC00B)); I(20);       // C: the frame it started in, B: its frames
 	for (;;) {

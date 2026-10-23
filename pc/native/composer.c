@@ -21,7 +21,15 @@
 #define BUFFER      0xC1C0          // the shared middle tile, built here
 #define PHASE       0xC603          // the animation frame for this row
 
-static void cy(int n) { cpu.cycles += n; }
+// each instruction's cycles; then the machine catches up (native_boundary),
+// or after ei and the instruction after it, takes an interrupt pending
+static int after_ei;
+static void cy(int n) {
+	cpu.cycles += n;
+	if (after_ei == 2) { after_ei = 1; native_boundary(); }
+	else if (after_ei == 1) { after_ei = 0; native_irq_point(); }
+	else native_boundary();
+}
 
 static void exx(void) {
 	uint8_t t;
@@ -40,34 +48,33 @@ static void iy_set(int o, uint8_t v) { mem_write((uint16_t)(cpu.iy + o), v); }
 
 // outi: (C) <- (HL), HL++, B--
 static void outi(void) {
-	cy(16);
 	uint8_t v = mem_read(HL);
 	cpu.b--;
-	native_sync();
 	io_out(cpu.c, v);
 	SET_HL(HL + 1);
+	cy(16);
 }
 
 // di / outi / outi / ei: the next video address from the list
 static void next_address(void) {
-	cy(4);
 	cpu.iff1 = cpu.iff2 = 0;
-	outi();
-	outi();
 	cy(4);
+	outi();
+	outi();
 	cpu.iff1 = cpu.iff2 = 1;
+	after_ei = 2;
+	cy(4);
 }
 
 static void out_data(uint8_t a) {      // out ($BE),a
-	cy(11);
-	native_sync();
 	io_out(VDP_DATA, a);
+	cy(11);
 }
 
 static uint8_t in_data(void) {         // in a,($BE)
+	uint8_t v = io_in(VDP_DATA);
 	cy(11);
-	native_sync();
-	return io_in(VDP_DATA);
+	return v;
 }
 
 // ------------------------------------------------------- graphic addresses --

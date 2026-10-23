@@ -52,6 +52,83 @@ static void nat_queue_text_copy(void) {
 Native native_queue_text_copy = { "queue_text_copy", 0x0499, 0, nat_queue_text_copy,
 	OUT_A | OUT_F | OUT_BC | OUT_HL, 0, 0 };
 
+// queue_vram_copy ($0465): copy BC bytes from bank A at HL to VRAM at DE,
+// next vertical blank (the interrupt's queue). When the queue is full it
+// waits for vertical blanks until there is room. $0458 queues the whole
+// name table shadow ($CA00, $600 bytes, bank 2) and $0463 a copy from bank 2.
+static void I(int cycles) { cpu.cycles += cycles; native_boundary(); }
+
+static void pop_af(void) { uint16_t v = pop16(); cpu.a = (uint8_t)(v >> 8); cpu.f = (uint8_t)v; }
+
+// shadow mode (no fiber): the wait for room can't run here; the original does it
+static int cannot_wait(void) {
+	if (native_on_fiber() || mem_read(VRAM_QUEUED) < 0x20) return 0;
+	native_decline();
+	return 1;
+}
+
+static void queue_vram_copy(void) {
+	for (;;) {
+		push16(HL); I(11);
+		push16((uint16_t)(cpu.a << 8 | cpu.f)); I(11);
+		cpu.a = mem_read(VRAM_QUEUED); I(13);
+		op_sub8(0x20, 0, 0); I(7);
+		I(10);
+		if (cpu.f & FC) break;
+		pop_af(); I(10);               // full: a vertical blank, and again
+		SET_HL(pop16()); I(10);
+		I(17);
+		call_original(0x041C);
+		I(10);
+	}
+	cpu.a = op_inc8(cpu.a); I(4);
+	mem_write(VRAM_QUEUED, cpu.a); I(13);
+	cpu.a = op_dec8(cpu.a); I(4);
+	for (int i = 0; i < 3; i++) { op_add8(cpu.a, 0); I(4); }
+	cpu.l = cpu.a; I(4);
+	cpu.h = 0xC2; I(7);
+	pop_af(); I(10);
+	mem_write(HL, cpu.a); I(7);        // the bank
+	cpu.d |= 0x40; I(8);               // the VRAM address, as a write
+	cpu.l = op_inc8(cpu.l); I(4);
+	mem_write(HL, cpu.e); I(7);
+	cpu.l = op_inc8(cpu.l); I(4);
+	mem_write(HL, cpu.d); I(7);
+	SET_DE(pop16()); I(10);            // the source
+	cpu.l = op_inc8(cpu.l); I(4);
+	mem_write(HL, cpu.e); I(7);
+	cpu.l = op_inc8(cpu.l); I(4);
+	mem_write(HL, cpu.d); I(7);
+	cpu.c = op_inc8(cpu.c); I(4);
+	cpu.c = op_dec8(cpu.c); I(4);
+	if (cpu.f & FZ) I(12);             // runs of C bytes (0: 256), B of them
+	else { I(7); cpu.b = op_inc8(cpu.b); I(4); }
+	cpu.l = op_inc8(cpu.l); I(4);
+	mem_write(HL, cpu.c); I(7);
+	cpu.l = op_inc8(cpu.l); I(4);
+	mem_write(HL, cpu.b); I(7);
+	I(10);
+}
+
+static void queue_screen(void) {       // $0458
+	if (cannot_wait()) return;
+	cpu.a = 2; I(7);
+	SET_HL(0xCA00); I(10);
+	SET_DE(0x3800); I(10);
+	SET_BC(0x0600); I(10);
+	cpu.a = 2; I(7);
+	queue_vram_copy();
+}
+static void queue_bank2_copy(void) {   // $0463
+	if (cannot_wait()) return;
+	cpu.a = 2; I(7);
+	queue_vram_copy();
+}
+static void nat_queue_vram_copy(void) { if (!cannot_wait()) queue_vram_copy(); }
+Native native_queue_vram_copy = { "queue_vram_copy", 0x0465, 0, nat_queue_vram_copy, 0, .long_calls = 1 };
+Native native_queue_screen = { "queue_screen", 0x0458, 0, queue_screen, 0, .long_calls = 1 };
+Native native_queue_bank2_copy = { "queue_bank2_copy", 0x0463, 0, queue_bank2_copy, 0, .long_calls = 1 };
+
 // ------------------------------------------------------------- cells --
 // cell_address ($2D0C): DE = the shadow address of column E, row D (A = D)
 static void cell_address(void) {
