@@ -106,18 +106,16 @@ static int task_in_call(void);
 void native_sync(void);
 
 // U4_SETTLE (main.c): after the run, the state each time the task scheduler
-// starts a pass ($0AE5): no rewritten routine is half way through its work
+// starts a pass (run_tasks, $0AE5): no rewritten routine is half way through its work
 // there, so the original's and the rewrites' states compare exactly.
 int native_settle;
-static void settle_nothing(void) {}
-Native native_settle_point = { "settle_point", 0x0AE5, 0, settle_nothing, .hook = 1 };
 
 int native_call(Native *n) {
 	int m = get_mode();
 	static const char *trace = (const char *)-1;   // U4_TRACE=<names>: log entry times
 	if (trace == (const char *)-1) trace = getenv("U4_TRACE");
 	if (trace && strstr(trace, n->name)) fprintf(stderr, "enter %s %lld\n", n->name, (long long)cpu.cycles);
-	if (native_settle && n == &native_settle_point) {   // tests: the state between turns
+	if (native_settle && n->addr == 0x0AE5 && n->bank == 0) {   // tests: the state between turns
 		uint32_t g = 2166136261u;
 		for (int i = 0; i < 0x2000; i++)
 			if (i < 0x1E00 || i >= 0x1FF0) g = (g ^ sms.ram[i]) * 16777619u;
@@ -494,6 +492,18 @@ void native_sync(void) {
 	park();
 }
 
+// From rewritten code on a fiber, at the end of each instruction of code
+// that copies the original step by step: the machine stops at the first
+// instruction that reaches the line's end, with the time as it is (not
+// rolled back as native_sync does for bigger steps), so the line's events
+// and interrupts come exactly where the original's would.
+void native_boundary(void) {
+	if (!current || cpu.cycles < cpu.budget) return;
+	if (cpu.cycles - cpu.budget > 23) { native_sync(); return; }   // more than an instruction
+	start_sink(0, PARK_PC, nparked + 1);
+	park();
+}
+
 // From rewritten code on a fiber, after "ei" and the instruction after it:
 // an interrupt pending now is taken here, as the machine takes it there.
 void native_irq_point(void) {
@@ -504,7 +514,7 @@ void native_irq_point(void) {
 		park();
 		return;
 	}
-	native_sync();
+	native_boundary();
 }
 
 // Run an original routine from C and come back when it returns. Used by

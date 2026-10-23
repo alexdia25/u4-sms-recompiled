@@ -380,7 +380,11 @@ name     02:B5E2 creature_blocked
 native   00:129D native_refresh
 name     00:1A7C compose_screen
 native   00:1A7C native_compose_screen
-native   00:0AE5 native_settle_point
+native   00:0AE5 native_run_tasks
+native   00:0AF8 native_task_back
+native   00:0CD2 native_main_loop
+native   00:0D06 native_pass_end
+native   00:065B native_update_joypad
 name     00:3BD9 fight_on_map
 name     00:3B9F fight
 name     00:3B52 fight_in_dungeon

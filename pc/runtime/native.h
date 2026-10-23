@@ -80,6 +80,8 @@ void call_original(uint16_t addr);
 void native_sync(void);
 // ... and after "ei" and the instruction after it: take an interrupt pending
 void native_irq_point(void);
+// ... at an instruction's end that reaches the line's end exactly, too
+void native_boundary(void);
 
 extern int native_settle;      // > 0: print the state at each scheduler pass (tests)
 

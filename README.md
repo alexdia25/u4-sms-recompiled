@@ -135,7 +135,7 @@ alone runs the game.
   - combat and karma rules;
   - the sound driver (bank $1F): the frame update, its sequencer and commands, envelopes, modulation, slides and fades, starting tunes and sounds, and the PSG's (and FM unit's) registers;
   - every game mode's set-up (the screen, graphics and task for the title, the story, the world, towns, dungeons, fights, camping, shrines, the ending);
-  - the task system;
+  - the main loop (reading the pads, clearing the sprites, waiting for the pass's frames, the pause), the task scheduler and the task system;
   - the interrupt handler: each frame's count, pad and reset button, display switch, scroll, sprite tables, palette and queue of video memory copies, and the line interrupt's scroll.
 
   Each rewrite takes exactly the original's time and leaves the machine

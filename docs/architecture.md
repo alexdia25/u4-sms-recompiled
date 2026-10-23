@@ -18,6 +18,14 @@ stack to $DFF0, initialises the hardware and jumps to `warm_restart` ($0CC4).
    - **bit 7 set** — the mode is running: `run_tasks` ($0AE5) gives each task its turn;
 3. waits for the next vertical blank and loops.
 
+The loop and the scheduler are rewritten in C (`pc/native/loop.c`),
+instruction by instruction: after each instruction's cycles the C calls
+`native_boundary()`, which lets the machine catch up exactly where the
+translated code would stop (at the first instruction that reaches the line's
+end), so interrupts come between the same instructions. The frame wait spins
+on the frame count the interrupt changes, so a coarser step would change when
+it ends.
+
 Mode numbers seen so far: `$11` world, `$12` settlement, `$13` dungeon, `$14`
 combat, `$15` camping. Their setup routines: `$11` 2:$AC74, `$12` 2:$AC80, `$13` $69D8 (bank 1), `$14` and up through bank 3's vector table ($801B …).
 

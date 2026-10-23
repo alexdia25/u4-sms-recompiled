@@ -16,7 +16,7 @@
 #include "../runtime/z80.h"
 #include "game.h"
 
-static void sync(void) { native_sync(); }
+static void sync(void) { native_boundary(); }
 
 static void out_bf(uint8_t v) {        // out ($BF),a
 	io_out((uint16_t)(cpu.a << 8 | 0xBF), v);
