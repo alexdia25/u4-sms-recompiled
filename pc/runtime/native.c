@@ -275,6 +275,7 @@ typedef struct Fiber {
 	Native *n;               // what runs on it; NULL when free
 	uint16_t wait_pc;        // a C task waiting for its turn: where its slot resumes
 	uint16_t wait_sp;        // ... or for an original routine to return there (task_call)
+	int stale;               // left half way (the Reset button): made afresh before use
 #ifdef _WIN32
 	void *h;
 #else
@@ -371,7 +372,8 @@ static void run_blocking(Native *n) {
 	for (int i = 0; i < POOL; i++)
 		if (!pool[i].n) {
 #ifdef _WIN32
-			if (!pool[i].h) make_fiber(&pool[i]);
+			if (!pool[i].h || pool[i].stale) make_fiber(&pool[i]);
+			pool[i].stale = 0;
 #else
 			make_fiber(&pool[i]);
 #endif
@@ -380,6 +382,8 @@ static void run_blocking(Native *n) {
 			return;
 		}
 	fprintf(stderr, "native: no free fiber for %s\n", n->name);
+	for (int i = 0; i < POOL; i++) fprintf(stderr, "  pool %d: %s%c", i, pool[i].n ? pool[i].n->name : "-", 10);
+	fprintf(stderr, "  parked %d sinking %d%c", nparked, sinking, 10);
 	exit(2);
 }
 
@@ -415,6 +419,20 @@ static void run_task(Native *n) {
 	make_fiber(f);
 	f->n = n;
 	switch_to(f);
+}
+
+// The Reset button ($0CB4, from the frame interrupt): the game starts over
+// with a fresh stack, so whatever rewritten code was waiting is dropped.
+void native_reset(void) {
+	for (int i = 0; i < nparked; i++) {
+		Fiber *f = parked[i];
+		if (f >= pool && f < pool + POOL) { f->n = NULL; f->stale = 1; }
+		else drop_task(f);
+	}
+	nparked = 0;
+	for (int i = 0; i < SLOTS; i++) drop_task(&task_fiber[i]);   // and every C task
+	sinking = 0;
+	sink_depth = 0;
 }
 
 // From a C task: end this turn with yield ($0B19), the slot resuming at
@@ -462,7 +480,7 @@ int native_special(void) {
 	if (cpu.pc == PARK_PC) {
 		if (sinking && nparked <= sink_base) { sink_step(); return 1; }
 		if (!nparked) return 0;
-		switch_to(parked[--nparked]);
+			switch_to(parked[--nparked]);
 		return 1;
 	}
 	if (native_tasks_waiting) {

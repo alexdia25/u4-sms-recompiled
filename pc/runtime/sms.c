@@ -214,7 +214,7 @@ uint8_t io_in(uint16_t port) {
 	case 0x81: { uint8_t v = vdp_read_status(); cpu.irq_line = (uint8_t)vdp_irq(); return v; }
 	case 0xC0: return (uint8_t)~sms.pad1;
 	case 0xC1: {
-		uint8_t v = 0xFF;
+		uint8_t v = sms.reset ? 0xEF : 0xFF;   // bit 4: Reset
 		// TH pins read back what the I/O control port drives
 		if (!(sms.ioctrl & 0x02)) v = (v & ~0x40) | ((sms.ioctrl & 0x20) << 1);
 		if (!(sms.ioctrl & 0x08)) v = (v & ~0x80) | (sms.ioctrl & 0x80);
@@ -258,6 +258,7 @@ void sms_pause(void) { cpu.nmi_pending = 1; }
 // many lines' worth of work at once (adding the original's cycle count) takes
 // that many lines, as the original did.
 static int64_t line_end;
+void (*sms_on_line)(void);
 
 void sms_run_frame(void) {
 	const int64_t frame = (int64_t)CYCLES_PER_LINE * LINES;
@@ -268,6 +269,7 @@ void sms_run_frame(void) {
 		line_end += CYCLES_PER_LINE;
 		cpu.budget = line_end;
 		recomp_run();
+		if (sms_on_line) sms_on_line();
 		vdp_end_line(line);
 		cpu.irq_line = (uint8_t)vdp_irq();
 	}

@@ -84,6 +84,8 @@ void native_irq_point(void);
 void native_boundary(void);
 // whether rewritten code runs on a fiber (so it can wait for frames)
 int native_on_fiber(void);
+// the Reset button: drop the rewritten code that was waiting
+void native_reset(void);
 
 extern int native_settle;      // > 0: print the state at each scheduler pass (tests)
 

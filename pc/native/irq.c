@@ -194,7 +194,7 @@ static void frame_interrupt(void) {
 	cpu.a = (uint8_t)~cpu.a;
 	op_and(cpu.b);
 	op_bit(4, cpu.a);
-	if (!(cpu.f & FZ)) { native_continue_at(0x0CB4); return; }   // reset, newly pressed
+	if (!(cpu.f & FZ)) { native_reset(); native_continue_at(0x0CB4); return; }   // reset, newly pressed
 	cpu.cycles += 13 + 4 + 10;
 	cpu.a = mem_read(0xC007);
 	op_or(cpu.a);

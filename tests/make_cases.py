@@ -261,6 +261,30 @@ def main():
             s.press(k, 60)
         random_presses(s, rnd, 8)
         s.write(name)
+    # Saved in the world, Reset, and Journey Onward: the saved games' menu,
+    # moved about, and the saved game loaded, or an empty slot (a new game)
+    for name, keys in (('journey_load', 'DUDU' + '2'), ('journey_empty', 'DU' + 'D' + 'D' + '2')):
+        s = Script()
+        for k in 'LLLLLL':
+            s.press(k, 30)
+        s.f += 10
+        s.press('2', 40)
+        for _ in range(7):
+            s.press('D', 30)
+        s.press('2', 60)
+        for k in 'DDD2' + '2':
+            s.press(k, 60)             # saved in the first slot
+        s.f += 308                     # (while the game waits: a rewrite stopped half way
+        s.press('X', 60)               # by Reset leaves what its last step did) Reset
+        s.f += 1140
+        s.press('1', 100)              # past the opening
+        for k in 'DU2':
+            s.press(k, 30)             # Journey Onward
+        s.f += 400
+        for k in keys:
+            s.press(k, 50)
+        s.f += 600
+        s.write(name)
     SEARCHES = {                       # Search where something is to be found (the table at $8C07)
         'search_town_1':  (False, ['C953:08', 'C985:08', 'C954:06', 'C986:06']),   # Moonglow is 6
         'search_town_2':  (False, ['C9A0:03', 'C953:06', 'C985:06', 'C954:06', 'C986:06']),

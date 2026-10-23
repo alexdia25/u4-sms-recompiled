@@ -2216,3 +2216,308 @@ static void sound_test(void) {
 	mem_write(GAME_MODE, 2);
 }
 Native native_sound_test = { "sound_test", 0x9A8D, 3, sound_test, 0, 0, 0, .task = 1 };
+
+// ------------------------------------------------------- Journey Onward --
+// $8BF8 (game mode 5, a game saved): the three saved games' summaries
+// ($8DD3) scrolled up into view, then one chosen with the pad (its frame
+// blinking, the palette at $8EB1), the choice kept in save RAM ($8100).
+// An empty one: the screen scrolled away and a new game (mode 6); else the
+// game loaded from save RAM (the party $C500, the rest $C651) and on to
+// the game (mode $10).
+
+static void scroll_screen(uint16_t from, uint16_t step_from, uint16_t to, uint16_t step_to,
+		uint16_t site_copy, uint16_t site_yield) {   // 13 turns, a row each
+	cpu.cycles += 19 * 5;
+	mem_write(SLOT + 0x1C, (uint8_t)to); mem_write(SLOT + 0x1D, (uint8_t)(to >> 8));
+	mem_write(SLOT + 0x1E, (uint8_t)from); mem_write(SLOT + 0x1F, (uint8_t)(from >> 8));
+	mem_write(SLOT + 0x16, 0x0D);
+	do {
+		cpu.cycles += 19 + 19 + 10 + 11 + 19 + 19 + 4 + 4;
+		SET_HL(rd16(SLOT + 0x1E));
+		SET_HL(op_add16(HL, step_from));
+		wr16(SLOT + 0x1E, HL);
+		SET_BC(HL);                    // the length grows a row a turn
+		cpu.cycles += 19 + 19 + 10 + 11 + 19 + 19 + 10;
+		SET_HL(rd16(SLOT + 0x1C));
+		SET_HL(op_add16(HL, step_to));
+		wr16(SLOT + 0x1C, HL);
+		SET_DE(0x3800);
+		tcall(0x0463, site_copy);
+		yield_at(site_yield);
+		cpu.cycles += 23;
+		uint8_t n = op_dec8(mem_read(SLOT + 0x16));
+		mem_write(SLOT + 0x16, n);
+		cpu.cycles += n ? 12 : 7;
+	} while (mem_read(SLOT + 0x16));
+}
+
+static void journey(void) {
+	cpu.cycles += 7;
+	cpu.a = 7;
+	tcall(0x0621, 0x8BFA);             // the music
+	tcall(0x8A97, 0x8BFD);
+	cpu.cycles += 10;
+	SET_HL(0x8E69);
+	tcall(0x7E4E, 0x8C03);             // "Journey Onward"
+	cpu.cycles += 10;
+	SET_HL(0x8E85);
+	tcall(0x7E4E, 0x8C09);             // "Please select a number:"
+	cpu.cycles += 7 + 10 + 10 + 10;
+	cpu.a = 0x13; SET_HL(0xB189); SET_DE(0xCA00); SET_BC(0x0340);
+	tcall(0x07EC, 0x8C17);             // the frames
+	static const uint16_t save[3] = { 0x8040, 0x8080, 0x80C0 }, at[3] = { 0xCA4E, 0xCB4E, 0xCC4E };
+	for (int i = 0; i < 3; i++) {      // each saved game's summary
+		cpu.cycles += 10 + 10;
+		SET_HL(save[i]); SET_DE(at[i]);
+		tcall(0x8DD3, (uint16_t)(0x8C20 + 9 * i));
+	}
+	scroll_screen(0x0000, 0x0040, 0xCD40, 0xFFC0, 0x8C6E, 0x8C71);   // scrolled up into view
+	cpu.cycles += 7 + 13 + 7 + 17 + 19 + 58;
+	mem_write(0xC010, 0xDF);
+	cpu.a = 3;
+	mem_write(SLOT + 1, 3);            // sleep 3 turns
+	SET_HL(0x8C83);
+	task_wait_turn(0x8C83);
+	cpu.cycles += 4 + 13;
+	op_xor(cpu.a);
+	mem_write(0xC010, 0);
+	yield_at(0x8C87);
+	cpu.cycles += 10;
+	SET_HL(0x8100);
+	tcall(0x0C3D, 0x8C8D);             // the last one chosen
+	cpu.cycles += 19 + 13 + 7 + 13 + 13 + 7 + 13;
+	mem_write(SLOT + 0x1A, cpu.a);
+	cpu.a = mem_read(0xC60C); op_add8(0x10, 0); mem_write(0xC604, cpu.a);
+	cpu.a = mem_read(0xC60D); op_add8(0x7C, 0); mem_write(0xC605, cpu.a);
+	for (;;) {                         // $8CA3: the choice, its frame blinking
+		tcall(0x7F5F, 0x8CA3);
+		cpu.cycles += 10;
+		SET_HL(0x9C68);
+		tcall(0x0830, 0x8CA9);
+		cpu.cycles += 19 + 4 + 7;
+		cpu.a = op_inc8(mem_read(SLOT + 0x1B));
+		op_sub8(0x18, 0, 0);
+		if (cpu.f & FC) cpu.cycles += 12;
+		else { cpu.cycles += 7 + 4; op_xor(cpu.a); }
+		cpu.cycles += 19 + 8 + 10 + 48;
+		mem_write(SLOT + 0x1B, cpu.a);
+		cpu.a = op_rot(7, cpu.a);
+		SET_HL((uint16_t)(0x8EB1 + cpu.a));
+		cpu.a = mem_read(HL);
+		cpu.cycles += 19 + 4;
+		cpu.b = op_dec8(mem_read(SLOT + 0x1A));
+		if (cpu.f & FZ) {              // the first: its colours
+			cpu.cycles += 12 + 13 * 3 + 12;
+			mem_write(0xC029, cpu.a); mem_write(0xC02A, cpu.a); mem_write(0xC02B, cpu.a);
+		} else {
+			cpu.cycles += 7 + 4;
+			cpu.b = op_dec8(cpu.b);
+			if (cpu.f & FZ) {
+				cpu.cycles += 12 + 13 * 2;
+				mem_write(0xC02B, cpu.a); mem_write(0xC02C, cpu.a);
+			} else {
+				cpu.cycles += 7 + 13 * 2 + 12;
+				mem_write(0xC028, cpu.a); mem_write(0xC029, cpu.a);
+			}
+		}
+		yield_at(0x8CE0);
+		cpu.cycles += 13 + 10;
+		cpu.a = mem_read(JOY_PRESSED);
+		SET_HL(0x8CEE);
+		int k = switch_on(0x8CEE, 4, 0x8CE9);
+		if (k < 0) { cpu.cycles += 12; continue; }
+		if (k >= 2) break;             // a button: chosen
+		if (k == 0) { cpu.cycles += 7 + 12; cpu.b = 2; }   // up
+		else { cpu.cycles += 7; cpu.b = 4; }               // down
+		cpu.cycles += 19 + 4 + 4 + 7;
+		cpu.a = mem_read(SLOT + 0x1A);
+		op_add8(cpu.b, 0);
+		cpu.l = cpu.a; cpu.h = 3;
+		tcall(0x7E3C, 0x8D08);         // (+2 or +4) mod 3
+		cpu.cycles += 19;
+		mem_write(SLOT + 0x1A, cpu.h);
+		tcall(0x7F14, 0x8D0E);         // the click
+		cpu.cycles += 10;
+	}
+	tcall(0x7F17, 0x8D14);             // $8D14: chosen
+	cpu.cycles += 19 + 13 + 10;
+	cpu.a = mem_read(SLOT + 0x1A);
+	mem_write(0xC0CD, cpu.a);
+	SET_HL(0x8100);
+	tcall(0x0C43, 0x8D20);             // kept
+	cpu.cycles += 7;
+	op_add8(0x31, 0);
+	tcall(0x7E4B, 0x8D25);             // its number shown
+	cpu.cycles += 19;
+	cpu.a = mem_read(SLOT + 0x1A);
+	rst20(0x9C88, cpu.a);
+	tcall(0x0830, 0x8D2F);
+	yield_at(0x8D32);
+	cpu.cycles += 19;
+	cpu.a = mem_read(SLOT + 0x1A);
+	rst20(0x8E49, cpu.a);
+	tcall(0x0C3D, 0x8D3C);             // is there a game there?
+	cpu.cycles += 4 + 7;
+	op_or(cpu.a);
+	if (!(cpu.f & FZ)) {               // $8D9C: loaded
+		cpu.cycles += 5 + 19 + 11;
+		cpu.a = mem_read(SLOT + 0x1A);
+		push16((uint16_t)(cpu.a << 8 | cpu.f));
+		rst20(0x8E55, cpu.a);
+		tcall(0x0C3D, 0x8DA4);
+		cpu.cycles += 13 + 10;
+		mem_write(0xC0CE, cpu.a);
+		uint16_t af = pop16();
+		cpu.a = (uint8_t)(af >> 8); cpu.f = (uint8_t)af;
+		rst20(0x8E4F, cpu.a);
+		cpu.cycles += 10 + 10;
+		SET_DE(0xC500); SET_BC(0x0100);
+		tcall(0x0C49, 0x8DB5);         // the party
+		cpu.cycles += 10 + 10;
+		SET_DE(0xC651); SET_BC(0x036C);
+		tcall(0x0C49, 0x8DBE);         // and the rest
+		tcall(0x0605, 0x8DC1);
+		cpu.cycles += 10;
+		SET_BC(0x8301);
+		tcall(0x0A22, 0x8DC7);         // faded out
+		tcall(0x0A82, 0x8DCA);
+		cpu.cycles += 7 + 13 + 10;
+		cpu.a = 0x10;
+		mem_write(GAME_MODE, 0x10);
+		return;
+	}
+	tcall(0x0605, 0x8D42);             // empty: a new game
+	scroll_screen(0x0380, 0xFFC0, 0xCA00, 0x0040, 0x8D7E, 0x8D81);   // scrolled away
+	cpu.cycles += 10 + 10 + 10 + 10;
+	SET_HL(0xCA00); SET_DE(0xCA01); SET_BC(0x037F);
+	mem_write(0xCA00, 0);
+	ldir();
+	cpu.cycles += 7 + 13 + 10;
+	cpu.a = 6;
+	mem_write(GAME_MODE, 6);
+}
+Native native_journey = { "journey", 0x8BF8, 3, journey, 0, 0, 0, .task = 1 };
+
+// ------------------------------------------------------------- the logo --
+// Game mode 1 at power-on ($8042, the set-up in modes.c): the logo's
+// graphics, and three tasks: the logo slid in with the line scroll table
+// ($807B), each letter's colour cycled ($80FE), and a button to skip it
+// all ($812F). Then the opening (mode 2).
+
+static void sleep_at(uint8_t n, uint16_t site) {   // ld a,n / call $0B16 at site
+	cpu.cycles += 7 + 17 + 19 + 58;
+	cpu.a = n;
+	mem_write(SLOT + 1, n);
+	SET_HL((uint16_t)(site + 3));
+	task_wait_turn((uint16_t)(site + 3));
+}
+
+static void ldir_exact(void) {         // ldir, the machine catching up each step
+	while (op_block(6, 0)) { cpu.cycles += 21; native_boundary(); }
+	cpu.cycles += 16;
+	native_boundary();
+}
+
+static void logo(void) {               // $807B
+	cpu.cycles += 10 + 10;
+	SET_HL(0x8141); SET_BC(0x0102);
+	tcall(0x0A22, 0x8081);             // the colours from black
+	cpu.cycles += 10;
+	SET_BC(0x000A);
+	tcall(0x01A9, 0x8087);
+	tcall(0x0201, 0x808A);
+	cpu.cycles += 19 * 3;
+	mem_write(SLOT + 0x1A, 0x09);
+	mem_write(SLOT + 0x1B, 0xF7);
+	mem_write(SLOT + 0x16, 0x0B);
+	do {                               // 11 steps: the scroll table filled with the next offsets
+		cpu.cycles += 19 + 19 + 16 + 10 + 10 + 10 + 10;
+		SET_HL(rd16(SLOT + 0x1A));
+		wr16(0xD000, HL);
+		SET_HL(0xD000); SET_DE(0xD002); SET_BC(0x00BE);
+		ldir_exact();
+		tcall(0x01F1, 0x80AD);
+		sleep_at(2, 0x80B2);
+		cpu.cycles += 23 + 23 + 23;
+		mem_write(SLOT + 0x1A, op_dec8(mem_read(SLOT + 0x1A)));
+		mem_write(SLOT + 0x1B, op_inc8(mem_read(SLOT + 0x1B)));
+		mem_write(SLOT + 0x16, op_dec8(mem_read(SLOT + 0x16)));
+		cpu.cycles += (cpu.f & FZ) ? 7 : 12;
+	} while (!(cpu.f & FZ));
+	tcall(0x01E3, 0x80C0);
+	cpu.cycles += 10 + 10;
+	SET_HL(0x8151); SET_BC(0x0101);
+	tcall(0x0A22, 0x80C9);
+	tcall(0x0A82, 0x80CC);
+	cpu.cycles += 10 + 10;
+	SET_HL(0x813B); SET_BC(0x0601);
+	do {                               // six letters' colour tasks
+		cpu.cycles += 11 + 11 + 10;
+		push16(BC); push16(HL);
+		SET_DE(0x80FE);
+		call(0x0B33);
+		cpu.cycles += 10 + 10 + 7 + 19 + 19 + 6 + 4;
+		SET_HL(pop16()); SET_BC(pop16());
+		cpu.a = mem_read(HL);
+		mem_write(cpu.iy + 0x07, cpu.a);   // its colour
+		mem_write(cpu.iy + 0x01, cpu.c);   // and its start: a turn apart
+		SET_HL(HL + 1);
+		cpu.c = op_inc8(cpu.c);
+		if (--cpu.b) cpu.cycles += 13; else cpu.cycles += 8;
+	} while (cpu.b);
+	sleep_at(0x5A, 0x80EC);
+	cpu.cycles += 10;
+	SET_BC(0x8102);
+	tcall(0x0A22, 0x80F2);             // faded out
+	tcall(0x0A82, 0x80F5);
+	cpu.cycles += 7 + 13 + 10;
+	cpu.a = 2;
+	mem_write(GAME_MODE, 2);
+}
+Native native_logo = { "logo", 0x807B, 3, logo, 0, 0, 0, .task = 1 };
+
+static void logo_letter(void) {        // $80FE: a letter's colour, 15 turns
+	cpu.cycles += 19 + 19;
+	mem_write(SLOT + 0x16, 0x0F);
+	mem_write(SLOT + 0x1A, 0x01);
+	for (;;) {                         // $8106
+		cpu.cycles += 19 + 7;
+		cpu.a = mem_read(SLOT + 0x1A);
+		op_sub8(1, 0, 0);
+		if (cpu.f & FZ) cpu.cycles += 12;
+		else {                         // the last palette entry back
+			cpu.cycles += 7 + 4 + 7;
+			cpu.l = cpu.a; cpu.h = 0x34;
+			call(0x0843);
+		}
+		cpu.cycles += 23 + 19 + 7;
+		mem_write(SLOT + 0x1A, op_inc8(mem_read(SLOT + 0x1A)));
+		cpu.a = mem_read(SLOT + 0x1A);
+		op_sub8(0x10, 0, 0);
+		if (cpu.f & FZ) cpu.cycles += 12;
+		else {                         // the next one in the letter's colour
+			cpu.cycles += 7 + 4 + 19;
+			cpu.l = cpu.a; cpu.h = mem_read(SLOT + 0x07);
+			call(0x0843);
+		}
+		yield_at(0x8124);
+		cpu.cycles += 23;
+		mem_write(SLOT + 0x16, op_dec8(mem_read(SLOT + 0x16)));
+		if (cpu.f & FZ) { cpu.cycles += 7; break; }
+		cpu.cycles += 12;
+	}
+	cpu.cycles += 10;
+	native_continue_at(0x0B5A);        // end_task
+}
+Native native_logo_letter = { "logo_letter", 0x80FE, 3, logo_letter, 0, 0, 0, .task = 1 };
+
+static void logo_skip(void) {          // $812F: a button skips the logo
+	cpu.cycles += 13 + 7;
+	cpu.a = mem_read(JOY_PRESSED);
+	op_and(0x30);
+	if (cpu.f & FZ) { cpu.cycles += 11; return; }
+	cpu.cycles += 5 + 7 + 13 + 10;
+	cpu.a = 2;
+	mem_write(GAME_MODE, 2);
+}
+Native native_logo_skip = { "logo_skip", 0x812F, 3, logo_skip, 0, 0, 0, .task = 1 };

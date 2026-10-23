@@ -122,7 +122,7 @@ alone runs the game.
 - **`pc/native/`** holds readable C rewrites of the game's routines, which
   replace the translated originals one by one through `native` lines in
   `tools/hints.txt`:
-  - the opening words, the title screen (the logo, the demo, the Options menu), the interlude after the demo, naming the Avatar, the story, the gypsy's questions and making the party, the sound test, the end of the game (the Codex's questions) and the credits;
+  - the logo at power-on, the opening words, the title screen (the logo, the demo, the Options menu), the interlude after the demo, Journey Onward (the saved games, loading one), naming the Avatar, the story, the gypsy's questions and making the party, the sound test, the end of the game (the Codex's questions) and the credits;
   - text printing and the text window;
   - menus, number entry and yes/no prompts;
   - talking to people;
@@ -136,6 +136,7 @@ alone runs the game.
   - the sound driver (bank $1F): the frame update, its sequencer and commands, envelopes, modulation, slides and fades, starting tunes and sounds, and the PSG's (and FM unit's) registers;
   - every game mode's set-up (the screen, graphics and task for the title, the story, the world, towns, dungeons, fights, camping, shrines, the ending);
   - the main loop (reading the pads, clearing the sprites, waiting for the pass's frames, the pause), the task scheduler and the task system;
+  - sprites: figures put in the sprite tables, and their steps along a path;
   - copying into video memory: the queue of copies for the next vertical blank, writes and fills, the run-length packed graphics (four bitplanes, or two streams into RAM), and the copies from other banks;
   - the interrupt handler: each frame's count, pad and reset button, display switch, scroll, sprite tables, palette and queue of video memory copies, and the line interrupt's scroll.
 
@@ -181,7 +182,7 @@ pc/out/u4_headless.exe build/u4.pak --headless 8632 --keys script.keys
 ```
 
 Here `script.keys` holds lines of the form `<frame> <buttons>`, with buttons
-from `UDLR12` or `-` for none. A line `<frame> =C9AB:FF` writes RAM instead.
+from `UDLR12`, `P` (Pause), `X` (Reset) or `-` for none. A line `<frame> =C9AB:FF` writes RAM instead.
 `U4_RANDOM=seed` plays random input. `tools/cycles.py` lists original code
 with its cycle counts.
 
@@ -191,6 +192,7 @@ with its cycle counts.
 | --- | --- |
 | `python tools/disasm.py build/original.sms src coverage/cov.bin` | regenerates `src/` after editing `tools/hints.txt` (names flow into the source and the generated C) |
 | `python tools/disasm.py build/original.sms out coverage/cov.bin --inline-data` | writes a copy with the data inline, for reading only; never commit it |
+| `U4_PC_PROFILE=prof.txt pc/out/u4_headless.exe ...`, then `python tools/pc_profile.py prof.txt` | where the machine is at each line's end, summed by routine: which original code still takes the most time |
 
 `coverage/cov.bin` records which ROM bytes run as code and which are read as
 data; the disassembler and the C generator are driven by it.

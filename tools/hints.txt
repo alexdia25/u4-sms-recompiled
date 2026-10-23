@@ -266,6 +266,14 @@ name     00:2E1B menu_window_clear
 name     00:2E54 menu_window_show
 name     00:340F item_name
 native   00:0499 native_queue_text_copy
+native   00:096B native_put_figure
+native   00:09C7 native_put_figure_at
+native   00:0962 native_far_put_figure
+native   00:09BE native_far_put_figure_at
+native   00:3082 native_put_picture
+native   00:30B6 native_put_picture_cell
+native   00:0BEE native_path_step
+native   00:0C19 native_path_byte
 native   00:0465 native_queue_vram_copy
 native   00:0458 native_queue_screen
 native   00:0463 native_queue_bank2_copy
@@ -420,8 +428,16 @@ native   03:8305 native_title
 native   03:87AD native_title_figures
 native   03:894D native_interlude
 native   03:89A4 native_ripple
+code     03:807B                       # the logo's tasks (started by address)
+code     03:80FE
+code     03:812F
+native   03:807B native_logo
+native   03:80FE native_logo_letter
+native   03:812F native_logo_skip
 code     03:8A61                       # the interlude's button task (started by address)
 native   03:8A61 native_interlude_button
+code     03:8BF8                       # Journey Onward's task (started by address)
+native   03:8BF8 native_journey
 native   03:8EBD native_new_game
 native   03:92D4 native_story
 native   03:9441 native_gate_task

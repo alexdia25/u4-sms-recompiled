@@ -66,6 +66,29 @@ static void write_ppm(const char *path) {
 
 // --keys script: lines "<frame> <buttons>" (buttons from U D L R 1 2, or - for none,
 // P for Pause), applied from that frame on; "<frame> =C9AB:FF" writes RAM
+// U4_PC_PROFILE=file: where the machine is at each line's end, as "bank:addr
+// count" (PARK_PC and up: rewritten code spending its time), to see which
+// original code still runs most (tools/pc_profile.py sums it by routine)
+static uint32_t (*pc_samples)[0x4000];
+static uint32_t park_samples;
+static void sample_pc(void) {
+	if (cpu.pc >= 0xFFF0) { park_samples++; return; }
+	int b = cpu.pc < 0xC000 ? rom_bank_at(cpu.pc) : -1;
+	if (b >= 0 && b < 32) pc_samples[b][cpu.pc & 0x3FFF]++;
+}
+static void write_pc_profile(const char *path) {
+	FILE *f = fopen(path, "w");
+	if (!f) return;
+	fprintf(f, "park %u%c", park_samples, 10);
+	for (int b = 0; b < 32; b++)
+		for (int a = 0; a < 0x4000; a++)
+			if (pc_samples[b][a]) {
+				int cpu_addr = b == 0 ? a : b == 1 ? 0x4000 + a : 0x8000 + a;
+				fprintf(f, "%02X:%04X %u%c", b, cpu_addr, pc_samples[b][a], 10);
+			}
+	fclose(f);
+}
+
 // U4_LOG_FALLBACK=file: list ROM addresses (bank:addr) that ran on the interpreter
 static uint8_t fallback_seen[32][0x4000];
 static void log_fallback(uint16_t pc) {
@@ -110,12 +133,14 @@ static int headless(int frames, const char *shot, const char *keys) {
 				continue;
 			}
 			sms.pad1 = 0;
+			sms.reset = 0;
 			for (char *c = btn; *c; c++) {
 				switch (*c) {
 				case 'U': sms.pad1 |= PAD_UP; break; case 'D': sms.pad1 |= PAD_DOWN; break;
 				case 'L': sms.pad1 |= PAD_LEFT; break; case 'R': sms.pad1 |= PAD_RIGHT; break;
 				case '1': sms.pad1 |= PAD_1; break; case '2': sms.pad1 |= PAD_2; break;
 				case 'P': sms_pause(); break;
+				case 'X': sms.reset = 1; break;   // the Reset button
 				}
 			}
 			if (fscanf(k, "%d %31s", &next_frame, btn) != 2) next_frame = -1;
@@ -216,7 +241,13 @@ int main(int argc, char **argv) {
 	load_save(pack_path);
 	if (state && sms_load_state(state)) { fprintf(stderr, "cannot load state %s\n", state); return 1; }
 	if (getenv("U4_LOG_FALLBACK")) recomp_on_fallback = log_fallback;
-	if (frames >= 0) { int r = headless(frames, shot, keys); native_report(); return r; }
+	if (getenv("U4_PC_PROFILE")) { pc_samples = calloc(32, sizeof *pc_samples); sms_on_line = sample_pc; }
+	if (frames >= 0) {
+		int r = headless(frames, shot, keys);
+		native_report();
+		if (pc_samples) write_pc_profile(getenv("U4_PC_PROFILE"));
+		return r;
+	}
 
 #ifdef U4_HEADLESS_ONLY
 	fprintf(stderr, "built without SDL; use --headless\n");

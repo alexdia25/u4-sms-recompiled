@@ -42,15 +42,30 @@ static void screen_off(void) {         // the screen and the sound cleared ($027
 	call(0x0265);
 }
 
-// $8042 (mode 1): the opening logo, only once ($C005); then mode 2
+// $8042 (mode 1): the logo at power-on ($C005 clear; after a Reset it is
+// skipped): its graphics, its tasks (title.c); then mode 2
 static void mode_logo(void) {
-	if (!mem_read(0xC005)) { native_decline(); return; }   // (the logo itself: original code)
 	call(0x7E87);
-	cpu.cycles += 13 + 4 + 7 + 7 + 13 + 10;
+	cpu.cycles += 13 + 4;
 	cpu.a = mem_read(0xC005);
 	op_or(cpu.a);
-	cpu.a = 2;
-	mem_write(0xC600, 2);
+	if (!(cpu.f & FZ)) {
+		cpu.cycles += 7 + 7 + 13 + 10;
+		cpu.a = 2;
+		mem_write(0xC600, 2);
+		return;
+	}
+	cpu.cycles += 12;
+	call(0x0265);
+	far(0x13, 0x9EB3, 0x0000, 0, 0, 0x0749);   // the logo's tiles
+	cpu.cycles += 10 + 10 + 4;
+	SET_HL(0x8161); SET_DE(0x3A96);
+	op_xor(cpu.a);
+	call(0x028B);
+	call(0x0201);
+	start_task(0x812F);
+	start_task(0x807B);
+	jp(0x7E5A);
 }
 
 static void mode_opening(void) {       // $818B (mode 2)

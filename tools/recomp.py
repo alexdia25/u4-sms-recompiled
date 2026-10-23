@@ -272,7 +272,8 @@ class Gen:
         o = self.out
         o.append('%s: /* %04X  %s */' % (self.lab(bank, off), pc, ins.text))
         if (bank, off) in self.d.natives and not alone:
-            o.append('	if (native_call(&%s)) goto dispatch;   /* rewritten in pc/native */' % self.d.natives[(bank, off)])
+            # (cpu.pc set: the code may have come here without a jump)
+            o.append('	cpu.pc = 0x%04X; if (native_call(&%s)) goto dispatch;   /* rewritten in pc/native */' % (pc, self.d.natives[(bank, off)]))
         if ins.undoc:
             o.append('\tcpu.pc = 0x%04X; z80_exec(); goto dispatch;' % pc)
             return

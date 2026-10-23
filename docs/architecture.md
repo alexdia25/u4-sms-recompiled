@@ -124,6 +124,13 @@ come in the middle of it; the C calls `native_irq_point()` after each `ei`
 and the instruction after it, which lets an interrupt pending then be taken
 there, as on the machine.
 
+The Reset button (port $DD bit 4, `X` in a key script) makes the frame
+interrupt jump to $0CB4 with a fresh stack; `native_reset()` drops the
+rewritten code that was waiting (parked fibers, C tasks, time sinks). A
+rewrite that works in bigger steps than single instructions is left as its
+last step did, where the original stops at an instruction, so a Reset
+during such a rewrite can leave different half-done work.
+
 ## Banks
 
 - Slot 0: bank 0 (code, fixed). Slot 1: bank 1 (code) — temporarily banks 4/5 for the

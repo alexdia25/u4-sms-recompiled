@@ -20,6 +20,7 @@ typedef struct SMS {
 	uint8_t mapper[4];   // $FFFC..$FFFF
 	uint8_t ioctrl;
 	uint8_t pad1;        // pressed buttons
+	uint8_t reset;       // the Reset button held
 	uint32_t frame;
 	uint32_t rgb[SCREEN_W * SCREEN_H];   // last finished frame, 0x00RRGGBB
 } SMS;
@@ -28,6 +29,7 @@ extern SMS sms;
 
 void sms_init(const uint8_t *rom, int size);
 void sms_run_frame(void);     // one 60 Hz frame
+extern void (*sms_on_line)(void);   // called after each line's code (profiling)
 int sms_load_state(const char *path);   // a machine snapshot (--state, for tests)
 void sms_pause(void);         // the console's Pause button (NMI)
 // mix `n` mono samples at `rate` Hz of the sound generated during the last frame
