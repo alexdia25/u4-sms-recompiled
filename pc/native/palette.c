@@ -149,3 +149,85 @@ Native native_set_palette_entry = { "set_palette_entry", 0x0843, 0, set_palette_
 Native native_fade_all = { "fade_all", 0x0855, 0, fade_all, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL, .long_calls = 1 };
 Native native_fade_background = { "fade_background", 0x085C, 0, fade_background, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL, .long_calls = 1 };
 Native native_fade_sprites = { "fade_sprites", 0x0863, 0, fade_sprites, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL, .long_calls = 1 };
+
+// ------------------------------------------------------------ the fade task --
+// fade_start ($0A22): a task (DE = $0A3F) that fades the palette over 9
+// steps, B (bits 0 and 1: the background, the sprites; bit 7: to black,
+// from $0910, else to the colours given at HL, kept at $C043) every C
+// frames; $C0C5 is set while it runs, and the wait flag ($C0C7) when done.
+static uint8_t slot(int o) { return mem_read((uint16_t)(cpu.ix + o)); }
+static void bit_slot(int n, int o) {   // bit n,(ix+o)
+	uint16_t a = (uint16_t)(cpu.ix + o);
+	op_bit(n, mem_read(a));
+	cpu.f = (uint8_t)((cpu.f & ~(FX | FY)) | ((a >> 8) & (FX | FY)));
+	I(20);
+}
+
+static void fade_start(void) {
+	push16(BC); I(11);
+	push16(HL); I(11);
+	SET_DE(0x0A3F); I(10);
+	I(17); call_original(0x0B33);      // spawn_task: IY = the slot, carry if none
+	SET_HL(pop16()); I(10);
+	SET_BC(pop16()); I(10);
+	if (cpu.f & FC) { I(11); return; }
+	I(5);
+	mem_write((uint16_t)(cpu.iy + 0x1A), cpu.c); I(19);
+	mem_write((uint16_t)(cpu.iy + 0x1B), cpu.b); I(19);
+	op_bit(7, cpu.b); I(8);
+	if (!(cpu.f & FZ)) { I(11); return; }
+	I(5);
+	SET_DE(0xC043); I(10);             // the colours to fade to, kept
+	SET_BC(0x0020); I(10);
+	while (op_block(6, 0)) I(21);
+	I(16);
+	I(10);
+}
+
+static void fade_step(void) {          // $0A48: one step, then sleep ($0B16) for (ix+$1A) frames
+	bit_slot(7, 0x1B);
+	if (cpu.f & FZ) {
+		I(7);
+		SET_HL(0xC043); I(10);
+		cpu.c = slot(0x16); I(19);
+		I(12);
+	} else {                           // to black
+		I(12);
+		SET_HL(0x0910); I(10);
+		cpu.c = 0x01; I(7);
+	}
+	bit_slot(0, 0x1B);
+	if (!(cpu.f & FZ)) { I(17); call_original(0x085C); } else I(10);
+	bit_slot(1, 0x1B);
+	if (!(cpu.f & FZ)) { I(17); call_original(0x0863); } else I(10);
+	cpu.a = slot(0x1A); I(19);
+	I(17);
+	push16(0x0A6F);                    // call sleep
+	native_continue_at(0x0B16);
+}
+
+static void fade_task(void) {          // $0A3F
+	cpu.a = 0xFF; I(7);
+	mem_write(0xC0C5, cpu.a); I(13);
+	mem_write((uint16_t)(cpu.ix + 0x16), 0x09); I(19);
+	fade_step();
+}
+
+static void fade_task_next(void) {     // $0A6F
+	uint16_t a = (uint16_t)(cpu.ix + 0x16);
+	mem_write(a, op_dec8(mem_read(a))); I(23);
+	if (!(cpu.f & FZ)) { I(12); fade_step(); return; }
+	I(7);
+	bit_slot(7, 0x1B);
+	if (cpu.f & FZ) {
+		I(10);
+		op_xor(cpu.a); I(4);
+		mem_write(0xC0C5, cpu.a); I(13);
+	}
+	I(10);
+	native_continue_at(0x0A9D);        // jp $0A9D: done; the task ends
+}
+
+Native native_fade_start = { "fade_start", 0x0A22, 0, fade_start, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL | OUT_IY, .long_calls = 1 };
+Native native_fade_task = { "fade_task", 0x0A3F, 0, fade_task, 0, .long_calls = 1 };
+Native native_fade_task_next = { "fade_task_next", 0x0A6F, 0, fade_task_next, 0, .long_calls = 1 };

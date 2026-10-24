@@ -6,6 +6,7 @@
 // - rst $20 ($008E): HL = entry A of the table of words at HL (A may be
 //   128 or more); $0092: the same for entry A / 2, $0097: HL = (HL).
 // - rst $28: A = (HL + A); rst $30: HL += A.
+// - switch_on_a ($334A): a jump by a table of keys.
 // Cycle counts are the original's, instruction by instruction (I); the
 // entries at the rst addresses add their jp where there is one.
 #include "../runtime/native.h"
@@ -94,6 +95,32 @@ static void rst30(void) {
 	I(10);
 }
 
+// switch_on_a ($334A): the table at HL of (key, handler) entries, ended by
+// $FF: jump to the handler of the key equal to A (its caller's return
+// popped into AF), or return with Z set when there is none
+static void switch_on_a(void) {
+	for (;;) {
+		cpu.b = mem_read(HL); I(7);
+		cpu.b = op_inc8(cpu.b); I(4);
+		if (cpu.f & FZ) { I(11); return; }
+		I(5);
+		op_sub8(mem_read(HL), 0, 0); I(7);
+		SET_HL(HL + 1); I(6);
+		if (cpu.f & FZ) { I(12); break; }
+		I(7);
+		SET_HL(HL + 1); I(6);
+		SET_HL(HL + 1); I(6);
+		I(10);
+	}
+	{ uint16_t af = pop16(); cpu.a = af >> 8; cpu.f = (uint8_t)af; } I(10);
+	cpu.a = mem_read(HL); I(7);
+	SET_HL(HL + 1); I(6);
+	cpu.h = mem_read(HL); I(7);
+	cpu.l = cpu.a; I(4);
+	I(4);
+	native_continue_at(HL);            // jp (hl)
+}
+
 #define RST(name, addr, out) Native native_##name = { #name, addr, 0, name, out, .long_calls = 1 };
 RST(rst08, 0x0008, OUT_A)
 RST(abs_a, 0x000B, OUT_A | OUT_F)
@@ -108,3 +135,4 @@ RST(jump_table, 0x0083, OUT_A | OUT_F | OUT_HL)
 RST(word_table, 0x008E, OUT_A | OUT_F | OUT_HL)
 RST(word_entry, 0x0092, OUT_A | OUT_F | OUT_HL)
 RST(word_at, 0x0097, OUT_A | OUT_HL)
+RST(switch_on_a, 0x334A, OUT_A | OUT_F | OUT_BC | OUT_HL)
