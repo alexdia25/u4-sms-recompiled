@@ -233,8 +233,7 @@ static void rle_interleaved(void) {    // $0723
 }
 
 // bank_push from a call at `site`: the old bank kept on the stack below
-static void bank_push(uint16_t site) {
-	push16((uint16_t)(site + 3)); I(17);
+static void bank_push_body(void) {     // $07CE, the return on the stack
 	wr16(0xC0C2, HL); I(16);
 	SET_HL(0xDFFF); I(10);
 	cpu.h = mem_read(HL); I(7);
@@ -242,11 +241,18 @@ static void bank_push(uint16_t site) {
 	push16(HL); I(11);
 	SET_HL(rd16(0xC0C2)); I(16);
 	mem_write(0xFFFF, cpu.a); I(13);
-	pop16(); I(10);
+	I(10);                             // ret
 }
 
-static void bank_pop(void) {           // jp $07DE: and the ret is the caller's
-	I(10);
+static void bank_push(uint16_t site) {
+	push16((uint16_t)(site + 3)); I(17);
+	bank_push_body();
+	pop16();
+}
+
+// as natives, for the original's calls: the return is popped for them
+static void nat_bank_push(void) { bank_push_body(); }
+static void bank_pop_body(void) {      // $07DE
 	wr16(0xC0C2, HL); I(16);
 	SET_HL(pop16()); I(10);
 	cpu.l = cpu.a; I(4);
@@ -254,7 +260,14 @@ static void bank_pop(void) {           // jp $07DE: and the ret is the caller's
 	mem_write(0xFFFF, cpu.a); I(13);
 	cpu.a = cpu.l; I(4);
 	SET_HL(rd16(0xC0C2)); I(16);
+	I(10);                             // ret, to the caller's caller
+}
+static void nat_bank_pop(void) { bank_pop_body(); }   // reached by jp
+
+static void bank_pop_body(void);
+static void bank_pop(void) {           // jp $07DE: and the ret is the caller's
 	I(10);
+	bank_pop_body();
 }
 
 static void far_ldir(void) {           // $07EC
@@ -375,3 +388,5 @@ VRAM(title_picture, 0x32FA)
 VRAM(vram_byte, 0x0213)
 VRAM(vram_byte_at, 0x0210)
 VRAM(vram_fill_bytes, 0x0219)
+VRAM(nat_bank_push, 0x07CE)
+VRAM(nat_bank_pop, 0x07DE)

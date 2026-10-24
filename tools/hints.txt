@@ -279,6 +279,21 @@ native   00:0458 native_queue_screen
 native   00:0463 native_queue_bank2_copy
 native   00:024C native_vram_write
 native   00:022A native_vram_fill
+native   00:07CE native_nat_bank_push
+native   00:07DE native_nat_bank_pop
+name     00:09DA put_sprite                 # tile C at E, D
+name     00:335C cursor                     # the blinking text cursor at the text position
+name     00:336E cursor_here                # ... at $C604/$C605
+native   00:09DA native_put_sprite
+native   00:335C native_cursor
+native   00:336E native_cursor_here
+name     00:0855 fade_all                   # each colour one step towards HL's (C = how close is enough)
+name     00:085C fade_background
+name     00:0863 fade_sprites
+native   00:0843 native_set_palette_entry
+native   00:0855 native_fade_all
+native   00:085C native_fade_background
+native   00:0863 native_fade_sprites
 name     00:1AF8 redraw_view                # by jp from $7E45: compose's rows, registers kept
 name     00:1B3B compose_wide               # by jp from $7E3F: a 19 x 5 view
 native   00:1AF8 native_redraw_view

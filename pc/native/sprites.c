@@ -6,6 +6,8 @@
 // - put_figure ($096B): the place from the task's slot (IX+$0B X, +$0D Y);
 //   put_figure_at ($09C7): at E, D. Their far forms ($0962, $09BE) page
 //   bank A in for the list.
+// - put_sprite ($09DA): one sprite, tile C at E, D.
+// - cursor ($335C) and cursor_here ($336E): the blinking text cursor.
 // - path_step ($0BEE): a figure's next step along its path ($0C19).
 // - put_picture ($3082): figure A of the list at $A1B6 in bank $13, at E, D;
 //   put_picture_cell ($30B6): the same at cell L, H (12 pixels a cell).
@@ -249,6 +251,85 @@ static void path_step(void) {          // $0BEE
 	I(10);
 }
 
+// $09DA: one sprite, tile C at E, D (the Y table holds D - 1); none when
+// the table is full
+static void put_sprite(void) {
+	cpu.a = mem_read(0xC064); I(13);
+	op_or(cpu.a); I(4);
+	if (cpu.f & FS) { I(11); return; }
+	I(5);
+	cpu.l = cpu.a; I(4);
+	op_add8(0x02, 0); I(7);
+	mem_write(0xC064, cpu.a); I(13);
+	cpu.h = 0xC1; I(7);
+	mem_write(HL, cpu.e); I(7);
+	cpu.l++; I(4);
+	mem_write(HL, cpu.c); I(7);
+	op_scf(); I(4);
+	cpu.l = op_rot(3, cpu.l); I(8);    // rr l: the Y table
+	cpu.d = op_dec8(cpu.d); I(4);
+	mem_write(HL, cpu.d); I(7);
+	I(10);
+}
+
+static void times8(uint16_t from, uint16_t to) {   // ld a,(from) / add a,a x3 / ld (to),a
+	cpu.a = mem_read(from); I(13);
+	for (int i = 0; i < 3; i++) { op_add8(cpu.a, 0); I(4); }
+	mem_write(to, cpu.a); I(13);
+}
+
+// $336E: the text cursor ($C604 X, $C605 Y): a sprite, and every few
+// passes ($C607 counts; fewer when a pass takes more frames, $C00C) the
+// next of its four frames ($C606), whose tile is queued from bank $13
+static void cursor_here(void) {
+	cpu.a = mem_read(0xC00C); I(13);
+	cpu.b = cpu.a; I(4);
+	cpu.a = 0x02; I(7);
+	cpu.b = op_dec8(cpu.b); I(4);
+	if (cpu.f & FZ) I(12);
+	else {
+		I(7);
+		cpu.a = op_dec8(cpu.a); I(4);
+		cpu.b = op_dec8(cpu.b); I(4);
+		if (cpu.f & FZ) I(12);
+		else { I(7); cpu.a = 0x05; I(7); }
+	}
+	SET_HL(0xC607); I(10);
+	mem_write(HL, op_inc8(mem_read(HL))); I(11);
+	op_sub8(mem_read(HL), 0, 0); I(7);
+	if (!(cpu.f & FC)) I(12);
+	else {
+		I(7);
+		mem_write(HL, 0); I(10);
+		cpu.a = mem_read(0xC606); I(13);
+		cpu.a = op_dec8(cpu.a); I(4);
+		op_and(0x03); I(7);
+		mem_write(0xC606, cpu.a); I(13);
+	}
+	cpu.c = 0xF2; I(7);
+	SET_DE(rd16(0xC604)); I(20);
+	I(17); put_sprite();
+	cpu.a = mem_read(0xC606); I(13);
+	for (int i = 0; i < 5; i++) { op_add8(cpu.a, 0); I(4); }
+	SET_HL(0xB0AF); I(10);
+	I(11);                             // rst $30: HL += A
+	op_add8(cpu.l, 0); I(4);
+	cpu.l = cpu.a; I(4);
+	if (!(cpu.f & FC)) I(11);
+	else { I(5); cpu.h++; I(4); I(10); }
+	SET_DE(0x3E40); I(10);
+	SET_BC(0x0020); I(10);
+	cpu.a = 0x13; I(7);
+	I(10);
+	native_continue_at(0x0465);        // jp queue_vram_copy
+}
+
+static void cursor(void) {             // $335C: at the text position
+	times8(0xC639, 0xC604);
+	times8(0xC63A, 0xC605);
+	cursor_here();
+}
+
 #define SPRITES(name, addr) Native native_##name = { #name, addr, 0, name, 0, .long_calls = 1 };
 SPRITES(put_figure, 0x096B)
 SPRITES(put_figure_at, 0x09C7)
@@ -258,3 +339,6 @@ SPRITES(put_picture, 0x3082)
 SPRITES(put_picture_cell, 0x30B6)
 SPRITES(path_step, 0x0BEE)
 SPRITES(path_byte, 0x0C19)
+SPRITES(put_sprite, 0x09DA)
+SPRITES(cursor, 0x335C)
+SPRITES(cursor_here, 0x336E)
