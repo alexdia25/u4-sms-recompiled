@@ -279,6 +279,16 @@ native   00:0458 native_queue_screen
 native   00:0463 native_queue_bank2_copy
 native   00:024C native_vram_write
 native   00:022A native_vram_fill
+name     00:2740 clear_window
+name     00:333B fill                       # B bytes of C from HL
+name     01:4F8A gem_map
+native   00:2740 native_clear_window
+native   00:333B native_fill
+native   01:4F8A native_gem_map
+name     01:50F2 dungeon_cells
+name     01:5186 dungeon_seen
+native   01:50F2 native_dungeon_cells
+native   01:5186 native_dungeon_seen
 name     00:342B status_glyph               # the corner glyph: virtues, ankh or a character ($C976)
 native   00:342B native_status_glyph
 name     01:4324 status_window

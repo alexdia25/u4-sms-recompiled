@@ -600,6 +600,7 @@ def main():
     DUNGEONS['abyss_altar_cancel'] = ('despise', ['C95B:FF', 'C9A0:19', 'C990:B0', 'C970:02', 'D222:B0', 'C955:FF'],
                                       '2DDDD2D2' + '-' * 3 + '1', 10)
     DUNGEONS['dungeon_stone'] = ('despise', ['C95B:FF', 'C955:01'], '2DDDD2D2' + '-' * 3 + '2', 10)
+    DUNGEONS['dungeon_gem'] = ('despise', ['C95B:FF', 'C914:02'], '2DDDD22D2', 10)   # the gem's view of the level
     SEARCH6 = '2DDDDDD2'               # the command menu, Search
     DUNGEONS['dsearch_nothing'] = ('despise', ['C95B:FF'], SEARCH6, 10)
     for cell, what in ((0x70, 'orb'), (0x90, 'fountain0'), (0x91, 'fountain1'), (0x92, 'fountain2'),
