@@ -9,6 +9,8 @@
 //   (invert_tile, $41D2, 48 bytes through $C1C0).
 // - invert_palette ($41EC): background colours 4-15 inverted, then a wait
 //   for the vertical blank.
+// - dissolve ($4EAC): the window cleared in a pattern of dots (dots,
+//   $4ED5; set_pixel, $4F15: one pixel of the window's patterns).
 // The C goes instruction by instruction (I), as the VDP accesses must land
 // where the original's do. Cycle counts are the original's.
 #include "../runtime/native.h"
@@ -217,6 +219,127 @@ static void invert_palette(void) {     // $41EC
 	native_continue_at(0x041C);        // jp wait_vblank
 }
 
+// set_pixel ($4F15): pixel (L, H) of the map window's patterns (tile
+// columns $220 bytes apart from VRAM $0020, 4 bytes a pixel row) set to
+// colour A, through $C1C0
+static void set_pixel(void) {
+	push(BC); push(HL); push(DE);
+	op_ex_af(); I(4);
+	ex_de_hl();
+	cpu.a = cpu.e; I(4);
+	op_and(0xF8); I(7);
+	cpu.l = cpu.a; I(4);
+	cpu.h = 0; I(7);
+	op_rrca(); I(4);
+	op_rrca(); I(4);
+	cpu.b = cpu.a; I(4);
+	cpu.c = cpu.h; I(4);
+	SET_HL(op_add16(HL, HL)); I(11);
+	SET_HL(op_add16(HL, HL)); I(11);
+	SET_HL(op_add16(HL, BC)); I(11);
+	cpu.c = cpu.l; I(4);
+	cpu.b = cpu.h; I(4);
+	cpu.l = cpu.d; I(4);
+	cpu.h = 0; I(7);
+	SET_HL(op_add16(HL, HL)); I(11);
+	SET_HL(op_add16(HL, HL)); I(11);
+	SET_HL(op_add16(HL, BC)); I(11);
+	SET_BC(0x0020); I(10);
+	SET_HL(op_add16(HL, BC)); I(11);
+	cpu.c = 0xBF; I(7);
+	cpu.iff1 = cpu.iff2 = 0; I(4);
+	io_out(BC, cpu.l); I(12);
+	io_out(BC, cpu.h); I(12);
+	cpu.iff1 = cpu.iff2 = 1;           // ei / ld a,e
+	cpu.a = cpu.e; cpu.cycles += 4 + 4;
+	native_irq_point();
+	op_and(0x07); I(7);
+	cpu.a = op_inc8(cpu.a); I(4);
+	cpu.b = cpu.a; I(4);
+	cpu.a = 0x01; I(7);
+	do {
+		op_rrca(); I(4);
+		if (--cpu.b) I(13); else I(8);
+	} while (cpu.b);
+	cpu.e = cpu.a; I(4);               // the pixel's bit
+	op_ex_af(); I(4);
+	cpu.d = cpu.a; I(4);               // the colour, a bit a plane
+	for (int p = 0; p < 4; p++) {
+		cpu.a = io_in((uint16_t)(cpu.a << 8 | 0xBE)); I(11);
+		op_or(cpu.e); I(4);
+		cpu.d = op_rot(3, cpu.d); I(8);
+		if (cpu.f & FC) I(12);
+		else { I(7); op_xor(cpu.e); I(4); }
+		mem_write((uint16_t)(0xC1C0 + p), cpu.a); I(13);
+	}
+	cpu.h |= 0x40; I(8);
+	cpu.iff1 = cpu.iff2 = 0; I(4);
+	io_out(BC, cpu.l); I(12);
+	io_out(BC, cpu.h); I(12);
+	cpu.iff1 = cpu.iff2 = 1;           // ei / pop de
+	SET_DE(pop16()); cpu.cycles += 4 + 10;
+	native_irq_point();
+	SET_HL(0xC1C0); I(10);
+	SET_BC(0x04BE); I(10);
+	block_io(3);
+	SET_HL(pop16()); I(10);
+	SET_BC(pop16()); I(10);
+	I(10);
+}
+
+// dots ($4ED5): 22 x 22 pixels from (L, H), 6 apart, cleared
+static void dots(void) {
+	push(BC); push(HL);
+	SET_BC(0x1606); I(10);
+	do {
+		push(BC); push(HL);
+		cpu.b = 0x16; I(7);
+		do {
+			op_xor(cpu.a); I(4);
+			I(17); set_pixel();
+			cpu.a = cpu.l; I(4);
+			op_add8(cpu.c, 0); I(4);
+			cpu.l = cpu.a; I(4);
+			if (--cpu.b) I(13); else I(8);
+		} while (cpu.b);
+		SET_HL(pop16()); I(10);
+		SET_BC(pop16()); I(10);
+		cpu.a = cpu.h; I(4);
+		op_add8(cpu.c, 0); I(4);
+		cpu.h = cpu.a; I(4);
+		if (--cpu.b) I(13); else I(8);
+	} while (cpu.b);
+	SET_HL(pop16()); I(10);
+	SET_BC(pop16()); I(10);
+	I(10);
+}
+
+static void sra4(void) { for (int i = 0; i < 4; i++) { cpu.a = op_rot(5, cpu.a); I(8); } }
+
+// dissolve ($4EAC): dots from places stepped by the list at $4EF1 (a
+// signed nibble each for X and Y; $88 ends): the screen goes dark
+static void dissolve(void) {
+	SET_HL(0x0000); I(10);
+	SET_DE(0x4EF1); I(10);
+	for (;;) {
+		I(17); dots();
+		cpu.a = mem_read(DE); I(7);
+		op_sub8(0x88, 0, 0); I(7);
+		if (cpu.f & FZ) { I(11); return; }
+		I(5);
+		for (int i = 0; i < 4; i++) { op_rrca(); I(4); }
+		sra4();
+		op_add8(cpu.l, 0); I(4);
+		cpu.l = cpu.a; I(4);
+		cpu.a = mem_read(DE); I(7);
+		sra4();
+		op_add8(cpu.h, 0); I(4);
+		cpu.h = cpu.a; I(4);
+		SET_DE(DE + 1); I(6);
+		I(12);
+	}
+}
+
 #define EFFECT(name, addr, out) Native native_##name = { #name, addr, 1, name, out, .long_calls = 1 };
 EFFECT(shake, 0x4117, OUT_A | OUT_F)
 EFFECT(shift_block, 0x4173, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL)
@@ -224,3 +347,6 @@ EFFECT(invert, 0x41A9, OUT_A | OUT_F)
 EFFECT(invert_tile, 0x41D2, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL)
 EFFECT(invert_palette, 0x41EC, OUT_A | OUT_F)
 Native native_forget_screen = { "forget_screen", 0x276D, 0, forget_screen, OUT_F, .long_calls = 1 };
+EFFECT(set_pixel, 0x4F15, OUT_A | OUT_F)
+EFFECT(dots, 0x4ED5, OUT_A | OUT_F)
+EFFECT(dissolve, 0x4EAC, OUT_A | OUT_F | OUT_DE | OUT_HL)

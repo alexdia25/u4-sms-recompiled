@@ -279,6 +279,24 @@ native   00:0458 native_queue_screen
 native   00:0463 native_queue_bank2_copy
 native   00:024C native_vram_write
 native   00:022A native_vram_fill
+name     03:8B16 screen_pixel               # pixel (L, H) of the screen to colour A
+native   03:8B16 native_screen_pixel
+name     01:4EAC dissolve                   # the window cleared in a pattern of dots
+name     01:4ED5 dots
+name     01:4F15 set_pixel                  # pixel (L, H) of the window to colour A
+native   01:4EAC native_dissolve
+native   01:4ED5 native_dots
+native   01:4F15 native_set_pixel
+name     01:5247 picture                    # bank A, HL: tiles, width, height, tile numbers; at VRAM DE
+name     01:5290 picture_reveal             # the same faded in over 32 frames
+name     01:5311 set_up_reveal
+name     01:5331 picture_header
+name     00:0950 sprites_clear
+native   01:5247 native_picture
+native   01:5290 native_picture_reveal
+native   01:5311 native_set_up_reveal
+native   01:5331 native_header
+native   00:0950 native_sprites_clear
 native   00:0008 native_rst08
 native   00:000B native_abs_a
 native   00:0010 native_rst10
