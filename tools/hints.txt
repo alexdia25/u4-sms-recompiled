@@ -279,6 +279,16 @@ native   00:0458 native_queue_screen
 native   00:0463 native_queue_bank2_copy
 native   00:024C native_vram_write
 native   00:022A native_vram_fill
+name     00:2CFE text_area_clear
+name     00:2D25 text_block                 # header: shadow address, C cells, B rows; then the cells
+name     00:2D47 text_blank                 # B rows of C cells at DE
+name     00:2D4A text_fill                  # ... of the cell in HL
+name     00:2DA7 text_line                  # text at HL to column E, row D, queued
+native   00:2CFE native_text_area_clear
+native   00:2D25 native_text_block
+native   00:2D47 native_text_blank
+native   00:2D4A native_text_fill
+native   00:2DA7 native_text_line
 name     00:2EBD draw_char                  # the title's proportional font: A at the pen ($C60C)
 name     00:2F6D draw_string
 name     00:2F80 draw_strings

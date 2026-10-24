@@ -444,3 +444,94 @@ static void nat_buy_or_sell(void) { cpu.cycles += 10; SET_HL(0xAB77); two_choice
 static void nat_two_choices(void) { two_choices(); }
 Native native_buy_or_sell = { "buy_or_sell", 0xAB4B, 2, nat_buy_or_sell, OUT_A | OUT_DE | OUT_HL, 0, 0 };
 Native native_two_choices = { "two_choices", 0xAB4E, 2, nat_two_choices, OUT_A | OUT_DE | OUT_HL, 0, 0 };
+
+// ------------------------------------------------------- more of the same --
+static int queue_full(void) {
+	if (mem_read(VRAM_QUEUED) < 0x20) return 0;
+	native_decline();                  // the original waits a frame for room
+	return 1;
+}
+
+// text_line ($2DA7, by jp): the text at HL (to a 0) at column E, row D,
+// queued for the VDP as one row of its length
+static void text_line(void) {
+	if (queue_full()) return;
+	cell_address();
+	uint16_t de = DE;
+	cpu.cycles += 11 + 7;
+	cpu.c = 0;
+	for (;;) {
+		cpu.a = mem_read(HL); SET_HL(HL + 1);
+		if (!cpu.a) break;
+		cpu.c++;
+		op_add8(0x40, 0);
+		mem_write(DE, cpu.a); cpu.e++;
+		cpu.a = 0x01;
+		mem_write(DE, cpu.a); cpu.e++;
+		cpu.cycles += 74;
+	}
+	cpu.cycles += 29 + 10 + 7 + 10;
+	SET_DE(de);
+	cpu.b = 1;
+	queue_text_copy();
+}
+Native native_text_line = { "text_line", 0x2DA7, 0, text_line, OUT_A | OUT_F | OUT_BC | OUT_HL, 0, 0 };
+
+// text_block ($2D25): a block of text cells from HL (after its header: the
+// shadow address, then C cells a row and B rows) into the shadow, queued
+static void text_block(void) {
+	uint8_t c = mem_read((uint16_t)(HL + 2)), b = mem_read((uint16_t)(HL + 3));
+	if (!b || !c || c >= 0x80) { native_decline(); return; }   // the original's long loops
+	if (queue_full()) return;
+	cpu.e = mem_read(HL); cpu.d = mem_read((uint16_t)(HL + 1));
+	cpu.c = c; cpu.b = b;
+	SET_HL(HL + 4);
+	cpu.cycles += 4 * (7 + 6) + 11 + 11 + 8;
+	uint16_t de = DE;
+	for (uint8_t r = 0; r < b; r++) {
+		uint16_t to = DE;
+		for (int i = 0; i < c * 2; i++) mem_write((uint16_t)(to + i), mem_read((uint16_t)(HL + i)));
+		SET_HL(HL + c * 2);
+		SET_DE(to + 0x40);
+		cpu.cycles += 11 + 11 + 7 + 21 * c * 2 - 5 + 10 + 4 + 7 + 4 + 4 + 4 + 4 + 10 + (r + 1 < b ? 13 : 8);
+	}
+	cpu.cycles += 10 + 10 + 10;
+	SET_DE(de);
+	cpu.c = c; cpu.b = b;
+	queue_text_copy();
+}
+Native native_text_block = { "text_block", 0x2D25, 0, text_block, OUT_A | OUT_F | OUT_BC | OUT_HL, 0, 0 };
+
+// text_area_clear ($2CFE, by jp): the whole shadow to 0
+static void text_area_clear(void) {
+	SET_HL(0xCA00); SET_DE(0xCA01); SET_BC(0x05FF);
+	mem_write(HL, 0);
+	cpu.cycles += 10 + 10 + 10 + 10;
+	while (op_block(6, 0)) cpu.cycles += 21;
+	cpu.cycles += 16 + 10;
+}
+Native native_text_area_clear = { "text_area_clear", 0x2CFE, 0, text_area_clear, OUT_F | OUT_BC | OUT_DE | OUT_HL, 0, 0 };
+
+// text_fill ($2D47 with blanks, $2D4A with the cell in HL, by jp): B rows of
+// C cells from the shadow address DE
+static void text_fill(void) {
+	{ uint16_t t = HL; SET_HL(DE); SET_DE(t); }
+	cpu.cycles += 4;
+	uint8_t rows = cpu.b, n = cpu.c;
+	do {
+		uint16_t hl = HL;
+		uint8_t k = n;
+		do {
+			mem_write(HL, cpu.e); cpu.l = op_inc8(cpu.l);
+			mem_write(HL, cpu.d); cpu.l = op_inc8(cpu.l);
+			cpu.cycles += 7 + 4 + 7 + 4 + (k != 1 ? 13 : 8);
+		} while (--k);
+		SET_HL(op_add16(hl, 0x0040));
+		cpu.cycles += 11 + 11 + 4 + 10 + 10 + 11 + 10 + (rows != 1 ? 13 : 8);
+	} while (--rows);
+	cpu.b = 0; cpu.c = n;
+	cpu.cycles += 10;
+}
+static void text_blank(void) { SET_HL(0); cpu.cycles += 10; text_fill(); }
+Native native_text_blank = { "text_blank", 0x2D47, 0, text_blank, OUT_F | OUT_BC | OUT_DE | OUT_HL, 0, 0 };
+Native native_text_fill = { "text_fill", 0x2D4A, 0, text_fill, OUT_F | OUT_BC | OUT_DE | OUT_HL, 0, 0 };
