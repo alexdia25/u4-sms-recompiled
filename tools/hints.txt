@@ -270,8 +270,6 @@ native   00:096B native_put_figure
 native   00:09C7 native_put_figure_at
 native   00:0962 native_far_put_figure
 native   00:09BE native_far_put_figure_at
-native   00:3082 native_put_picture
-native   00:30B6 native_put_picture_cell
 native   00:0BEE native_path_step
 native   00:0C19 native_path_byte
 native   00:0465 native_queue_vram_copy
@@ -279,6 +277,33 @@ native   00:0458 native_queue_screen
 native   00:0463 native_queue_bank2_copy
 native   00:024C native_vram_write
 native   00:022A native_vram_fill
+native   00:0008 native_rst08
+native   00:000B native_abs_a
+native   00:0010 native_rst10
+native   00:0018 native_rst18
+native   00:0020 native_rst20
+native   00:0028 native_rst28
+native   00:0030 native_rst30
+native   00:006F native_read_address
+native   00:0078 native_write_address
+native   00:0083 native_jump_table
+native   00:008E native_word_table
+native   00:0092 native_word_entry
+native   00:0097 native_word_at
+name     00:2FA7 title_font                 # the font for draw_char's tiles
+native   00:2FA7 native_title_font
+name     00:0C2D sram_on                    # battery RAM paged in ($FFFC bit 3)
+name     00:0C35 sram_off
+name     00:0C3D sram_read
+name     00:0C43 sram_write
+name     00:0C49 sram_copy
+name     00:0C50 sram_check                 # power-on: the mark at $8010, else cleared
+native   00:0C2D native_sram_on
+native   00:0C35 native_sram_off
+native   00:0C3D native_sram_read
+native   00:0C43 native_sram_write
+native   00:0C49 native_sram_copy
+native   00:0C50 native_sram_check
 name     00:276D forget_screen              # $DA00 to $FF: the whole view redrawn
 name     01:4117 shake                      # the earthquake
 name     01:4173 shift_block
@@ -332,9 +357,7 @@ native   00:0210 native_vram_byte_at
 native   00:0213 native_vram_byte
 native   00:0219 native_vram_fill_bytes
 name     00:32BE font_in_colour             # by jp from $7F3E: A = colour
-name     00:32FA title_picture              # by jp from $7EE7: A = picture, DE = VRAM
 native   00:32BE native_font_in_colour
-native   00:32FA native_title_picture
 name     00:01A9 set_vdp_reg                # register C = B (kept at $C013 + C)
 name     00:01CB frame_irq_on
 name     00:01E3 line_irq_off

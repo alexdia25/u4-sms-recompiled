@@ -567,6 +567,46 @@ static void draw_spaced(void) {        // $2F88: each character followed by its 
 	}
 }
 
+// $2FA7: the title's font for text drawn into tiles: $63 glyphs of bank
+// $0F at $BB40 to VRAM $2BA0, as the inverse in plane 0, the glyph in
+// plane 1 and planes 2-3 clear
+static void title_font(void) {
+	cpu.a = 0x0F; I(7);
+	bank_push(0x2FA9);
+	SET_DE(0x2BA0); I(10);
+	set_vram_address();
+	SET_HL(0xBB40); I(10);
+	cpu.c = 0x63; I(7);
+	do {
+		cpu.b = 0x08; I(7);
+		do {
+			cpu.a = mem_read(HL); I(7);
+			SET_HL(HL + 1); I(6);
+			op_cpl(); I(4);
+			out_port(0xBE, cpu.a); I(11);
+			wait_vdp();
+			op_cpl(); I(4);
+			out_port(0xBE, cpu.a); I(11);
+			wait_vdp();
+			op_xor(cpu.a); I(4);
+			out_port(0xBE, cpu.a); I(11);
+			wait_vdp();
+			out_port(0xBE, cpu.a); I(11);
+			wait_vdp();
+			if (--cpu.b) I(13); else I(8);
+		} while (cpu.b);
+		cpu.c = op_dec8(cpu.c); I(4);
+		if (cpu.f & FZ) { I(7); break; }
+		I(12);
+	} while (1);
+	bank_pop();
+}
+
+// for the other files (game.h)
+void vram_bank_push(uint16_t site) { bank_push(site); }
+void vram_bank_pop(void) { bank_pop(); }
+void vram_set_write_address(void) { set_vram_address(); }
+
 static const uint16_t bank_scratch[] = { 0xC0C2, 0xC0C3 };
 #define VRAM(name, addr) Native native_##name = { #name, addr, 0, name, 0, bank_scratch, 2, .long_calls = 1 };
 VRAM(vram_write, 0x024C)
@@ -590,3 +630,4 @@ VRAM(draw_char, 0x2EBD)
 VRAM(draw_string, 0x2F6D)
 VRAM(draw_strings, 0x2F80)
 VRAM(draw_spaced, 0x2F88)
+VRAM(title_font, 0x2FA7)

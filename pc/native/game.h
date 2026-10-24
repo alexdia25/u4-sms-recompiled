@@ -26,4 +26,9 @@ void task_wait_frames(uint16_t site, uint8_t n);   // "ld a,n / call $3046" at s
 int creatures_move(uint16_t back);   // $B5B3; back: where "call $B4CA" returns. 1: a fight began
 void creatures_appear(void);          // $BB17
 
+// vram.c, instruction by instruction (the machine catches up after each)
+void vram_bank_push(uint16_t site);   // "call bank_push" ($07CE) at site, bank A
+void vram_bank_pop(void);             // "jp bank_pop" ($07DE), with the ret
+void vram_set_write_address(void);    // rst $10: DE as the VDP's write address
+
 #endif
