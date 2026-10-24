@@ -438,3 +438,167 @@ static void status_page(void) {
 	cpu.a = (uint8_t)(af >> 8); cpu.f = (uint8_t)af;
 }
 Native native_status_page = { "status_page", 0x7552, 1, status_page, 0, .long_calls = 1 };
+
+// ------------------------------------------------------ the status window --
+// Instruction by instruction from here (I): these run every turn.
+static void I(int cycles) { cpu.cycles += cycles; native_boundary(); }
+static void push(uint16_t v) { push16(v); I(11); }
+static void icall(uint16_t addr) { I(17); call_original(addr); }
+
+// $342B: the glyph shown in the corner, by $C976: 0 the eight virtues'
+// marks (a row lit for each one with karma left), 1 the ankh (bank $13),
+// otherwise that character of the font
+static void status_glyph(void) {
+	cpu.a = mem_read(0xC976); I(13);
+	op_or(cpu.a); I(4);
+	if (cpu.f & FZ) {                  // $3454
+		I(12);
+		push(BC); push(DE); push(HL);
+		SET_HL(0x34B3); I(10);
+		SET_DE(0xC1C0); I(10);
+		SET_BC(0x0008); I(10);
+		while (op_block(6, 0)) I(21);
+		I(16);
+		SET_HL(0xC1C0); I(10);
+		SET_DE(0xC90B); I(10);
+		SET_BC(0x0800); I(10);
+		do {
+			cpu.a = mem_read(DE); I(7);
+			op_or(cpu.a); I(4);
+			if (cpu.f & FZ) I(12);
+			else { I(7); mem_write(HL, cpu.c); I(7); }
+			cpu.l = op_inc8(cpu.l); I(4);
+			SET_DE(DE + 1); I(6);
+			if (--cpu.b) I(13); else I(8);
+		} while (cpu.b);
+		SET_HL(0xC1C0); I(10);
+		icall(0x3493);                 // cursor_glyph
+		SET_HL(pop16()); I(10);
+		SET_DE(pop16()); I(10);
+		SET_BC(pop16()); I(10);
+		I(10);
+		return;
+	}
+	I(7);
+	cpu.a = op_dec8(cpu.a); I(4);
+	if (cpu.f & FZ) {                  // $347E: the ankh
+		I(12);
+		push(BC); push(DE); push(HL);
+		cpu.a = 0x13; I(7);
+		SET_HL(0xB12F); I(10);
+		SET_DE(0x25F0); I(10);
+		SET_BC(0x0020); I(10);
+		icall(0x07F4);                 // far_vram_write
+		SET_HL(pop16()); I(10);
+		SET_DE(pop16()); I(10);
+		SET_BC(pop16()); I(10);
+		I(10);
+		return;
+	}
+	I(7);
+	cpu.a = 0x0F; I(7);
+	vram_bank_push(0x3436);
+	push(BC); push(DE); push(HL);
+	cpu.a = mem_read(0xC976); I(13);
+	op_sub8(0x20, 0, 1); I(7);
+	cpu.l = cpu.a; I(4);
+	cpu.h = 0; I(7);
+	for (int i = 0; i < 3; i++) { SET_HL(op_add16(HL, HL)); I(11); }
+	SET_DE(0xBB58); I(10);
+	SET_HL(op_add16(HL, DE)); I(11);
+	icall(0x3493);
+	SET_HL(pop16()); I(10);
+	SET_DE(pop16()); I(10);
+	SET_BC(pop16()); I(10);
+	vram_bank_pop();
+}
+
+// $4324: the status window: each member's name, hit points, status and
+// magic points, then food, and the hull ($C961) on a ship or else the gold
+static void status_window(void) {
+	push((uint16_t)(cpu.a << 8 | cpu.f)); push(BC); push(DE); push(HL);
+	push16(cpu.iy); I(15);
+	SET_HL(rd16(0xC639)); I(16);       // the text position, kept
+	push(HL);
+	I(17); status_glyph();
+	icall(0x2E1B);                     // menu_window_clear
+	cpu.iy = 0xC751; I(14);
+	SET_DE(0xCA66); I(10);
+	cpu.a = mem_read(0xC957); I(13);   // party_size
+	cpu.b = cpu.a; I(4);
+	do {
+		push(BC);
+		push16(cpu.iy); I(15);
+		SET_HL(pop16()); I(10);
+		SET_BC(0x000D); I(10);
+		SET_HL(op_add16(HL, BC)); I(11);
+		push(DE);
+		icall(0x2D6C);                 // the name
+		SET_DE(pop16()); I(10);
+		SET_HL(0x0048); I(10);
+		SET_HL(op_add16(HL, DE)); I(11);
+		{ uint16_t t = HL; SET_HL(DE); SET_DE(t); } I(4);
+		cpu.l = mem_read(cpu.iy); I(19);
+		cpu.h = mem_read((uint16_t)(cpu.iy + 1)); I(19);
+		icall(0x2D81);                 // hit points
+		cpu.e = op_inc8(cpu.e); I(4);
+		cpu.e = op_inc8(cpu.e); I(4);
+		cpu.a = mem_read((uint16_t)(cpu.iy + 0x1C)); I(19);   // the status letter
+		op_add8(0x40, 0); I(7);
+		mem_write(DE, cpu.a); I(7);
+		cpu.e = op_inc8(cpu.e); I(4);
+		cpu.a = 0x01; I(7);
+		mem_write(DE, cpu.a); I(7);
+		for (int i = 0; i < 3; i++) { cpu.e = op_inc8(cpu.e); I(4); }
+		cpu.l = mem_read((uint16_t)(cpu.iy + 9)); I(19);
+		cpu.h = 0; I(7);
+		icall(0x2D87);                 // magic points
+		SET_HL(0x0028); I(10);
+		SET_HL(op_add16(HL, DE)); I(11);
+		{ uint16_t t = HL; SET_HL(DE); SET_DE(t); } I(4);
+		SET_BC(0x001D); I(10);
+		cpu.iy = op_add16(cpu.iy, BC); I(15);
+		SET_BC(pop16()); I(10);
+		if (--cpu.b) I(13); else I(8);
+	} while (cpu.b);
+	icall(0x2E54);                     // menu_window_show
+	SET_HL(0x0014); I(10);
+	wr16(0xC639, HL); I(16);
+	cpu.a = 'F'; I(7);
+	icall(0x548F);                     // print_char
+	cpu.a = ':'; I(7);
+	icall(0x548F);
+	SET_HL(rd16(0xC907)); I(16);       // food
+	SET_BC(0x0430); I(10);
+	icall(0x55CF);                     // print_number
+	SET_HL(0x000A); I(10);
+	wr16(0xC639, HL); I(16);
+	cpu.a = mem_read(0xC959); I(13);
+	op_sub8(0x14, 0, 0); I(7);
+	if (cpu.f & FC) {                  // on a ship: its hull
+		I(7);
+		SET_HL(0x43D2); I(10);
+		icall(0x5519);                 // print_text_hl
+		SET_HL(rd16(0xC961)); I(16);
+		SET_BC(0x0230); I(10);
+		icall(0x55CF);
+		I(12);
+	} else {
+		I(12);
+		SET_HL(0x43D7); I(10);
+		icall(0x5519);
+		SET_HL(rd16(0xC909)); I(16);   // gold
+		SET_BC(0x0430); I(10);
+		icall(0x55CF);
+	}
+	SET_HL(pop16()); I(10);
+	wr16(0xC639, HL); I(16);
+	cpu.iy = pop16(); I(14);
+	SET_HL(pop16()); I(10);
+	SET_DE(pop16()); I(10);
+	SET_BC(pop16()); I(10);
+	{ uint16_t af = pop16(); cpu.a = af >> 8; cpu.f = (uint8_t)af; } I(10);
+	I(10);
+}
+Native native_status_glyph = { "status_glyph", 0x342B, 0, status_glyph, OUT_A | OUT_F, .long_calls = 1 };
+Native native_status_window = { "status_window", 0x4324, 1, status_window, 0, .long_calls = 1 };
