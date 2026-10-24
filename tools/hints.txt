@@ -270,6 +270,8 @@ native   00:096B native_put_figure
 native   00:09C7 native_put_figure_at
 native   00:0962 native_far_put_figure
 native   00:09BE native_far_put_figure_at
+native   00:3082 native_put_picture
+native   00:30B6 native_put_picture_cell
 native   00:0BEE native_path_step
 native   00:0C19 native_path_byte
 native   00:0465 native_queue_vram_copy
@@ -357,7 +359,9 @@ native   00:0210 native_vram_byte_at
 native   00:0213 native_vram_byte
 native   00:0219 native_vram_fill_bytes
 name     00:32BE font_in_colour             # by jp from $7F3E: A = colour
+name     00:32FA title_picture              # by jp from $7EE7: A = picture, DE = VRAM
 native   00:32BE native_font_in_colour
+native   00:32FA native_title_picture
 name     00:01A9 set_vdp_reg                # register C = B (kept at $C013 + C)
 name     00:01CB frame_irq_on
 name     00:01E3 line_irq_off
