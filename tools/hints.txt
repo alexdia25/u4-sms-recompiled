@@ -279,6 +279,13 @@ native   00:0458 native_queue_screen
 native   00:0463 native_queue_bank2_copy
 native   00:024C native_vram_write
 native   00:022A native_vram_fill
+native   01:48B6 native_member_record
+native   01:48CB native_current_record
+native   01:48D5 native_member_object
+native   01:48E1 native_current_object
+native   01:48EB native_foe_record
+native   01:48F7 native_person_record
+native   01:4906 native_person_with_graphic
 name     00:0262 wait_vdp
 native   00:0262 native_wait_vdp
 name     00:0815 far_read
