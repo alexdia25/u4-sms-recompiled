@@ -16,6 +16,8 @@
 //   far_rle_interleaved ($071A).
 // - font_in_colour ($32BE) and title_picture ($32FA): the title's font in a
 //   colour, and a picture of twelve tiles.
+// - The title's proportional text: draw_char ($2EBD), draw_string ($2F6D),
+//   draw_strings ($2F80) and draw_spaced ($2F88).
 // Interrupts are on throughout (but for the two address writes), so the C
 // goes instruction by instruction (I) and the machine catches up after each.
 // Cycle counts are the original's.
@@ -371,6 +373,200 @@ static void title_picture(void) {
 	bank_pop();
 }
 
+// ------------------------------------------------------- the title's text --
+// A proportional font drawn into tiles already in VRAM: the text area's
+// tiles start at $C608 (VRAM), $C60A apart a row of tiles; the pen is at
+// pixel $C60C across, tile row $C60D. A glyph (8 rows, bank $0F at $BB58)
+// is shifted to the pen's pixel and ORed into the two tiles it covers,
+// which are read back first (to $C1C0 and $C1E0); the pen moves 8 on.
+static void set_read_address(void) {   // rst $08: $006F, HL as the read address
+	I(11); I(10);
+	cpu.iff1 = cpu.iff2 = 0; I(4);
+	cpu.a = cpu.l; I(4);
+	out_port(0xBF, cpu.a); I(11);
+	cpu.a = cpu.h; I(4);
+	out_port(0xBF, cpu.a); I(11);
+	cpu.iff1 = cpu.iff2 = 1;
+	cpu.cycles += 4 + 10;
+	native_irq_point();
+}
+
+static void ini_block(void) {          // ini / jr nz, B bytes from the VDP to HL
+	for (;;) {
+		op_block(4, 2); I(16);
+		if (cpu.f & FZ) { I(7); break; }
+		I(12);
+	}
+}
+
+static void exx(void) { op_exx(); I(4); }
+
+static void bank_pop(void);
+
+static void draw_char(void) {          // $2EBD: character A
+	op_sub8(0x20, 0, 1); I(7);
+	cpu.l = cpu.a; I(4);
+	cpu.h = 0; I(7);
+	for (int i = 0; i < 3; i++) { SET_HL(op_add16(HL, HL)); I(11); }
+	SET_DE(0xBB58); I(10);
+	SET_HL(op_add16(HL, DE)); I(11);
+	cpu.a = 0x0F; I(7);
+	bank_push(0x2ECB);
+	cpu.a = mem_read(0xC60C); I(13);
+	cpu.b = cpu.a; I(4);
+	op_and(0x07); I(7);
+	cpu.a = op_inc8(cpu.a); I(4);
+	cpu.c = cpu.a; I(4);               // the shift: pixel within the tile + 1
+	cpu.a = cpu.b; I(4);
+	exx();
+	for (int i = 0; i < 3; i++) { op_rrca(); I(4); }
+	op_and(0x1F); I(7);
+	SET_HL(rd16(0xC608)); I(16);
+	if (cpu.f & FZ) I(12);
+	else {                             // the tile column: A rows of tiles on
+		I(7);
+		SET_DE(rd16(0xC60A)); I(20);
+		cpu.b = cpu.a; I(4);
+		do {
+			SET_HL(op_add16(HL, DE)); I(11);
+			if (--cpu.b) I(13); else I(8);
+		} while (cpu.b);
+	}
+	{ uint16_t t = HL; SET_HL(DE); SET_DE(t); } I(4);
+	cpu.a = mem_read(0xC60D); I(13);
+	cpu.l = cpu.a; I(4);
+	cpu.h = 0; I(7);
+	SET_HL(op_add16(HL, HL)); I(11);
+	SET_HL(op_add16(HL, HL)); I(11);
+	SET_HL(op_add16(HL, DE)); I(11);
+	push16(HL); I(11);
+	set_read_address();
+	{ uint16_t t = HL; SET_HL(DE); SET_DE(t); } I(4);
+	SET_HL(0xC1C0); I(10);
+	SET_BC(0x20BE); I(10);
+	ini_block();
+	SET_HL(rd16(0xC60A)); I(16);
+	SET_HL(op_add16(HL, DE)); I(11);
+	set_read_address();
+	SET_HL(0xC1E0); I(10);
+	cpu.b = 0x20; I(7);
+	ini_block();
+	SET_DE(pop16()); I(10);
+	set_vram_address();
+	push16(DE); I(11);
+	exx();
+	push16(cpu.iy); I(15);
+	cpu.iy = 0xC1C0; I(14);
+	cpu.d = 0; I(7);
+	cpu.a = 0x08; I(7);
+	do {                               // each row: the glyph's byte shifted across two tiles
+		op_ex_af(); I(4);
+		cpu.a = mem_read(cpu.iy); I(19);
+		out_port(0xBE, cpu.a); I(11);
+		cpu.a = mem_read(HL); I(7);
+		SET_HL(HL + 1); I(6);
+		cpu.e = cpu.d; I(4);
+		cpu.b = cpu.c; I(4);
+		cpu.b = op_dec8(cpu.b); I(4);
+		if (cpu.f & FZ) I(12);
+		else {
+			I(7);
+			op_or(cpu.a); I(4);
+			do {
+				op_rra(); I(4);
+				cpu.e = op_rot(3, cpu.e); I(8);
+				if (--cpu.b) I(13); else I(8);
+			} while (cpu.b);
+		}
+		op_or(mem_read((uint16_t)(cpu.iy + 1))); I(19);
+		out_port(0xBE, cpu.a); I(11);
+		cpu.a = cpu.e; I(4);
+		op_or(mem_read((uint16_t)(cpu.iy + 0x21))); I(19);
+		mem_write((uint16_t)(cpu.iy + 0x21), cpu.a); I(19);
+		cpu.a = mem_read((uint16_t)(cpu.iy + 2)); I(19);
+		out_port(0xBE, cpu.a); I(11);
+		cpu.a = mem_read((uint16_t)(cpu.iy + 3)); I(19);
+		out_port(0xBE, cpu.a); I(11);
+		cpu.e = 0x04; I(7);
+		cpu.iy = op_add16(cpu.iy, DE); I(15);
+		op_ex_af(); I(4);
+		cpu.a = op_dec8(cpu.a); I(4);
+		I(10);
+	} while (!(cpu.f & FZ));
+	cpu.iy = pop16(); I(14);
+	SET_DE(pop16()); I(10);
+	SET_HL(rd16(0xC60A)); I(16);
+	SET_HL(op_add16(HL, DE)); I(11);
+	{ uint16_t t = HL; SET_HL(DE); SET_DE(t); } I(4);
+	set_vram_address();                // the next tile, with what the glyph left over
+	SET_HL(0xC1E0); I(10);
+	SET_BC(0x20BE); I(10);
+	for (;;) {
+		outi();
+		if (cpu.f & FZ) { I(7); break; }
+		I(12);
+	}
+	cpu.a = mem_read(0xC60C); I(13);
+	op_add8(0x08, 0); I(7);
+	mem_write(0xC60C, cpu.a); I(13);
+	bank_pop();
+}
+
+static void pen_from_hl(void) {        // ld e,(hl) / inc hl / ld d,(hl) / inc hl / ld ($C60C),de
+	cpu.e = mem_read(HL); I(7);
+	SET_HL(HL + 1); I(6);
+	cpu.d = mem_read(HL); I(7);
+	SET_HL(HL + 1); I(6);
+	wr16(0xC60C, DE); I(20);
+}
+
+static void draw_string(void) {        // $2F6D: the pen's place, then text up to a 0
+	pen_from_hl();
+	for (;;) {
+		cpu.a = mem_read(HL); I(7);
+		SET_HL(HL + 1); I(6);
+		op_or(cpu.a); I(4);
+		if (cpu.f & FZ) { I(11); return; }
+		I(5);
+		push16(HL); I(11);
+		I(17); draw_char();
+		SET_HL(pop16()); I(10);
+		I(12);
+	}
+}
+
+static void draw_strings(void) {       // $2F80: B of them
+	do {
+		push16(BC); I(11);
+		I(17); draw_string();
+		SET_BC(pop16()); I(10);
+		if (--cpu.b) I(13); else I(8);
+	} while (cpu.b);
+	I(10);
+}
+
+static void draw_spaced(void) {        // $2F88: each character followed by its width (0 ends)
+	pen_from_hl();
+	for (;;) {
+		cpu.a = mem_read(HL); I(7);
+		SET_HL(HL + 1); I(6);
+		push16(HL); I(11);
+		I(17); draw_char();
+		SET_HL(pop16()); I(10);
+		cpu.b = mem_read(HL); I(7);
+		SET_HL(HL + 1); I(6);
+		cpu.b = op_inc8(cpu.b); I(4);
+		cpu.b = op_dec8(cpu.b); I(4);
+		if (cpu.f & FZ) { I(11); return; }
+		I(5);
+		cpu.a = mem_read(0xC60C); I(13);
+		op_add8(0xF8, 0); I(7);
+		op_add8(cpu.b, 0); I(4);
+		mem_write(0xC60C, cpu.a); I(13);
+		I(12);
+	}
+}
+
 static const uint16_t bank_scratch[] = { 0xC0C2, 0xC0C3 };
 #define VRAM(name, addr) Native native_##name = { #name, addr, 0, name, 0, bank_scratch, 2, .long_calls = 1 };
 VRAM(vram_write, 0x024C)
@@ -390,3 +586,7 @@ VRAM(vram_byte_at, 0x0210)
 VRAM(vram_fill_bytes, 0x0219)
 VRAM(nat_bank_push, 0x07CE)
 VRAM(nat_bank_pop, 0x07DE)
+VRAM(draw_char, 0x2EBD)
+VRAM(draw_string, 0x2F6D)
+VRAM(draw_strings, 0x2F80)
+VRAM(draw_spaced, 0x2F88)
