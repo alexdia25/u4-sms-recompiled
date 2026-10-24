@@ -279,6 +279,18 @@ native   00:0458 native_queue_screen
 native   00:0463 native_queue_bank2_copy
 native   00:024C native_vram_write
 native   00:022A native_vram_fill
+name     00:276D forget_screen              # $DA00 to $FF: the whole view redrawn
+name     01:4117 shake                      # the earthquake
+name     01:4173 shift_block
+name     01:41A9 invert                     # the map window's patterns inverted (a flash)
+name     01:41D2 invert_tile
+name     01:41EC invert_palette
+native   00:276D native_forget_screen
+native   01:4117 native_shake
+native   01:4173 native_shift_block
+native   01:41A9 native_invert
+native   01:41D2 native_invert_tile
+native   01:41EC native_invert_palette
 name     00:2CFE text_area_clear
 name     00:2D25 text_block                 # header: shadow address, C cells, B rows; then the cells
 name     00:2D47 text_blank                 # B rows of C cells at DE
