@@ -126,6 +126,8 @@ int native_call(Native *n) {
 	if (n->hook) { n->fn(); return 0; }   // looks, and the original runs
 	const char *only = getenv("U4_NATIVE_ONLY");   // test one rewrite at a time
 	if (only && !strstr(only, n->name)) return 0;
+	const char *skip = getenv("U4_NATIVE_SKIP");   // ... or leave some out (comma-separated names)
+	if (skip && strstr(skip, n->name)) return 0;
 	n->calls++;
 	track(n);
 	if (n->task) {             // a C task runs as a whole, or not at all
