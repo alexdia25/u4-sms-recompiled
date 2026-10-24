@@ -1,7 +1,8 @@
 // Copies into video memory, and the copies from another bank.
 // - set_vram_address (rst $10, $0078): DE as the VDP's write address.
 // - vram_write ($024C): BC bytes from HL to VRAM at DE; vram_fill ($022A):
-//   the word HL, BC times.
+//   the word HL, BC times; vram_fill_bytes ($0219): the byte A, BC times;
+//   vram_byte_at ($0210) and vram_byte ($0213): A at DE, or where it was.
 // - vram_rle ($0752) and vram_rle_slow ($0791): four run-length streams from
 //   HL, one per bitplane, to VRAM at DE, DE+1, DE+2, DE+3; each byte written
 //   is followed by three reads that step over the other planes (the slow
@@ -13,6 +14,8 @@
 //   one kept on the stack; with them far_ldir ($07EC), far_vram_write
 //   ($07F4), far_vram_rle ($0749), far_vram_rle_slow ($0788) and
 //   far_rle_interleaved ($071A).
+// - font_in_colour ($32BE) and title_picture ($32FA): the title's font in a
+//   colour, and a picture of twelve tiles.
 // Interrupts are on throughout (but for the two address writes), so the C
 // goes instruction by instruction (I) and the machine catches up after each.
 // Cycle counts are the original's.
@@ -69,6 +72,38 @@ static void vram_write(void) {         // $024C
 		cpu.a = op_dec8(cpu.a); I(4);
 		I(10);
 	} while (!(cpu.f & FZ));
+	I(10);
+}
+
+static void vram_byte(void) {          // $0213: A to VRAM at the address set
+	wait_vdp();
+	out_port(0xBE, cpu.a); I(11);
+	I(10);
+}
+
+static void vram_byte_at(void) {       // $0210: A to VRAM at DE
+	uint8_t a = cpu.a, f = cpu.f;
+	push16((uint16_t)(a << 8 | f)); I(11);
+	set_vram_address();
+	pop16(); cpu.a = a; cpu.f = f; I(10);
+	vram_byte();
+}
+
+static void vram_fill_bytes(void) {    // $0219: A, BC times, to VRAM at DE
+	push16(HL); I(11);
+	cpu.l = cpu.a; I(4);
+	set_vram_address();
+	block_count();
+	do {
+		do {
+			io_out(BC, cpu.l); I(12);
+			I(4);
+			if (--cpu.b) I(13); else I(8);
+		} while (cpu.b);
+		cpu.a = op_dec8(cpu.a); I(4);
+		I(10);
+	} while (!(cpu.f & FZ));
+	SET_HL(pop16()); I(10);
 	I(10);
 }
 
@@ -241,6 +276,88 @@ static void far_vram_rle(void) { far_call(0x0749, vram_rle); }               // 
 static void far_vram_rle_slow(void) { far_call(0x0788, vram_rle_slow); }     // $0788
 static void far_rle_interleaved(void) { far_call(0x071A, rle_interleaved); } // $071A
 
+// $32BE (by jp from the vector $7F3E): the font in colour A. Its 126
+// glyphs (bank $14 at $8840, three planes a row) go to VRAM $2840, each
+// plane masked by the colour's eight bytes at $9410 + A*8 (a byte a row);
+// the fourth plane is stepped over with a read.
+static void font_in_colour(void) {
+	cpu.l = cpu.a; I(4);
+	cpu.h = 0; I(7);
+	for (int i = 0; i < 3; i++) { SET_HL(op_add16(HL, HL)); I(11); }
+	SET_DE(0x9410); I(10);
+	SET_HL(op_add16(HL, DE)); I(11);
+	cpu.a = 0x14; I(7);
+	bank_push(0x32CA);
+	SET_DE(0x2840); I(10);
+	set_vram_address();
+	SET_DE(0x8840); I(10);
+	cpu.a = 0x7E; I(7);
+	do {
+		op_ex_af(); I(4);
+		push16(HL); I(11);
+		cpu.b = 8; I(7);
+		do {
+			cpu.c = mem_read(HL); I(7);
+			for (int p = 0; p < 3; p++) {
+				cpu.a = mem_read(DE); I(7);
+				op_and(cpu.c); I(4);
+				out_port(0xBE, cpu.a); I(11);
+				SET_DE(DE + 1); I(6);
+			}
+			SET_HL(HL + 1); I(6);
+			I(4);
+			cpu.a = in_be(); I(11);
+			I(4);
+			if (--cpu.b) I(13); else I(8);
+		} while (cpu.b);
+		SET_HL(pop16()); I(10);
+		op_ex_af(); I(4);
+		cpu.a = op_dec8(cpu.a); I(4);
+		I(10);
+	} while (!(cpu.f & FZ));
+	bank_pop();
+}
+
+// $32FA (by jp from the vector $7EE7): picture A of the title, twelve
+// tiles listed at $ABB0 + A*12 (bank $14), each 32 bytes at $9610 + n*32,
+// to VRAM at DE
+static void title_picture(void) {
+	cpu.l = cpu.a; I(4);
+	cpu.h = 0; I(7);
+	cpu.c = cpu.l; I(4);
+	cpu.b = cpu.h; I(4);
+	SET_HL(op_add16(HL, HL)); I(11);
+	SET_HL(op_add16(HL, BC)); I(11);
+	SET_HL(op_add16(HL, HL)); I(11);
+	SET_HL(op_add16(HL, HL)); I(11);
+	SET_BC(0xABB0); I(10);
+	SET_HL(op_add16(HL, BC)); I(11);
+	cpu.a = 0x14; I(7);
+	bank_push(0x3309);
+	set_vram_address();
+	cpu.a = 0x0C; I(7);
+	cpu.c = 0xBE; I(7);
+	SET_DE(0x9610); I(10);
+	do {
+		push16(HL); I(11);
+		cpu.l = mem_read(HL); I(7);
+		cpu.h = 0; I(7);
+		for (int i = 0; i < 5; i++) { SET_HL(op_add16(HL, HL)); I(11); }
+		SET_HL(op_add16(HL, DE)); I(11);
+		cpu.b = 0x20; I(7);
+		for (;;) {
+			outi();
+			if (cpu.f & FZ) { I(7); break; }
+			I(12);
+		}
+		SET_HL(pop16()); I(10);
+		SET_HL(HL + 1); I(6);
+		cpu.a = op_dec8(cpu.a); I(4);
+		I(10);
+	} while (!(cpu.f & FZ));
+	bank_pop();
+}
+
 static const uint16_t bank_scratch[] = { 0xC0C2, 0xC0C3 };
 #define VRAM(name, addr) Native native_##name = { #name, addr, 0, name, 0, bank_scratch, 2, .long_calls = 1 };
 VRAM(vram_write, 0x024C)
@@ -253,3 +370,8 @@ VRAM(far_vram_write, 0x07F4)
 VRAM(far_vram_rle, 0x0749)
 VRAM(far_vram_rle_slow, 0x0788)
 VRAM(far_rle_interleaved, 0x071A)
+VRAM(font_in_colour, 0x32BE)
+VRAM(title_picture, 0x32FA)
+VRAM(vram_byte, 0x0213)
+VRAM(vram_byte_at, 0x0210)
+VRAM(vram_fill_bytes, 0x0219)

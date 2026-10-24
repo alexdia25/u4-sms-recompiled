@@ -638,10 +638,68 @@ static void compose(void) {
 	call_original(0x1A7C);             // jp: queued for the screen
 }
 
+static void copy_view_bytes(uint16_t from, uint16_t to);
+
+// $10E4: the same in a town (a 32 x 32 map at $D000, rows of $40 bytes):
+// the view starts as grass ($0004 a cell) and only the part of it inside
+// the map is copied, row by row
+static void copy_view_town(void) {
+	cpu.cycles += 10 + 16 + 10 + 10 + 17;
+	wr16(0xD800, 0x0004);
+	copy_view_bytes(0xD800, 0xD802);
+	int8_t y = (int8_t)(mem_read(VIEW_XY + 1) - 5);
+	uint16_t src, dst;
+	uint8_t rows;
+	cpu.cycles += 13 + 7 + 10;
+	if (y < 0) {                       // above the map: start lower in the view
+		cpu.cycles += 11 + 8 + 4 + 4 + 4 + 4 + 4 + 4 + 4 + 4 + 4 + 7 + 10 + 10 + 7 + 4 + 12;
+		dst = 0xD800 | (uint8_t)(-y * 22);
+		src = 0xD000;
+		rows = (uint8_t)(y + 11);
+	} else {
+		cpu.cycles += 4 + 7 + 4 + 7;
+		rows = (uint8_t)(0x20 - y);
+		if (rows < 11) cpu.cycles += 12;
+		else { rows = 11; cpu.cycles += 7 + 7; }
+		cpu.cycles += 4 + 4 + 12 + 4 + 7 + 33 + 4 + 7 + 4 + 10;
+		src = (uint16_t)(0xD000 + (uint8_t)(y * 8) * 8);
+		dst = 0xD800;
+	}
+	int8_t x = (int8_t)(mem_read(VIEW_XY) * 2 - 10);
+	uint8_t len;
+	cpu.cycles += 13 + 4 + 7 + 10;
+	if (x < 0) {                       // left of the map: start further right
+		cpu.cycles += 11 + 7 + 4 + 10 + 8 + 4 + 4 + 12;
+		len = (uint8_t)(x + 22);
+		dst = (uint16_t)((dst & 0xFF00) | (uint8_t)(dst - x));
+		cpu.a = (uint8_t)dst;
+	} else {
+		cpu.cycles += 11 + 8 + 7 + 7;
+		len = (uint8_t)(0x40 - x);
+		if (len < 22) cpu.cycles += 12;
+		else { len = 22; cpu.cycles += 7 + 7; }
+		cpu.cycles += 4 + 10 + 4 + 4 + 4 + 7 + 4;
+		src = (uint16_t)(src + (uint8_t)x);
+		cpu.a = src >> 8;
+	}
+	for (uint8_t r = 0; r < rows; r++) {
+		native_sync();
+		for (int i = 0; i < len; i++) mem_write((uint16_t)(dst + i), mem_read((uint16_t)(src + i)));
+		cpu.cycles += 11 + 11 + 11 + 7 + 21 * len - 5 + 10 + 10 + 11 + 4 + 10 + 10 + 11 + 10
+			+ (r + 1 < rows ? 13 : 8);
+		dst += 22;
+		src += 0x40;
+	}
+	SET_HL(src);
+	SET_DE(dst);
+	SET_BC(len);
+	cpu.cycles += 10;
+}
+
 // $108B: the 11 x 11 cells around the party, from the map, into $D800
 static void copy_view(void) {
 	cpu.cycles += 17 + 13 + 4 + 10;
-	if (mem_read(MAP_KIND)) { call_original(0x10E4); return; }   // towns: the original's (bounds)
+	if (mem_read(MAP_KIND)) { copy_view_town(); return; }
 	cpu.cycles += 13 + 7 + 4 + 4 + 4 + 4 + 7 + 11 + 11 + 11 + 13 + 7 + 4 + 4 + 7 + 11 + 10 + 7;
 	uint16_t src = (uint16_t)(((uint8_t)((mem_read(VIEW_XY + 1) + 0xFB) * 8)) * 8 + 0xD000
 		+ (uint8_t)((mem_read(VIEW_XY) + 0xFB) * 2));

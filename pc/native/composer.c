@@ -685,6 +685,66 @@ static void draw_rows(void) {
 	cpu.a = 0x0B;
 }
 
+// $1AE9: the next row's turn to be redrawn in full
+static void next_full_row(void) {
+	cy(17 + 10 + 11 + 7 + 7);
+	uint8_t n = op_inc8(mem_read(0xC601));
+	mem_write(0xC601, n);
+	SET_HL(0xC601);
+	cpu.a = n;
+	op_sub8(0x0C, 0, 0);
+	if (n < 0x0C) cy(11);
+	else {
+		cy(5 + 10 + 10 + 11 + 10);
+		mem_write(0xC601, 1);
+		SET_HL(0xC602);
+		mem_write(0xC602, op_inc8(mem_read(0xC602)));
+	}
+}
+
+// $1AF8 (by jp from the vector $7E45): the 11 rows, keeping the registers
+static void redraw_view(void) {
+	uint16_t bc = BC, de = DE, hl = HL, ix = cpu.ix, iy = cpu.iy;
+	cy(11 + 11 + 11 + 15 + 15);
+	draw_rows();
+	cy(14 + 14 + 10 + 10 + 10 + 10);
+	SET_BC(bc); SET_DE(de); SET_HL(hl); cpu.ix = ix; cpu.iy = iy;
+}
+
+// $1B3B (by jp from the vector $7E3F): the same for a view 19 cells wide
+// and 5 high, with its own list of VRAM addresses ($24E0)
+static void compose_wide(void) {
+	cy(16 + 11 + 15 + 15 + 13 + 4 + 7);
+	uint16_t banks = rd16(0xDFFE), ix = cpu.ix, iy = cpu.iy;
+	uint8_t r = (uint8_t)(mem_read(0xC601) - 1);
+	if (r < 0x05) {                    // this row is redrawn in full: forget it
+		cy(7 + 4 * 9 + 7 + 4 + 4 + 7 + 4 + 4 + 4 + 4 + 4 + 10 + 10);
+		uint8_t a = (uint8_t)(r * 38 + 6);   // 76 bytes a row, from the 4th cell
+		uint16_t at = (uint16_t)(0xDA00 + a * 2);
+		for (int i = 0; i < 56; i++) mem_write((uint16_t)(at + i), 0xFF);
+		cy(21 * 54 + 16);
+		SET_HL(at + 55); SET_DE(at + 56); SET_BC(0);
+	} else cy(12);
+	cy(14 + 14 + 10 + 7 + 4);
+	cpu.ix = 0xD900; cpu.iy = 0xDA00;
+	SET_HL(0x24E0);
+	cpu.c = 0xBF;
+	for (uint8_t row = 0; row < 5; row++) {
+		cy(11 + 20 + 4 + 4 + 7 + 7 + 13);
+		uint8_t first = mem_read(0xC601), turn = mem_read(0xC602);
+		mem_write(PHASE, (uint8_t)((turn + (row < first ? 1 : 0)) & 3));
+		for (int i = 0; i < 9; i++) draw_pair();
+		draw_last();
+		cy(10 + 4 + 7 + 10);
+	}
+	next_full_row();
+	cy(14 + 14 + 10 + 16 + 10);
+	cpu.ix = ix; cpu.iy = iy;
+	SET_HL(banks);
+	mem_write(0xFFFE, (uint8_t)banks);
+	mem_write(0xFFFF, (uint8_t)(banks >> 8));
+}
+
 // $1A7C
 static void compose_screen(void) {
 	cy(15 + 15 + 13 + 4 + 7 + 7);
@@ -698,20 +758,10 @@ static void compose_screen(void) {
 		SET_HL(at + 44); SET_DE(at + 44); SET_BC(0);
 	} else cy(5);
 	draw_rows();
-	cy(17 + 10 + 11 + 7 + 7);          // $1AE9: the next row's turn
-	uint8_t n = op_inc8(mem_read(0xC601));
-	mem_write(0xC601, n);
-	SET_HL(0xC601);
-	cpu.a = n;
-	op_sub8(0x0C, 0, 0);
-	if (n < 0x0C) cy(11);
-	else {
-		cy(5 + 10 + 10 + 11 + 10);
-		mem_write(0xC601, 1);
-		SET_HL(0xC602);
-		mem_write(0xC602, op_inc8(mem_read(0xC602)));
-	}
+	next_full_row();
 	cy(14 + 14 + 10);
 	cpu.ix = ix; cpu.iy = iy;
 }
 Native native_compose_screen = { "compose_screen", 0x1A7C, 0, compose_screen, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL, 0, 0, .long_calls = 1 };
+Native native_redraw_view = { "redraw_view", 0x1AF8, 0, redraw_view, OUT_A | OUT_F, 0, 0, .long_calls = 1 };
+Native native_compose_wide = { "compose_wide", 0x1B3B, 0, compose_wide, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL, 0, 0, .long_calls = 1 };
