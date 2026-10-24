@@ -233,7 +233,13 @@ typedef struct TurnLoop {
 static const TurnLoop world = { 1, 0xACBD, 0xACDC, 0xACC0, 0, 0xACCC, 0xACCF, 0xACD4, 0xACD7 };
 static const TurnLoop town = { 0, 0xAF8B, 0xAFAA, 0xAF8E, 0, 0xAF9A, 0xAF9D, 0xAFA2, 0xAFA5 };
 
-static void turn_loop(const TurnLoop *t) {
+// stage: where the loop is entered. 0 its top; 1 after the check of where
+// the party stands (the original's, which the C hands off to, returns
+// there); 2 after the input (a command, which is the original's too, ends
+// there): the ground's hazards and the end of the turn
+static void turn_loop(const TurnLoop *t, int stage) {
+	if (stage == 1) goto after_check;
+	if (stage == 2) goto end;
 	for (;;) {
 		if (t->world) {                // where the party was at the start of the turn
 			cpu.cycles += 16 + 16;
@@ -251,6 +257,7 @@ static void turn_loop(const TurnLoop *t) {
 			return;
 		}
 		cpu.cycles += 11;
+	after_check:
 		call(0xAF57);                  // everyone asleep? then no input this turn
 		cpu.cycles += 7;
 		if (cpu.f & FC) cpu.cycles += 5;
@@ -272,6 +279,7 @@ static void turn_loop(const TurnLoop *t) {
 				cpu.cycles += 5;
 			}
 		}
+	end:
 		tcall(0x3F14, t->end_at);      // the ground's hazards
 		cpu.cycles += 17;              // call $B4CA
 		if (end_of_turn((uint16_t)(t->after_end + 3))) return;
@@ -279,10 +287,18 @@ static void turn_loop(const TurnLoop *t) {
 	}
 }
 
-static void world_turn(void) { turn_loop(&world); }   // $ACB1
-static void town_turn(void) { turn_loop(&town); }     // $AF85
+static void world_turn(void) { turn_loop(&world, 0); }   // $ACB1
+static void town_turn(void) { turn_loop(&town, 0); }     // $AF85
+static void world_after_check(void) { turn_loop(&world, 1); }   // $ACC0
+static void town_after_check(void) { turn_loop(&town, 1); }     // $AF8E
+static void world_turn_end(void) { turn_loop(&world, 2); }      // $ACD4
+static void town_turn_end(void) { turn_loop(&town, 2); }        // $AFA2
 Native native_world_turn = { "world_turn", 0xACB1, 2, world_turn, 0, 0, 0, .task = 1 };
 Native native_town_turn = { "town_turn", 0xAF85, 2, town_turn, 0, 0, 0, .task = 1 };
+Native native_world_after_check = { "world_after_check", 0xACC0, 2, world_after_check, 0, 0, 0, .task = 1 };
+Native native_town_after_check = { "town_after_check", 0xAF8E, 2, town_after_check, 0, 0, 0, .task = 1 };
+Native native_world_turn_end = { "world_turn_end", 0xACD4, 2, world_turn_end, 0, 0, 0, .task = 1 };
+Native native_town_turn_end = { "town_turn_end", 0xAFA2, 2, town_turn_end, 0, 0, 0, .task = 1 };
 
 // $AC8C (game mode $11, the world) and $AF69 (mode $12, a town): the map
 // set up, drawn, the music started, the turn count cleared; then the turns

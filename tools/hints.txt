@@ -480,6 +480,10 @@ name     02:AF85 town_turn_loop
 name     02:8000 command_menu
 native   02:ACB1 native_world_turn
 native   02:AF85 native_town_turn
+native   02:ACC0 native_world_after_check
+native   02:AF8E native_town_after_check
+native   02:ACD4 native_world_turn_end
+native   02:AFA2 native_town_turn_end
 native   02:AC8C native_world_start
 native   02:AF69 native_town_start
 native   02:AC62 native_game_fade_in
