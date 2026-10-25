@@ -177,6 +177,13 @@ ram      C9AB talk_turn_away
 name     00:3578 talk_topics                # unlock keyword topics from the header pairs, build the talk menu
 name     00:355F dialogue_string            # HL = string B (1-based) of the current person
 name     00:360D talk_topic_names
+name     00:354D dialogue_print             # string B printed, HL kept
+name     00:3553 dialogue_print_hl
+native   00:34DD native_talk_setup
+native   00:354D native_dialogue_print
+native   00:3553 native_dialogue_print_hl
+native   00:355F native_dialogue_string
+native   00:3578 native_talk_topics
 ram      C580 talk_flags                    # +topic: 1 once asked; $C595/$C596 keyword 1/2 shown
 name     02:88F3 spell_recipes              # reagent bits per spell (Sulfur Ash = $80)
 name     01:5DE1 spell_mp_cost
@@ -654,6 +661,10 @@ name     03:B4FB fade_row                   # one pixel row of the ending's diss
 name     03:B55B wipe                       # the ending's screen wiped to the middle
 native   03:B4FB native_fade_row
 native   03:B55B native_wipe
+native   01:4098 native_party_iter_setup
+native   01:4679 native_member_hurt
+native   01:5650 native_print_avatar_name
+native   01:426F native_karma_lose
 native   1F:87AA native_snd_silence
 native   1F:86A9 native_snd_note_tone
 native   1F:8715 native_snd_table_command

@@ -8,6 +8,12 @@
 // - person_with_graphic ($4906): the first person whose graphic is A (in
 //   a place 32 of them from $C651, on the world 24 from $C691): A = its
 //   number, or carry for none.
+// And three small ones of the party's:
+// - party_iter_setup ($4098): IY = the first member, DE = 29, B = the
+//   party's size, C = 0, for a loop over the members.
+// - member_hurt ($4679): member C takes DE damage (member_take_damage,
+//   $467F), then the status window is drawn again ($4324).
+// - print_avatar_name ($5650): the Avatar's name printed.
 // Cycle counts are the original's, instruction by instruction (I).
 #include "../runtime/native.h"
 #include "../runtime/sms.h"
@@ -98,6 +104,30 @@ static void person_with_graphic(void) {   // $4906
 	I(10);
 }
 
+static void party_iter_setup(void) {   // $4098
+	cpu.iy = 0xC751; I(14);
+	SET_DE(0x001D); I(10);
+	cpu.a = mem_read(0xC957); I(13);
+	cpu.b = cpu.a; I(4);
+	cpu.c = 0x00; I(7);
+	I(10);
+}
+
+static void member_hurt(void) {        // $4679
+	I(17); call_original(0x467F);      // member_take_damage
+	I(10);
+	native_continue_at(0x4324);        // jp status_window
+}
+
+static void print_avatar_name(void) {  // $5650
+	if (!native_on_fiber()) { native_decline(); return; }   // shadow mode: printing may wait for frames
+	push(HL);
+	SET_HL(0xC75E); I(10);
+	I(17); call_original(0x5519);      // print_text_hl
+	SET_HL(pop16()); I(10);
+	I(10);
+}
+
 #define RECORD(name, addr, out) Native native_##name = { #name, addr, 1, name, out, .long_calls = 1 };
 RECORD(member_record, 0x48B6, OUT_F | OUT_IY)
 RECORD(current_record, 0x48CB, OUT_F | OUT_IY)
@@ -106,3 +136,6 @@ RECORD(current_object, 0x48E1, OUT_F | OUT_IY)
 RECORD(foe_record, 0x48EB, OUT_F | OUT_IY)
 RECORD(person_record, 0x48F7, OUT_A | OUT_F | OUT_IY)
 RECORD(person_with_graphic, 0x4906, OUT_A | OUT_F | OUT_IY)
+RECORD(party_iter_setup, 0x4098, OUT_A | OUT_BC | OUT_DE | OUT_IY)
+RECORD(member_hurt, 0x4679, OUT_A | OUT_F)
+RECORD(print_avatar_name, 0x5650, OUT_A | OUT_F | OUT_BC | OUT_DE)
