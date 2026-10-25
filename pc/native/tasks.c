@@ -32,7 +32,8 @@ static void play_music(uint8_t tune) { cpu.a = tune; call_original(0x0621); }
 
 // music_later ($33D4, started by play_music_later at $33AF): stop the music,
 // wait 20 frames, then start the tune stored in the slot (+$1A) and end.
-#define MUSIC_LATER_TUNE (SLOT + 0x1A)
+#define MUSIC_LATER_TUNE_OF(slot) ((uint16_t)((slot) + 0x1A))
+#define MUSIC_LATER_TUNE MUSIC_LATER_TUNE_OF(SLOT)
 
 // (cycle counts: the original's, around the calls to the sound routines)
 static void music_later_start(void) {   // $33D4
@@ -49,7 +50,35 @@ static void music_later_play(void) {    // $33DC
 	cpu.cycles += 10 + 1049;             // jp end_task, which clears the slot with ldir
 }
 
-Native native_music_later_start = { "music_later_start", 0x33D4, 0, music_later_start, 0, 0, 0, .long_calls = 1 };
+// play_music_later ($33AF): tune A after the wait above: any music_later
+// task ($F0) ended ($0B6D), a new one started; with no free slot the tune
+// starts now. All registers but F are kept.
+static void play_music_later(void) {
+	uint8_t tune = cpu.a;
+	push16(BC); push16(DE); push16(HL); push16(cpu.iy);
+	push16((uint16_t)(cpu.a << 8 | cpu.f));
+	cpu.cycles += 11 + 11 + 11 + 15 + 11;
+	cpu.a = 0xF0; cpu.cycles += 7 + 17;
+	call_original(0x0B6D);               // end the tasks of kind A
+	cpu.c = 0xF0; SET_DE(0x33D4); cpu.cycles += 7 + 10 + 17;
+	call_original(0x0B35);               // spawn_task_c: IY = the slot, carry if none
+	int full = cpu.f & FC;
+	cpu.f = (uint8_t)pop16();            // pop af
+	if (full) {
+		cpu.cycles += 7 + 10 + 17;
+		play_music(tune);
+		cpu.cycles += 12;
+	} else {
+		cpu.cycles += 12 + 10 + 19;
+		mem_write(MUSIC_LATER_TUNE_OF(cpu.iy), tune);
+	}
+	cpu.a = tune;
+	cpu.iy = pop16(); SET_HL(pop16()); SET_DE(pop16()); SET_BC(pop16());
+	cpu.cycles += 14 + 10 + 10 + 10 + 10;
+}
+
+Native native_play_music_later = { "play_music_later", 0x33AF, 0, play_music_later, OUT_A | OUT_F, 0, 0, .long_calls = 1 };
+Native native_music_later_start ={ "music_later_start", 0x33D4, 0, music_later_start, 0, 0, 0, .long_calls = 1 };
 Native native_music_later_play = { "music_later_play", 0x33DC, 0, music_later_play, 0, 0, 0, .long_calls = 1 };
 
 // ----------------------------------------------------------------------------
