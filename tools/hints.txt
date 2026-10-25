@@ -247,6 +247,14 @@ native   00:141B native_window_reset
 native   00:1431 native_window_clear
 native   00:1449 native_window_strip
 native   00:1461 native_window_border
+name     00:2BFE aim                        # the step from (L,H) towards (E,D): HL = x, DE = y
+name     00:2D0C text_cell                  # DE = text area copy address of column E, row D
+native   00:2BFE native_aim
+native   00:2D0C native_text_cell
+name     00:3095 selection_blink
+name     00:30DA queue_glyphs
+native   00:3095 native_selection_blink
+native   00:30DA native_queue_glyphs
 native   00:33D4 native_music_later_start
 native   00:33DC native_music_later_play
 name     00:2FFB frame_tick                 # per-frame work of a waiting task, then yield

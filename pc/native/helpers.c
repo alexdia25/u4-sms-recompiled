@@ -26,6 +26,15 @@
 // - place_index ($33EE): the location less 2 (the castle's floors as 0).
 // - unpack_position ($3EAA): the byte at HL as two nibbles, the high one
 //   in A', the low one in A.
+// - aim ($2BFE): the step from (L, H) towards (E, D): HL = its x part,
+//   DE = its y part, from the tables at $2C7C and $2CBD by six bits of the
+//   smaller distance over the larger, signs and swap by the octant (C).
+// - text_cell ($2D0C): DE = the address in the text area's copy ($CA00 +
+//   row * 64 + column * 2) of column E, row D.
+// - selection_blink ($3095): picture cell 0 at HL (put_picture_cell,
+//   $30B6), and colour $1F the next of the six shades at $30CB ($C63B).
+// - queue_glyphs ($30DA): $100 bytes of bank $13 from $A40F + A * 256
+//   queued for VRAM $2920.
 // Cycle counts are the original's, instruction by instruction (I).
 #include "../runtime/native.h"
 #include "../runtime/sms.h"
@@ -419,6 +428,133 @@ static void unpack_position(void) {    // $3EAA
 	I(10);
 }
 
+static int sub_a_l_step(void) {        // add a,a / jr c / cp l / jr c / sub l / inc e
+	op_add8(cpu.a, 0); I(4);
+	if (cpu.f & FC) I(12);
+	else {
+		I(7);
+		op_sub8(cpu.l, 0, 0); I(4);
+		if (cpu.f & FC) { I(12); return 0; }
+		I(7);
+	}
+	op_sub8(cpu.l, 0, 1); I(4);
+	cpu.e = op_inc8(cpu.e); I(4);
+	return 1;
+}
+
+static void negate_into(uint8_t *lo, uint8_t *hi) {   // xor a / sub lo / ld lo,a / sbc a,a / sub hi / ld hi,a
+	op_xor(cpu.a); I(4);
+	op_sub8(*lo, 0, 1); I(4);
+	*lo = cpu.a; I(4);
+	op_sub8(cpu.a, cpu.f & FC, 1); I(4);
+	op_sub8(*hi, 0, 1); I(4);
+	*hi = cpu.a; I(4);
+}
+
+static void aim(void) {                // $2BFE
+	SET_BC(0x0000); I(10);
+	cpu.a = cpu.e; I(4);
+	op_sub8(cpu.l, 0, 1); I(4);
+	if (!(cpu.f & FC)) I(12);
+	else { I(7); cpu.c = op_inc8(cpu.c); I(4); op_neg(); I(8); }
+	cpu.l = cpu.a; I(4);
+	cpu.a = cpu.d; I(4);
+	op_sub8(cpu.h, 0, 1); I(4);
+	if (!(cpu.f & FC)) I(12);
+	else { I(7); cpu.c |= 0x02; I(8); op_neg(); I(8); }
+	cpu.h = cpu.a; I(4);
+	op_sub8(cpu.l, 0, 0); I(4);
+	if (cpu.f & FC) I(12);
+	else { I(7); cpu.c |= 0x04; I(8); cpu.h = cpu.l; I(4); cpu.l = cpu.a; I(4); }
+	cpu.d = cpu.b; I(4);
+	cpu.e = cpu.b; I(4);
+	cpu.a = cpu.h; I(4);
+	sub_a_l_step();                    // six bits of the smaller over the larger
+	for (int i = 0; i < 5; i++) {
+		cpu.e = op_rot(4, cpu.e); I(8);   // sla e
+		sub_a_l_step();
+	}
+	SET_HL(0x2C7C); I(10);
+	SET_HL(op_add16(HL, DE)); I(11);
+	cpu.a = mem_read(HL); I(7);
+	SET_HL(0x2CBD); I(10);
+	SET_HL(op_add16(HL, DE)); I(11);
+	cpu.l = mem_read(HL); I(7);
+	cpu.e = cpu.a; I(4);
+	cpu.d = cpu.b; I(4);
+	cpu.h = cpu.b; I(4);
+	op_bit(2, cpu.c); I(8);
+	if (cpu.f & FZ) I(12);
+	else { I(7); uint16_t t = HL; SET_HL(DE); SET_DE(t); I(4); }
+	op_bit(1, cpu.c); I(8);
+	if (cpu.f & FZ) I(12);
+	else { I(7); negate_into(&cpu.e, &cpu.d); }
+	op_bit(0, cpu.c); I(8);
+	if (cpu.f & FZ) { I(11); return; }
+	I(5);
+	negate_into(&cpu.l, &cpu.h);
+	I(10);
+}
+
+static void text_cell(void) {          // $2D0C
+	cpu.a = cpu.e; I(4);
+	for (int i = 0; i < 3; i++) { op_add8(cpu.a, 0); I(4); }
+	cpu.e = cpu.a; I(4);
+	cpu.a = cpu.d; I(4);
+	op_rra(); I(4);
+	cpu.e = op_rot(3, cpu.e); I(8);    // rr e
+	op_rra(); I(4);
+	cpu.e = op_rot(3, cpu.e); I(8);
+	op_add8(0xCA, 0); I(7);
+	cpu.d = cpu.a; I(4);
+	I(10);
+}
+
+static void selection_blink(void) {    // $3095
+	push(BC); push(DE); push(HL);
+	op_xor(cpu.a); I(4);
+	I(17); call_original(0x30B6);      // put_picture_cell
+	cpu.a = mem_read(0xC63B); I(13);
+	cpu.a = op_inc8(cpu.a); I(4);
+	op_sub8(0x06, 0, 0); I(7);
+	if (cpu.f & FC) I(12);
+	else { I(7); op_xor(cpu.a); I(4); }
+	mem_write(0xC63B, cpu.a); I(13);
+	SET_HL(0x30CB); I(10);
+	I(11);                             // rst $28: A = (HL + A)
+	op_add8(cpu.l, 0); I(4);
+	cpu.l = cpu.a; I(4);
+	op_add8(cpu.h, cpu.f & FC); I(4);
+	op_sub8(cpu.l, 0, 1); I(4);
+	cpu.h = cpu.a; I(4);
+	cpu.a = mem_read(HL); I(7);
+	I(10);
+	cpu.h = cpu.a; I(4);
+	cpu.l = 0x1F; I(7);
+	I(17); call_original(0x0843);      // set_palette_entry
+	SET_HL(pop16()); I(10);
+	SET_DE(pop16()); I(10);
+	SET_BC(pop16()); I(10);
+	I(10);
+}
+
+static void queue_glyphs(void) {       // $30DA
+	// shadow mode: the queue may be full, and the original waits for room
+	if (!native_on_fiber() && mem_read(0xC063) >= 0x20) { native_decline(); return; }
+	push(BC); push(DE); push(HL);
+	op_add8(0xA4, 0); I(7);
+	cpu.h = cpu.a; I(4);
+	cpu.l = 0x0F; I(7);
+	cpu.a = 0x13; I(7);
+	SET_DE(0x2920); I(10);
+	SET_BC(0x0100); I(10);
+	I(17); call_original(0x0465);      // queue_vram_copy
+	SET_HL(pop16()); I(10);
+	SET_DE(pop16()); I(10);
+	SET_BC(pop16()); I(10);
+	I(10);
+}
+
 #define HELPER(name, addr, out) Native native_##name = { #name, addr, 0, name, out, .long_calls = 1 };
 HELPER(wait_vdp, 0x0262, 0)
 HELPER(far_read, 0x0815, OUT_A)
@@ -445,3 +581,7 @@ HELPER(terrain_edges, 0x1204, OUT_A | OUT_F)
 HELPER(dungeon_header, 0x2A6E, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL)
 HELPER(place_index, 0x33EE, OUT_A | OUT_F)
 HELPER(unpack_position, 0x3EAA, OUT_A | OUT_F | OUT_HL)
+HELPER(aim, 0x2BFE, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL)
+HELPER(text_cell, 0x2D0C, OUT_A | OUT_F | OUT_DE)
+HELPER(selection_blink, 0x3095, OUT_A | OUT_F)
+HELPER(queue_glyphs, 0x30DA, OUT_A | OUT_F)
