@@ -39,6 +39,20 @@
 // - far_word ($0807): HL = the word HL[C] in bank A.
 // - input_reset ($06E2): the pads as if every button were held and none
 //   just pressed ($C0AF = $FF, $C0B0 = $C0B2 = $C0B5 = 0, direction 8).
+// - input_start ($06CD): the pads read apart ($C0AE = 0), input_reset,
+//   then key repeat 1 ($06D4: $C0B3 = 1); input_repeat ($06DA): key repeat
+//   HL ($C0B3), and $C0B2 = 0. restart_input ($0DD7): input_start, then
+//   every task cleared.
+// - person_blocks ($3974): carry when tile A is not one people walk on
+//   ($3EB7), unless it is one of the eight at $3989.
+// - window_redraw ($323D): the text window's frame again and its 18x17
+//   cells queued from $CA42, then a wait for the vertical blank.
+// - slot_step_add ($0BA4) / slot_step_sub ($0BC9): the task's 16-bit
+//   place (IX+$0A/$0B, $0C/$0D) moved by its step (IX+$0E/$0F, $10/$11).
+// - end_tasks_of ($0B6D): every task slot ($C300, 10 x 48 bytes) of kind A
+//   cleared.
+// - tile_effect ($3F67): what the tile under the party ($C990) does: $03
+//   and $44 ($4071), $4C and $46 ($4812), $47 ($404A).
 // - screen_place ($3991): (L, H) cells as pixels (12 a cell);
 //   screen_cell ($399C): back from the missile's pixels (IX+$0B, $0D,
 //   from a cell's middle) to its cell (L, H).
@@ -635,6 +649,124 @@ static void input_reset(void) {        // $06E2
 	I(10);
 }
 
+static void input_repeat(void) {       // $06DA
+	wr16(0xC0B3, HL); I(16);
+	op_xor(cpu.a); I(4);
+	mem_write(0xC0B2, cpu.a); I(13);
+	I(10);
+}
+
+static void input_repeat_1(void) {     // $06D4
+	cpu.a = 0x01; I(7);
+	mem_write(0xC0B3, cpu.a); I(13);
+	I(10);
+}
+
+static void input_start(void) {        // $06CD
+	op_xor(cpu.a); I(4);
+	mem_write(0xC0AE, cpu.a); I(13);
+	I(17); input_reset();
+	input_repeat_1();                  // falls into it
+}
+
+static void restart_input(void) {      // $0DD7
+	I(17); input_start();
+	I(10);
+	native_continue_at(0x0B21);        // jp clear_tasks
+}
+
+static void person_blocks(void) {      // $3974
+	I(17); call_original(0x3EB7);      // people_ground
+	if (!(cpu.f & FC)) { I(11); return; }
+	I(5);
+	push(BC); push(HL);
+	SET_HL(0x3989); I(10);
+	SET_BC(0x0008); I(10);
+	while (op_block(6, 1)) I(21);      // cpir
+	I(16);
+	int found = cpu.f & FZ;
+	op_scf(); I(4);
+	if (!found) I(12);
+	else { I(7); op_or(cpu.a); I(4); }
+	SET_HL(pop16()); I(10);
+	SET_BC(pop16()); I(10);
+	I(10);
+}
+
+static void window_redraw(void) {      // $323D
+	if (!native_on_fiber()) { native_decline(); return; }   // shadow mode: it waits for a frame
+	push(BC); push(DE); push(HL);
+	SET_HL(0xB748); I(10);
+	I(17); call_original(0x3255);      // window_frame
+	SET_DE(0xCA42); I(10);
+	SET_BC(0x1211); I(10);
+	I(17); call_original(0x0499);      // queue_text_copy
+	SET_HL(pop16()); I(10);
+	SET_DE(pop16()); I(10);
+	SET_BC(pop16()); I(10);
+	I(10);
+	native_continue_at(0x041C);        // jp wait_vblank
+}
+
+static uint8_t ix_at(uint8_t d) { return mem_read((uint16_t)(cpu.ix + d)); }
+
+static void slot_step(int sub) {       // $0BA4 / $0BC9
+	for (int k = 0; k < 2; k++) {
+		uint8_t at = (uint8_t)(0x0A + 2 * k), by = (uint8_t)(0x0E + 2 * k);
+		cpu.a = ix_at(at); I(19);
+		if (sub) op_sub8(ix_at(by), 0, 1); else op_add8(ix_at(by), 0);
+		I(19);
+		mem_write((uint16_t)(cpu.ix + at), cpu.a); I(19);
+		cpu.a = ix_at((uint8_t)(at + 1)); I(19);
+		if (sub) op_sub8(ix_at((uint8_t)(by + 1)), cpu.f & FC, 1); else op_add8(ix_at((uint8_t)(by + 1)), cpu.f & FC);
+		I(19);
+		mem_write((uint16_t)(cpu.ix + at + 1), cpu.a); I(19);
+	}
+	I(10);
+}
+static void slot_step_add(void) { slot_step(0); }
+static void slot_step_sub(void) { slot_step(1); }
+
+static void end_tasks_of(void) {       // $0B6D
+	SET_HL(0xC300); I(10);
+	SET_DE(0x0030); I(10);
+	SET_BC(0x0A00); I(10);
+	do {
+		op_sub8(mem_read(HL), 0, 0); I(7);
+		if (!(cpu.f & FZ)) I(12);
+		else {
+			I(7);
+			push(BC); push(HL);
+			cpu.d = cpu.h; I(4);
+			cpu.e = cpu.l; I(4);
+			cpu.e = op_inc8(cpu.e); I(4);
+			mem_write(HL, cpu.c); I(7);
+			SET_BC(0x002F); I(10);
+			while (op_block(6, 0)) I(21);   // ldir: the slot cleared
+			I(16);
+			SET_HL(pop16()); I(10);
+			SET_BC(pop16()); I(10);
+			SET_DE(0x0030); I(10);
+		}
+		SET_HL(op_add16(HL, DE)); I(11);
+		if (--cpu.b) I(13); else I(8);
+	} while (cpu.b);
+	I(10);
+}
+
+static void tile_effect(void) {        // $3F67
+	static const struct { uint8_t tile; uint16_t to; } effects[5] = {
+		{ 0x03, 0x4071 }, { 0x44, 0x4071 }, { 0x4C, 0x4812 }, { 0x46, 0x4812 }, { 0x47, 0x404A },
+	};
+	cpu.a = mem_read(0xC990); I(13);
+	for (int i = 0; i < 5; i++) {
+		op_sub8(effects[i].tile, 0, 0); I(7);
+		I(10);
+		if (cpu.f & FZ) { native_continue_at(effects[i].to); return; }   // jp z
+	}
+	I(10);
+}
+
 #define HELPER(name, addr, out) Native native_##name = { #name, addr, 0, name, out, .long_calls = 1 };
 HELPER(wait_vdp, 0x0262, 0)
 HELPER(far_read, 0x0815, OUT_A)
@@ -671,3 +803,13 @@ HELPER(screen_place, 0x3991, OUT_A | OUT_F | OUT_HL)
 HELPER(screen_cell, 0x399C, OUT_A | OUT_F | OUT_BC | OUT_HL)
 HELPER(far_word, 0x0807, OUT_A | OUT_F | OUT_BC | OUT_HL)
 HELPER(input_reset, 0x06E2, OUT_A | OUT_F)
+HELPER(input_repeat, 0x06DA, OUT_A | OUT_F)
+HELPER(input_repeat_1, 0x06D4, OUT_A | OUT_F)
+HELPER(input_start, 0x06CD, OUT_A | OUT_F)
+HELPER(restart_input, 0x0DD7, OUT_A | OUT_F)
+HELPER(person_blocks, 0x3974, OUT_A | OUT_F)
+HELPER(window_redraw, 0x323D, OUT_A | OUT_F)
+HELPER(tile_effect, 0x3F67, OUT_A | OUT_F)
+HELPER(slot_step_add, 0x0BA4, OUT_A | OUT_F)
+HELPER(slot_step_sub, 0x0BC9, OUT_A | OUT_F)
+HELPER(end_tasks_of, 0x0B6D, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL)

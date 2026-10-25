@@ -323,6 +323,26 @@ native   01:4999 native_member_unflash
 native   01:6C59 native_step_cell
 native   03:B856 native_times_11_b3
 native   03:B860 native_times_12_b3
+name     00:06CD input_start
+name     00:06D4 input_repeat_1
+name     00:06DA input_repeat               # key repeat HL ($C0B3)
+name     00:0DD7 restart_input              # input_start, then clear_tasks
+name     00:3974 person_blocks
+name     00:323D window_redraw
+name     00:3F67 tile_effect                # what the tile under the party does
+native   00:06CD native_input_start
+native   00:06D4 native_input_repeat_1
+native   00:06DA native_input_repeat
+native   00:0DD7 native_restart_input
+native   00:3974 native_person_blocks
+native   00:323D native_window_redraw
+native   00:3F67 native_tile_effect
+name     00:0BA4 slot_step_add              # task place += step
+name     00:0BC9 slot_step_sub
+name     00:0B6D end_tasks_of               # clear every task slot of kind A
+native   00:0BA4 native_slot_step_add
+native   00:0BC9 native_slot_step_sub
+native   00:0B6D native_end_tasks_of
 native   00:33D4 native_music_later_start
 native   00:33DC native_music_later_play
 name     00:2FFB frame_tick                 # per-frame work of a waiting task, then yield
