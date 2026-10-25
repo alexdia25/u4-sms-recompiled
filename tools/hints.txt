@@ -397,6 +397,26 @@ name     01:430A is_foe                     # carry: figure A is a creature (not
 name     02:BBE7 whirl_check                # a whirlpool or twister on the party (world)
 native   01:430A native_is_foe
 native   02:BBE7 native_whirl_check
+name     01:4004 poison_member
+name     01:401B sleep_member
+name     01:4037 burn_member
+name     01:404A sleep_field
+name     01:4071 poison_field
+name     01:40A6 blocked
+name     01:40C9 sound_0c
+name     01:40D1 sound_0d
+name     01:40D9 sound_1e
+name     01:40E1 sound_20
+native   01:4004 native_poison_member
+native   01:401B native_sleep_member
+native   01:4037 native_burn_member
+native   01:404A native_sleep_field
+native   01:4071 native_poison_field
+native   01:40A6 native_blocked
+native   01:40C9 native_sound_0c
+native   01:40D1 native_sound_0d
+native   01:40D9 native_sound_1e
+native   01:40E1 native_sound_20
 native   00:33D4 native_music_later_start
 native   00:33DC native_music_later_play
 name     00:2FFB frame_tick                 # per-frame work of a waiting task, then yield
