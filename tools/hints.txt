@@ -184,6 +184,8 @@ native   00:354D native_dialogue_print
 native   00:3553 native_dialogue_print_hl
 native   00:355F native_dialogue_string
 native   00:3578 native_talk_topics
+native   00:377E native_load_arena
+native   00:3D82 native_load_dungeon_room
 ram      C580 talk_flags                    # +topic: 1 once asked; $C595/$C596 keyword 1/2 shown
 name     02:88F3 spell_recipes              # reagent bits per spell (Sulfur Ash = $80)
 name     01:5DE1 spell_mp_cost
