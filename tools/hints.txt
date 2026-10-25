@@ -80,7 +80,6 @@ ram      C957 party_size
 ram      C751 party                         # +0 hp, +2 max hp, +4 xp (16-bit each), +6 str, +7 dex, +8 int, +9 mp, +A level, +B weapon, +C armour, +D name
                                             # +1A sex glyph ($1E/$1F), +1B class (0-7 = home town), +1C status ('G' good, 'D' dead)
 ram      C75E party_name                    # the Avatar's name (party + $0D)
-name     01:4098 party_iter_setup           # iy = party, de = 29, b = party_size
 name     01:5650 print_avatar_name
 name     00:06FF decode_rle                 # hl = source, de = dest; $00 end, n<$80 repeat, $80+n literal
 name     00:06F6 decode_rle_far             # same with bank A paged into slot 2
@@ -279,6 +278,11 @@ native   00:0458 native_queue_screen
 native   00:0463 native_queue_bank2_copy
 native   00:024C native_vram_write
 native   00:022A native_vram_fill
+native   00:064C native_read_pads
+native   00:1204 native_terrain_edges
+native   00:2A6E native_dungeon_header
+native   00:33EE native_place_index
+native   00:3EAA native_unpack_position
 name     00:009C init_hw
 name     00:014D vdp_init
 name     00:0453 queue_reset

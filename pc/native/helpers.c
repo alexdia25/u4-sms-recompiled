@@ -16,6 +16,16 @@
 // - cursor_glyph ($3493): the 8 bytes at HL as the glyph under the cursor.
 // - font ($2FD8): the font, plain, to VRAM $2C00.
 // - the name table ($0265) and patterns ($0277, $0281) cleared.
+// - read_pads ($064C): both pads' six buttons as one byte, 1 = held.
+// - terrain_edges ($1204): for each open cell of the 11x11 view at $D800
+//   (two bytes a cell: the tile, then its edge bits), a bit set for each
+//   side whose neighbour is a wall-like tile that doesn't join it (bit 0
+//   above, 1 below, 2 left, 3 right); $17, $19, $1A and $48 never count.
+// - dungeon_header ($2A6E): A = the first byte, HL = the word after it, of
+//   the current dungeon's 3-byte entry at $2A81.
+// - place_index ($33EE): the location less 2 (the castle's floors as 0).
+// - unpack_position ($3EAA): the byte at HL as two nibbles, the high one
+//   in A', the low one in A.
 // Cycle counts are the original's, instruction by instruction (I).
 #include "../runtime/native.h"
 #include "../runtime/sms.h"
@@ -281,6 +291,134 @@ static void clear_patterns(uint16_t de, uint16_t bc) {   // then jp vram_fill_by
 static void clear_all_patterns(void) { clear_patterns(0x0000, 0x2000); }   // $0277
 static void clear_upper_patterns(void) { clear_patterns(0x2000, 0x1800); } // $0281
 
+static void read_pads(void) {          // $064C
+	cpu.a = io_in((uint16_t)(cpu.a << 8 | 0xDC)); I(11);
+	cpu.b = cpu.a; I(4);
+	cpu.a = io_in((uint16_t)(cpu.a << 8 | 0xDD)); I(11);
+	cpu.b = op_rot(2, cpu.b); I(8);    // rl b / rla, twice: the second pad's
+	op_rla(); I(4);                    // first two buttons, from port $DC's top
+	cpu.b = op_rot(2, cpu.b); I(8);
+	op_rla(); I(4);
+	op_cpl(); I(4);
+	op_and(0x3F); I(7);
+	I(10);
+}
+
+static int ret_z(void) { if (cpu.f & FZ) { I(11); return 1; } I(5); return 0; }
+static int ret_c(void) { if (cpu.f & FC) { I(11); return 1; } I(5); return 0; }
+static int cp_ret_z(uint8_t v) { op_sub8(v, 0, 0); I(7); return ret_z(); }
+
+static int joins_anything(void) {      // $1291: Z for the tiles that join every side
+	if (cp_ret_z(0x17) || cp_ret_z(0x19) || cp_ret_z(0x1A)) return 1;
+	op_sub8(0x48, 0, 0); I(7);
+	I(10);
+	return 0;
+}
+
+// $1243 / $1255 / $1267 / $127C: the neighbour on one side (A, or the cell
+// at IY + from); this cell's edge bit set unless the neighbour joins
+// anything, is one of the two tiles that join this side (k1, k2), or is
+// open itself (below 3)
+static void edge(int8_t from, uint8_t k1, uint8_t k2, int bit) {
+	I(17);
+	if (from) { cpu.a = mem_read((uint16_t)(cpu.iy + from)); I(19); }
+	I(17);
+	joins_anything();
+	if (ret_z()) return;
+	if (cp_ret_z(k1) || cp_ret_z(k2)) return;
+	op_sub8(0x03, 0, 0); I(7);
+	if (ret_c()) return;
+	uint16_t at = (uint16_t)(cpu.iy + 1);
+	mem_write(at, mem_read(at) | 1 << bit); I(23);
+	I(10);
+}
+static void no_call(void) { I(10); }   // call nz, not taken
+
+static void terrain_edges(void) {      // $1204
+	push(BC); push(DE); push(HL);
+	push16(cpu.iy); I(15);
+	cpu.iy = 0xD800; I(14);
+	SET_DE(0x0002); I(10);
+	SET_HL(0x0B01); I(10);
+	cpu.c = cpu.h; I(4);
+	do {
+		cpu.b = cpu.h; I(4);
+		do {
+			cpu.a = mem_read(cpu.iy); I(19);
+			op_sub8(0x03, 0, 0); I(7);
+			if (!(cpu.f & FC)) I(12);
+			else {
+				I(7);
+				cpu.a = cpu.c; I(4);
+				op_sub8(cpu.h, 0, 0); I(4);
+				cpu.a = mem_read((uint16_t)(cpu.iy - 0x16)); I(19);
+				if (cpu.f & FZ) no_call(); else edge(0, 0x33, 0x34, 0);
+				cpu.a = cpu.c; I(4);
+				op_sub8(cpu.l, 0, 0); I(4);
+				cpu.a = mem_read((uint16_t)(cpu.iy + 0x16)); I(19);
+				if (cpu.f & FZ) no_call(); else edge(0, 0x31, 0x32, 1);
+				cpu.a = cpu.b; I(4);
+				op_sub8(cpu.h, 0, 0); I(4);
+				if (cpu.f & FZ) no_call(); else edge(-2, 0x31, 0x33, 2);
+				cpu.a = cpu.b; I(4);
+				op_sub8(cpu.l, 0, 0); I(4);
+				if (cpu.f & FZ) no_call(); else edge(2, 0x32, 0x34, 3);
+			}
+			cpu.iy = op_add16(cpu.iy, DE); I(15);
+			if (--cpu.b) I(13); else I(8);
+		} while (cpu.b);
+		cpu.c = op_dec8(cpu.c); I(4);
+		if (!(cpu.f & FZ)) I(12); else I(7);
+	} while (cpu.c);
+	cpu.iy = pop16(); I(14);
+	SET_HL(pop16()); I(10);
+	SET_DE(pop16()); I(10);
+	SET_BC(pop16()); I(10);
+	I(10);
+}
+
+static void dungeon_header(void) {     // $2A6E
+	cpu.a = mem_read(0xC9A0); I(13);
+	op_sub8(0x12, 0, 1); I(7);
+	cpu.b = cpu.a; I(4);
+	op_add8(cpu.a, 0); I(4);
+	op_add8(cpu.b, 0); I(4);
+	SET_HL(0x2A81); I(10);
+	I(11);                             // rst $30: HL += A
+	op_add8(cpu.l, 0); I(4);
+	cpu.l = cpu.a; I(4);
+	if (!(cpu.f & FC)) I(11);
+	else { I(5); cpu.h = op_inc8(cpu.h); I(4); I(10); }
+	cpu.a = mem_read(HL); I(7);
+	SET_HL(HL + 1); I(6);
+	cpu.e = mem_read(HL); I(7);
+	SET_HL(HL + 1); I(6);
+	cpu.d = mem_read(HL); I(7);
+	uint16_t t = HL; SET_HL(DE); SET_DE(t); I(4);
+	I(10);
+}
+
+static void place_index(void) {        // $33EE
+	cpu.a = mem_read(0xC9A0); I(13);
+	op_sub8(0x02, 0, 1); I(7);
+	op_add8(0x00, cpu.f & FC); I(7);
+	I(10);
+}
+
+static void unpack_position(void) {    // $3EAA
+	cpu.a = mem_read(HL); I(7);
+	op_rlca(); I(4);
+	op_rlca(); I(4);
+	op_rlca(); I(4);
+	op_rlca(); I(4);
+	op_and(0x0F); I(7);
+	op_ex_af(); I(4);
+	cpu.a = mem_read(HL); I(7);
+	op_and(0x0F); I(7);
+	SET_HL(HL + 1); I(6);
+	I(10);
+}
+
 #define HELPER(name, addr, out) Native native_##name = { #name, addr, 0, name, out, .long_calls = 1 };
 HELPER(wait_vdp, 0x0262, 0)
 HELPER(far_read, 0x0815, OUT_A)
@@ -302,3 +440,8 @@ HELPER(font, 0x2FD8, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL)
 HELPER(clear_name_table, 0x0265, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL)
 HELPER(clear_all_patterns, 0x0277, OUT_A | OUT_F | OUT_BC | OUT_DE)
 HELPER(clear_upper_patterns, 0x0281, OUT_A | OUT_F | OUT_BC | OUT_DE)
+HELPER(read_pads, 0x064C, OUT_A | OUT_F | OUT_BC)
+HELPER(terrain_edges, 0x1204, OUT_A | OUT_F)
+HELPER(dungeon_header, 0x2A6E, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL)
+HELPER(place_index, 0x33EE, OUT_A | OUT_F)
+HELPER(unpack_position, 0x3EAA, OUT_A | OUT_F | OUT_HL)
