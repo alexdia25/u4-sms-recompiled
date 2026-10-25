@@ -645,6 +645,10 @@ native   03:9A8D native_sound_test
 native   03:B127 native_ending
 native   03:B63F native_credits
 native   03:B7CF native_ankh
+name     03:B4FB fade_row                   # one pixel row of the ending's dissolve
+name     03:B55B wipe                       # the ending's screen wiped to the middle
+native   03:B4FB native_fade_row
+native   03:B55B native_wipe
 native   1F:87AA native_snd_silence
 native   1F:86A9 native_snd_note_tone
 native   1F:8715 native_snd_table_command

@@ -1,4 +1,5 @@
-// Screen effects on the map window's tiles in VRAM (bank 1).
+// Screen effects on the map window's tiles in VRAM (bank 1), and two of
+// the ending's (bank 3: fade_row and wipe, below).
 // - shake ($4117): the earthquake. The window's top-left 8-byte strip is
 //   kept at $DA00; five times the window's patterns are moved one tile
 //   column over (shift_block, $4173: 5 x 17 rows of $68 bytes through
@@ -340,7 +341,146 @@ static void dissolve(void) {
 	}
 }
 
+// rst $28 (A = (HL + A)) and rst $20 (HL = the word HL[A], A < 128)
+static void add_a_to_hl(void) {
+	op_add8(cpu.l, 0); I(4);
+	cpu.l = cpu.a; I(4);
+	op_add8(cpu.h, cpu.f & FC); I(4);
+	op_sub8(cpu.l, 0, 1); I(4);
+	cpu.h = cpu.a; I(4);
+}
+static void rst28(void) {
+	I(11);
+	add_a_to_hl();
+	cpu.a = mem_read(HL); I(7);
+	I(10);
+}
+static void rst20(void) {
+	I(11); I(10);
+	op_add8(cpu.a, 0); I(4);
+	if (!(cpu.f & FC)) I(12);
+	else { I(7); cpu.h = op_inc8(cpu.h); I(4); }
+	add_a_to_hl();
+	cpu.a = mem_read(HL); I(7);
+	SET_HL(HL + 1); I(6);
+	cpu.h = mem_read(HL); I(7);
+	cpu.l = cpu.a; I(4);
+	I(10);
+}
+
+// fade_row ($B4FB, bank 3): row A of the ending's dissolve (A & 7: which
+// pixel row of a tile, from the masks at $B531; A / 8: which tile row, from
+// the VRAM addresses at $B539): that pixel row of eleven 48-byte strips
+// ANDed with its mask, through $C1C0
+static void fade_row(void) {
+	cpu.b = cpu.a; I(4);
+	op_and(0x07); I(7);
+	SET_HL(0xB531); I(10);
+	rst28();
+	cpu.c = cpu.a; I(4);
+	cpu.a = cpu.b; I(4);
+	op_and(0xF8); I(7);
+	op_rrca(); I(4);
+	op_rrca(); I(4);
+	op_rrca(); I(4);
+	SET_HL(0xB539); I(10);
+	rst20();
+	cpu.b = 0x0B; I(7);
+	do {
+		push(BC);
+		read_address();
+		SET_DE(0xC1C0); I(10);
+		cpu.b = 0x30; I(7);
+		do {
+			cpu.a = io_in((uint16_t)(cpu.a << 8 | 0xBE)); I(11);
+			op_and(cpu.c); I(4);
+			mem_write(DE, cpu.a); I(7);
+			cpu.e = op_inc8(cpu.e); I(4);
+			if (--cpu.b) I(13); else I(8);
+		} while (cpu.b);
+		ex_de_hl();
+		write_address();
+		SET_HL(0xC1C0); I(10);
+		SET_BC(0x30BE); I(10);
+		block_io(3);
+		SET_HL(0x0030); I(10);
+		SET_HL(op_add16(HL, DE)); I(11);
+		SET_BC(pop16()); I(10);
+		if (--cpu.b) I(13); else I(8);
+	} while (cpu.b);
+	I(10);
+}
+
+// wipe ($B55B, bank 3): the ending's screen wiped from both sides to the
+// middle, one frame for each of 33 steps of two 8-pixel columns: the
+// columns' 16 tiles cleared to 0 (the VDP waited for between bytes), then
+// the four bytes at $B5B8 written at the next tile of each side
+static void wait_vdp(void) { I(17); I(11); I(10); I(10); }   // call $0262: push af / pop af / ret
+
+static void wipe(void) {
+	if (!native_on_fiber()) { native_decline(); return; }   // shadow mode: it waits for frames
+	SET_HL(0x0020); I(10);
+	SET_DE(0x022C); I(10);
+	cpu.b = 0x21; I(7);
+	do {
+		I(17); call_original(0x041C);  // wait_vblank
+		cpu.c = 0x02; I(7);
+		do {
+			push(BC); push(DE); push(HL);
+			cpu.b = 0x10; I(7);
+			do {
+				push(BC);
+				cpu.b = 0x02; I(7);
+				do {
+					write_address();
+					ex_de_hl();
+					op_xor(cpu.a); I(4);
+					for (int i = 0; i < 4; i++) {
+						wait_vdp();
+						io_out((uint16_t)(cpu.a << 8 | 0xBE), cpu.a); I(11);
+					}
+					if (--cpu.b) I(13); else I(8);
+				} while (cpu.b);
+				SET_BC(0x0220); I(10);
+				SET_HL(op_add16(HL, BC)); I(11);
+				ex_de_hl();
+				SET_HL(op_add16(HL, BC)); I(11);
+				ex_de_hl();
+				SET_BC(pop16()); I(10);
+				if (--cpu.b) I(13); else I(8);
+			} while (cpu.b);
+			cpu.b = 0x02; I(7);
+			do {
+				push(BC);
+				write_address();
+				ex_de_hl();
+				SET_HL(0xB5B8); I(10);
+				SET_BC(0x04BE); I(10);
+				block_io(3);
+				SET_BC(pop16()); I(10);
+				if (--cpu.b) I(13); else I(8);
+			} while (cpu.b);
+			SET_HL(pop16()); I(10);
+			SET_DE(pop16()); I(10);
+			SET_BC(0x0008); I(10);
+			SET_HL(op_add16(HL, BC)); I(11);
+			ex_de_hl();
+			SET_BC(0xFFF8); I(10);
+			SET_HL(op_add16(HL, BC)); I(11);
+			ex_de_hl();
+			SET_BC(pop16()); I(10);
+			cpu.c = op_dec8(cpu.c); I(4);
+			if (!(cpu.f & FZ)) I(12);
+			else { I(7); break; }
+		} while (1);
+		if (--cpu.b) I(13); else I(8);
+	} while (cpu.b);
+	I(10);
+}
+
 #define EFFECT(name, addr, out) Native native_##name = { #name, addr, 1, name, out, .long_calls = 1 };
+Native native_fade_row = { "fade_row", 0xB4FB, 3, fade_row, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL, .long_calls = 1 };
+Native native_wipe = { "wipe", 0xB55B, 3, wipe, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL, .long_calls = 1 };
 EFFECT(shake, 0x4117, OUT_A | OUT_F)
 EFFECT(shift_block, 0x4173, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL)
 EFFECT(invert, 0x41A9, OUT_A | OUT_F)
