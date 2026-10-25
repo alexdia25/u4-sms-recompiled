@@ -393,6 +393,10 @@ native   00:372E native_count_move
 native   00:36FF native_bcd_text
 native   00:34BB native_same_word
 native   01:47D3 native_figure_name
+name     01:430A is_foe                     # carry: figure A is a creature (not the six at $431E)
+name     02:BBE7 whirl_check                # a whirlpool or twister on the party (world)
+native   01:430A native_is_foe
+native   02:BBE7 native_whirl_check
 native   00:33D4 native_music_later_start
 native   00:33DC native_music_later_play
 name     00:2FFB frame_tick                 # per-frame work of a waiting task, then yield

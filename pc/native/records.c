@@ -35,6 +35,8 @@
 // - figure_name ($47D3): the name of figure A, by item_name ($340F):
 //   foes $90 and up by fours ($05 + ...), $80-$8F by twos ($01 + ...), $38
 //   ($9F), people $20-$2F and $50-$5F by twos ($4D + ...), others $14.
+// - is_foe ($430A): carry when figure A is a creature ($80 and up) but
+//   not one of the six at $431E.
 // - person_at ($42B7): which of the first B people of the place ($C651)
 //   stands at (L, H): A = its number, or carry for none.
 // Cycle counts are the original's, instruction by instruction (I).
@@ -397,6 +399,25 @@ static void figure_name(void) {        // $47D3
 	native_continue_at(0x340F);        // jp item_name
 }
 
+static void is_foe(void) {             // $430A
+	push(BC); push(HL);
+	op_sub8(0x80, 0, 0); I(7);
+	int listed = 0;
+	if (cpu.f & FC) I(12);
+	else {
+		I(7);
+		SET_HL(0x431E); I(10);
+		SET_BC(0x0006); I(10);
+		while (op_block(6, 1)) I(21);  // cpir
+		I(16);
+		if (cpu.f & FZ) { I(12); listed = 1; } else I(7);
+	}
+	if (!listed) { op_ccf(); I(4); }
+	SET_HL(pop16()); I(10);
+	SET_BC(pop16()); I(10);
+	I(10);
+}
+
 static void person_at(void) {          // $42B7
 	push(BC); push(DE);
 	push16(cpu.iy); I(15);
@@ -455,3 +476,4 @@ RECORD(member_unflash, 0x4999, OUT_A | OUT_F)
 RECORD(people_save, 0x40E9, OUT_F)
 RECORD(people_load, 0x4100, OUT_F)
 RECORD(figure_name, 0x47D3, OUT_A | OUT_F | OUT_HL)
+RECORD(is_foe, 0x430A, OUT_A | OUT_F)

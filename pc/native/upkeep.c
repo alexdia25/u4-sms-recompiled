@@ -17,6 +17,9 @@
 //   $C99A), each told; across it, as it is.
 // - palette_dim ($A81A, bank 2): every colour of the palette's copy whose
 //   bits A are not 0 one step darker in them; sent next frame.
+// - whirl_check ($BBE7): on the world, whether one of the first four
+//   figures ($C651) is a whirlpool ($8C) or a twister ($8E) on the party;
+//   what it does then is left to the original ($BC1F, $BC54).
 // Cycle counts are the original's, instruction by instruction (I).
 #include "../runtime/native.h"
 #include "../runtime/sms.h"
@@ -235,6 +238,53 @@ static void palette_dim(void) {        // $A81A
 	I(10);
 }
 
+static int whirl_on_party(void) {
+	for (int i = 0; i < 4; i++) {
+		uint16_t r = (uint16_t)(0xC651 + 8 * i);
+		uint8_t f = mem_read(r + 3);
+		if (mem_read(r + 1) == mem_read(0xC953) && mem_read(r + 2) == mem_read(0xC954) && (f == 0x8C || f == 0x8E))
+			return 1;
+	}
+	return 0;
+}
+
+static void whirl_check(void) {        // $BBE7
+	// shadow mode: a whirlpool or a twister on the party waits for frames
+	if (!native_on_fiber() && !mem_read(0xC99F) && whirl_on_party()) { native_decline(); return; }
+	cpu.a = mem_read(0xC99F); I(13);
+	op_or(cpu.a); I(4);
+	if (!(cpu.f & FZ)) { I(11); return; }
+	I(5);
+	cpu.iy = 0xC651; I(14);
+	SET_HL(rd16(0xC953)); I(16);
+	SET_DE(0x0008); I(10);
+	cpu.b = 0x04; I(7);
+	do {
+		cpu.a = mem_read((uint16_t)(cpu.iy + 1)); I(19);
+		op_sub8(cpu.l, 0, 0); I(4);
+		if (!(cpu.f & FZ)) I(12);
+		else {
+			I(7);
+			cpu.a = mem_read((uint16_t)(cpu.iy + 2)); I(19);
+			op_sub8(cpu.h, 0, 0); I(4);
+			if (!(cpu.f & FZ)) I(12);
+			else {
+				I(7);
+				cpu.a = mem_read((uint16_t)(cpu.iy + 3)); I(19);
+				op_sub8(0x8C, 0, 0); I(7);
+				if (cpu.f & FZ) { I(12); native_continue_at(0xBC1F); return; }   // a whirlpool
+				I(7);
+				op_sub8(0x8E, 0, 0); I(7);
+				if (cpu.f & FZ) { I(12); native_continue_at(0xBC54); return; }   // a twister
+				I(7);
+			}
+		}
+		cpu.iy = op_add16(cpu.iy, DE); I(15);
+		if (--cpu.b) I(13); else I(8);
+	} while (cpu.b);
+	I(10);
+}
+
 #define UPKEEP(name, addr, out) Native native_##name = { #name, addr, 2, name, out, .long_calls = 1 };
 UPKEEP(in_balloon, 0x957C, OUT_A | OUT_F)
 UPKEEP(hull_mend, 0xB55E, OUT_A | OUT_F | OUT_HL)
@@ -242,3 +292,4 @@ UPKEEP(afflictions, 0xB4EE, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL | OUT_IY)
 UPKEEP(below_c8fd, 0xBBC6, OUT_A | OUT_F | OUT_HL)
 UPKEEP(ship_wind, 0xB36C, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL)
 UPKEEP(palette_dim, 0xA81A, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL)
+UPKEEP(whirl_check, 0xBBE7, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL | OUT_IY)
