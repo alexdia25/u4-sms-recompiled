@@ -353,6 +353,38 @@ name     02:B36C ship_wind                  # a ship's move time by the wind
 name     02:A81A palette_dim                # palette copy one step darker in bits A
 native   02:B36C native_ship_wind
 native   02:A81A native_palette_dim
+name     03:B894 put_here
+name     03:B8A7 first_out_of_view
+name     03:B8B7 in_view                    # carry: IY record within 5 of the party
+name     03:B8CD first_not_at_party
+name     03:B8DD at_party
+name     03:B8EB room_for_ship              # the ship list ($C699) makes room; IY = its last
+name     03:B94C at_c973
+name     03:B95A room_for_horse
+name     03:B994 room_for_chest
+name     03:B9CF room_for_both
+name     03:B9E0 balloon_reset
+name     03:B9FA balloon_here
+name     03:BA0B ship_at_c97a
+name     03:BA2A ship_left_here
+name     03:BA3B horse_left_here
+name     03:BA4C chest_at_c97a
+native   03:B894 native_put_here
+native   03:B8A7 native_first_out_of_view
+native   03:B8B7 native_in_view
+native   03:B8CD native_first_not_at_party
+native   03:B8DD native_at_party
+native   03:B8EB native_room_for_ship
+native   03:B94C native_at_c973
+native   03:B95A native_room_for_horse
+native   03:B994 native_room_for_chest
+native   03:B9CF native_room_for_both
+native   03:B9E0 native_balloon_reset
+native   03:B9FA native_balloon_here
+native   03:BA0B native_ship_at_c97a
+native   03:BA2A native_ship_left_here
+native   03:BA3B native_horse_left_here
+native   03:BA4C native_chest_at_c97a
 native   00:33D4 native_music_later_start
 native   00:33DC native_music_later_play
 name     00:2FFB frame_tick                 # per-frame work of a waiting task, then yield

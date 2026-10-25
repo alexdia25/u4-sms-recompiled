@@ -718,6 +718,11 @@ def main():
         'roam_sea':      ((0x5B, 0x44), ['C959:11', 'C95A:00'], 200),
         'roam_horse':    ((0x9F, 0x16), ['C959:14', 'C95A:00'], 300),
     }
+    def full(base, n, figure):         # a full list far away: leaving one must make room
+        return ['%04X:%02X' % (base + 8 * i + k, v) for i in range(n)
+                for k, v in ((0, figure), (1, 0x10 + i), (2, 0x10), (3, figure))]
+    ROAMS['roam_sea_full'] = ((0x5B, 0x44), ['C959:11', 'C95A:00'] + full(0xC699, 5, 0x10), 200)
+    ROAMS['roam_horse_full'] = ((0x9F, 0x16), ['C959:14', 'C95A:00'] + full(0xC6C1, 5, 0x14), 300)
     for name, (at, pokes, n) in ROAMS.items():
         rnd = random.Random(name)
         s = Script()
