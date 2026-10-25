@@ -299,6 +299,14 @@ name     02:B55E hull_mend                  # the ship's hull ($C961) mends, 1 i
 native   02:957C native_in_balloon
 native   02:B4EE native_afflictions
 native   02:B55E native_hull_mend
+name     01:465D party_alive                # nobody can act: the party is lost ($4483)
+name     01:4896 party_flash
+name     01:49A6 member_flash
+name     01:49B3 member_row
+native   01:465D native_party_alive
+native   01:4896 native_party_flash
+native   01:49A6 native_member_flash
+native   01:49B3 native_member_row
 native   00:33D4 native_music_later_start
 native   00:33DC native_music_later_play
 name     00:2FFB frame_tick                 # per-frame work of a waiting task, then yield

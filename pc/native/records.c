@@ -19,6 +19,13 @@
 // - magic_regain ($4776): each member not dead ($1C != $44) gains a magic
 //   point, up to its class's most (the jump table at $47B3, from its
 //   intelligence: x2, x1, 0, x1.5 or x0.5), 99 at most.
+// - party_alive ($465D): when no member can act the party is lost
+//   ($4483); else C = the first who can act, then on to the first able
+//   one ($4466).
+// - member_row ($49B3): D, E, B, C = member C's line of the status
+//   window (row C * 2 + 1, column 18, 2 x 14); member_flash ($49A6): that
+//   line highlighted; party_flash ($4896): every member's, then a wait
+//   for the vertical blank.
 // - person_at ($42B7): which of the first B people of the place ($C651)
 //   stands at (L, H): A = its number, or carry for none.
 // Cycle counts are the original's, instruction by instruction (I).
@@ -224,6 +231,64 @@ static void magic_regain(void) {       // $4776
 	I(10);
 }
 
+static void party_alive(void) {        // $465D
+	push(BC);
+	cpu.a = mem_read(0xC957); I(13);
+	cpu.b = cpu.a; I(4);
+	cpu.c = 0x00; I(7);
+	for (;;) {
+		I(17); call_original(0x4445);  // member_can_act
+		if (!(cpu.f & FC)) { I(12); break; }
+		I(7);
+		cpu.c = op_inc8(cpu.c); I(4);
+		if (--cpu.b) I(13);
+		else { I(8); I(10); native_continue_at(0x4483); return; }   // nobody: the party is lost
+	}
+	for (;;) {
+		I(17); call_original(0x4466);  // member_able
+		if (!(cpu.f & FC)) { I(12); break; }
+		I(7);
+		cpu.c = op_inc8(cpu.c); I(4);
+		if (--cpu.b) I(13); else { I(8); break; }
+	}
+	SET_BC(pop16()); I(10);
+	I(10);
+}
+
+static void member_row(void) {         // $49B3
+	cpu.a = cpu.c; I(4);
+	op_add8(cpu.a, 0); I(4);
+	cpu.a = op_inc8(cpu.a); I(4);
+	cpu.d = cpu.a; I(4);
+	cpu.e = 0x12; I(7);
+	SET_BC(0x020E); I(10);
+	I(10);
+}
+
+static void member_flash(void) {       // $49A6
+	push(BC); push(DE); push(HL);
+	I(17); member_row();
+	I(17); call_original(0x2DE3);      // highlight_on
+	SET_HL(pop16()); I(10);
+	SET_DE(pop16()); I(10);
+	SET_BC(pop16()); I(10);
+	I(10);
+}
+
+static void party_flash(void) {        // $4896
+	if (!native_on_fiber()) { native_decline(); return; }   // shadow mode: it waits for a frame
+	cpu.a = mem_read(0xC957); I(13);
+	cpu.b = cpu.a; I(4);
+	cpu.c = 0x00; I(7);
+	do {
+		I(17); member_flash();
+		cpu.c = op_inc8(cpu.c); I(4);
+		if (--cpu.b) I(13); else I(8);
+	} while (cpu.b);
+	I(10);
+	native_continue_at(0x041C);        // jp wait_vblank
+}
+
 static void person_at(void) {          // $42B7
 	push(BC); push(DE);
 	push16(cpu.iy); I(15);
@@ -273,3 +338,7 @@ RECORD(print_avatar_name, 0x5650, OUT_A | OUT_F | OUT_BC | OUT_DE)
 RECORD(person_at, 0x42B7, OUT_A | OUT_F)
 RECORD(eat, 0x4753, OUT_A | OUT_F)
 RECORD(magic_regain, 0x4776, OUT_A | OUT_F)
+RECORD(party_alive, 0x465D, OUT_A | OUT_F)
+RECORD(member_row, 0x49B3, OUT_A | OUT_F | OUT_BC | OUT_DE)
+RECORD(member_flash, 0x49A6, OUT_A | OUT_F)
+RECORD(party_flash, 0x4896, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL)
