@@ -1,11 +1,19 @@
-// Doors in towns (bank 2).
+// Doors in towns, and the world's ways in (bank 2).
 // - town_cell ($B5A4): HL = the cell (L, H) of the town's 32x32 map at
 //   $D000 (2 bytes a cell).
 // - door_ahead ($B464): the party's step (L, H) in a town: a locked door
 //   ($3A) is "Locked!" and stops it; a door ($3B) opens ($3E) for two
 //   turns ($C9A4, the one opened before shut again, its place at $C9A2),
 //   with a sound, and stops this step too. Carry: the step is stopped.
-// Cycle counts are the original's, instruction by instruction (I).
+// - world_step ($ACDC): after a step on the world (unless travel there is
+//   off, $C9A1, or by balloon): the Abyss's isle ($AEDA, left to the
+//   original); on an open moongate ($C98C = $43 at $C98D/$C98E) the party
+//   is sent, with a sound and two flashes, to the gate of the other moon
+//   ($C95F, places at $7CA3), or, both moons new ($C95D = $C95F = 4), to
+//   location $20 (the rest in the original, $ADFF); else a place among
+//   the 32 at $AE60 is entered: location = its number + 2 (with the
+//   carry), the way back kept, and what happens by the figure the party
+//   travels as ($C9BB, the table at $AD6D, in the original).
 #include "../runtime/native.h"
 #include "../runtime/sms.h"
 #include "../runtime/z80.h"
@@ -109,5 +117,120 @@ static void door_ahead(void) {         // $B464
 	I(10);
 }
 
+static int world_event_here(void) {    // a moongate, or a place's entrance, under the party
+	uint8_t x = mem_read(PARTY_X), y = mem_read(PARTY_Y);
+	if (x == mem_read(0xC98D) && y == mem_read(0xC98E) && mem_read(0xC98C) == 0x43) return 1;
+	for (int i = 0; i < 0x20; i++)
+		if (mem_read((uint16_t)(0xAE60 + 2 * i)) == x && mem_read((uint16_t)(0xAE61 + 2 * i)) == y) return 1;
+	return 0;
+}
+
+static void world_step(void) {         // $ACDC
+	// shadow mode: what follows a moongate or an entrance waits for frames
+	if (!native_on_fiber() && world_event_here()) { native_decline(); return; }
+	cpu.a = mem_read(0xC9A1); I(13);
+	op_or(cpu.a); I(4);
+	if (ret_if(cpu.f & FZ)) return;
+	call(0x957C);                      // in_balloon
+	if (ret_if(cpu.f & FZ)) return;
+	call(0xAEDA);                      // the Abyss's isle
+	int gate = 0;
+	cpu.a = mem_read(PARTY_X); I(13);
+	SET_HL(0xC98D); I(10);
+	op_sub8(mem_read(HL), 0, 0); I(7);
+	if (!(cpu.f & FZ)) I(12);
+	else {
+		I(7);
+		cpu.a = mem_read(PARTY_Y); I(13);
+		SET_HL(0xC98E); I(10);
+		op_sub8(mem_read(HL), 0, 0); I(7);
+		if (!(cpu.f & FZ)) I(12);
+		else {
+			I(7);
+			cpu.a = mem_read(0xC98C); I(13);
+			op_sub8(0x43, 0, 0); I(7);
+			if (!(cpu.f & FZ)) I(12); else { I(7); gate = 1; }
+		}
+	}
+	if (gate) {                        // a moongate
+		cpu.a = 0x15; I(7);
+		call(0x05F1);                  // play_sound
+		call(0x41A9);                  // invert: a flash
+		call(0x41A9);
+		cpu.a = mem_read(0xC95D); I(13);
+		op_sub8(0x04, 0, 0); I(7);
+		int both_new = 0;
+		if (!(cpu.f & FZ)) I(12);
+		else {
+			I(7);
+			cpu.a = mem_read(0xC95F); I(13);
+			op_sub8(0x04, 0, 0); I(7);
+			if (!(cpu.f & FZ)) I(12); else { I(7); both_new = 1; }
+		}
+		if (both_new) {
+			cpu.a = 0x20; I(7);
+			mem_write(0xC9A0, cpu.a); I(13);
+			SET_HL(rd16(PARTY_X)); I(16);
+			wr16(0xC96D, HL); I(16);
+			I(10);
+			native_continue_at(0xADFF);
+			return;
+		}
+		cpu.a = mem_read(0xC95F); I(13);   // $AD28: the other moon's gate
+		SET_HL(0x7CA3); I(10);
+		I(11); I(10);                  // rst $20: HL = the word HL[A]
+		op_add8(cpu.a, 0); I(4);
+		if (!(cpu.f & FC)) I(12);
+		else { I(7); cpu.h = op_inc8(cpu.h); I(4); }
+		op_add8(cpu.l, 0); I(4);
+		cpu.l = cpu.a; I(4);
+		op_add8(cpu.h, cpu.f & FC); I(4);
+		op_sub8(cpu.l, 0, 1); I(4);
+		cpu.h = cpu.a; I(4);
+		cpu.a = mem_read(HL); I(7);
+		SET_HL(HL + 1); I(6);
+		cpu.h = mem_read(HL); I(7);
+		cpu.l = cpu.a; I(4);
+		I(10);
+		wr16(PARTY_X, HL); I(16);
+		call(0x0E22);                  // recenter_map_view
+		call(0x276D);                  // forget_screen
+		call(0x129D);                  // refresh
+		call(0x41A9);
+		I(10);
+		native_continue_at(0x41A9);    // jp invert
+		return;
+	}
+	SET_HL(0xAE60); I(10);             // $AD41: a place entered?
+	SET_DE(rd16(PARTY_X)); I(20);
+	cpu.b = 0x20; I(7);
+	for (;;) {
+		cpu.a = cpu.e; I(4);
+		op_sub8(mem_read(HL), 0, 0); I(7);
+		SET_HL(HL + 1); I(6);
+		if (cpu.f & FZ) {
+			I(7);
+			cpu.a = cpu.d; I(4);
+			op_sub8(mem_read(HL), 0, 0); I(7);
+			if (cpu.f & FZ) { I(12); break; }
+			I(7);
+		} else I(12);
+		SET_HL(HL + 1); I(6);
+		if (--cpu.b) I(13);
+		else { I(8); I(10); return; }  // none
+	}
+	cpu.a = 0x1F; I(7);                // $AD57
+	op_sub8(cpu.b, 0, 1); I(4);
+	op_sub8(0xFD, cpu.f & FC, 1); I(7);
+	mem_write(0xC9A0, cpu.a); I(13);
+	wr16(0xC96D, DE); I(20);
+	cpu.a = mem_read(0xC9BB); I(13);
+	SET_HL(0xAD6D); I(10);
+	I(17);
+	push16(0xAD6C);                    // call switch_on_a: by the figure, in the original
+	native_continue_at(0x334A);
+}
+
 Native native_town_cell = { "town_cell", 0xB5A4, 2, town_cell, OUT_A | OUT_F | OUT_HL, .long_calls = 1 };
 Native native_door_ahead = { "door_ahead", 0xB464, 2, door_ahead, OUT_A | OUT_F | OUT_DE | OUT_HL, .long_calls = 1 };
+Native native_world_step = { "world_step", 0xACDC, 2, world_step, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL, .long_calls = 1 };

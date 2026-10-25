@@ -659,6 +659,23 @@ def main():
         for _ in range(4):
             s.press('1', 60)
         s.write(name)
+    # Moonglow's moongate ($E0, $85), stepped onto from the west while open
+    for name, moons in (('moongate', []),):
+        rnd = random.Random(name)
+        s = Script()
+        s.poke('C96D:DF')
+        s.poke('C96E:85')
+        s.press('L', 40)
+        s.press('L', 70)
+        s.f += 300
+        for p in ['C98C:43'] + moons:
+            s.poke(p)
+        s.press('R', 300)
+        for _ in range(40):
+            r = rnd.random()
+            k = rnd.choice('UDLR') if r < 0.6 else '2' if r < 0.9 else '1'
+            s.press(k, rnd.choice((20, 30, 40, 60)))
+        s.write(name)
     # the shrine of honesty (location $1A at $E9, $42): stepped in from the
     # south; the virtue, the cycles, the mantra (AHM) for each cycle
     AHM = ['2', 'R', 'R', 'D', '2', 'D', '2', 'R', 'D', 'D', 'D', '2']   # on the letter grid, then End

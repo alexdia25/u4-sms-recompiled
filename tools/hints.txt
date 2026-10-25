@@ -307,6 +307,8 @@ native   01:465D native_party_alive
 native   01:4896 native_party_flash
 native   01:49A6 native_member_flash
 native   01:49B3 native_member_row
+name     02:ACDC world_step                 # moongates, entering a place
+native   02:ACDC native_world_step
 native   00:33D4 native_music_later_start
 native   00:33DC native_music_later_play
 name     00:2FFB frame_tick                 # per-frame work of a waiting task, then yield
