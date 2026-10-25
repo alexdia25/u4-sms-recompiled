@@ -51,6 +51,12 @@
 //   place (IX+$0A/$0B, $0C/$0D) moved by its step (IX+$0E/$0F, $10/$11).
 // - end_tasks_of ($0B6D): every task slot ($C300, 10 x 48 bytes) of kind A
 //   cleared.
+// - count_move ($372E): the 32-bit count at $C8FD and the 5-byte BCD
+//   count at $C901 one up.
+// - bcd_text ($36FF): the 5-byte BCD number at HL as ten digits ending at
+//   $C06F (a 0 after them), leading zeros (but the last) as spaces.
+// - same_word ($34BB): Z (no carry) when the words at HL and DE are the
+//   same, letters' case aside (to_upper, $34D4); else carry.
 // - tile_effect ($3F67): what the tile under the party ($C990) does: $03
 //   and $44 ($4071), $4C and $46 ($4812), $47 ($404A).
 // - screen_place ($3991): (L, H) cells as pixels (12 a cell);
@@ -754,6 +760,110 @@ static void end_tasks_of(void) {       // $0B6D
 	I(10);
 }
 
+static void count_move(void) {         // $372E
+	push(BC); push(HL);
+	SET_HL(rd16(0xC8FD)); I(16);
+	SET_BC(0x0001); I(10);
+	SET_HL(op_add16(HL, BC)); I(11);
+	wr16(0xC8FD, HL); I(16);
+	if (!(cpu.f & FC)) I(12);
+	else {
+		I(7);
+		SET_HL(rd16(0xC8FF)); I(16);
+		SET_HL(HL + 1); I(6);
+		wr16(0xC8FF, HL); I(16);
+	}
+	SET_HL(0xC901); I(10);
+	SET_BC(0x0500); I(10);
+	op_scf(); I(4);
+	do {
+		cpu.a = mem_read(HL); I(7);
+		op_add8(cpu.c, cpu.f & FC); I(4);
+		op_daa(); I(4);
+		mem_write(HL, cpu.a); I(7);
+		SET_HL(HL + 1); I(6);
+		if (--cpu.b) I(13); else I(8);
+	} while (cpu.b);
+	SET_HL(pop16()); I(10);
+	SET_BC(pop16()); I(10);
+	I(10);
+}
+
+static void bcd_digit(void) {          // $3727: digit A & $0F before HL
+	I(17);
+	op_and(0x0F); I(7);
+	op_add8(0x30, 0); I(7);
+	SET_HL(HL - 1); I(6);
+	mem_write(HL, cpu.a); I(7);
+	I(10);
+}
+
+static void bcd_text(void) {           // $36FF
+	push(BC); push(DE);
+	{ uint16_t t = HL; SET_HL(DE); SET_DE(t); } I(4);
+	SET_HL(0xC06F); I(10);
+	mem_write(HL, 0x00); I(10);
+	cpu.b = 0x05; I(7);
+	do {
+		cpu.a = mem_read(DE); I(7);
+		bcd_digit();
+		cpu.a = mem_read(DE); I(7);
+		for (int i = 0; i < 4; i++) { op_rrca(); I(4); }
+		bcd_digit();
+		SET_DE(DE + 1); I(6);
+		if (--cpu.b) I(13); else I(8);
+	} while (cpu.b);
+	cpu.a = 0x30; I(7);
+	cpu.b = 0x09; I(7);
+	do {                               // leading zeros
+		op_sub8(mem_read(HL), 0, 0); I(7);
+		if (!(cpu.f & FZ)) { I(12); break; }
+		I(7);
+		mem_write(HL, 0x20); I(10);
+		SET_HL(HL + 1); I(6);
+		if (--cpu.b) I(13); else I(8);
+	} while (cpu.b);
+	SET_DE(pop16()); I(10);
+	SET_BC(pop16()); I(10);
+	I(10);
+}
+
+static void to_upper(void) {           // $34D4
+	I(17);
+	op_sub8(0x61, 0, 0); I(7);
+	if (cpu.f & FC) { I(11); return; }
+	I(5);
+	op_sub8(0x7B, 0, 0); I(7);
+	if (!(cpu.f & FC)) { I(11); return; }
+	I(5);
+	op_add8(0xE0, 0); I(7);
+	I(10);
+}
+
+static void same_word(void) {          // $34BB
+	push(BC); push(DE); push(HL);
+	for (;;) {
+		cpu.a = mem_read(HL); I(7);
+		SET_HL(HL + 1); I(6);
+		to_upper();
+		cpu.b = cpu.a; I(4);
+		cpu.a = mem_read(DE); I(7);
+		SET_DE(DE + 1); I(6);
+		to_upper();
+		op_sub8(cpu.b, 0, 0); I(4);
+		op_scf(); I(4);
+		if (!(cpu.f & FZ)) { I(12); break; }
+		I(7);
+		op_or(cpu.a); I(4);
+		if (cpu.f & FZ) { I(7); break; }
+		I(12);
+	}
+	SET_HL(pop16()); I(10);
+	SET_DE(pop16()); I(10);
+	SET_BC(pop16()); I(10);
+	I(10);
+}
+
 static void tile_effect(void) {        // $3F67
 	static const struct { uint8_t tile; uint16_t to; } effects[5] = {
 		{ 0x03, 0x4071 }, { 0x44, 0x4071 }, { 0x4C, 0x4812 }, { 0x46, 0x4812 }, { 0x47, 0x404A },
@@ -813,3 +923,6 @@ HELPER(tile_effect, 0x3F67, OUT_A | OUT_F)
 HELPER(slot_step_add, 0x0BA4, OUT_A | OUT_F)
 HELPER(slot_step_sub, 0x0BC9, OUT_A | OUT_F)
 HELPER(end_tasks_of, 0x0B6D, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL)
+HELPER(count_move, 0x372E, OUT_A | OUT_F)
+HELPER(bcd_text, 0x36FF, OUT_A | OUT_F | OUT_HL)
+HELPER(same_word, 0x34BB, OUT_A | OUT_F)

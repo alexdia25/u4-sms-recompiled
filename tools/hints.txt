@@ -385,6 +385,14 @@ native   03:BA0B native_ship_at_c97a
 native   03:BA2A native_ship_left_here
 native   03:BA3B native_horse_left_here
 native   03:BA4C native_chest_at_c97a
+name     00:372E count_move                 # the move counts ($C8FD, BCD $C901) +1
+name     00:36FF bcd_text                   # 5-byte BCD at HL as text ending at $C06F
+name     00:34BB same_word                  # Z: the words at HL and DE match, case aside
+name     01:47D3 figure_name                # the name of figure A (item_name)
+native   00:372E native_count_move
+native   00:36FF native_bcd_text
+native   00:34BB native_same_word
+native   01:47D3 native_figure_name
 native   00:33D4 native_music_later_start
 native   00:33DC native_music_later_play
 name     00:2FFB frame_tick                 # per-frame work of a waiting task, then yield

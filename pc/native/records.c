@@ -32,6 +32,9 @@
 //   normal (highlight_off).
 // - people_save ($40E9) / people_load ($4100): the place's 256 bytes of
 //   people ($C651) to or from the battery RAM at $8200.
+// - figure_name ($47D3): the name of figure A, by item_name ($340F):
+//   foes $90 and up by fours ($05 + ...), $80-$8F by twos ($01 + ...), $38
+//   ($9F), people $20-$2F and $50-$5F by twos ($4D + ...), others $14.
 // - person_at ($42B7): which of the first B people of the place ($C651)
 //   stands at (L, H): A = its number, or carry for none.
 // Cycle counts are the original's, instruction by instruction (I).
@@ -339,6 +342,61 @@ static void people_copy(uint16_t from, uint16_t to) {   // $40E9 / $4100
 static void people_save(void) { people_copy(0xC651, 0x8200); }
 static void people_load(void) { people_copy(0x8200, 0xC651); }
 
+static void figure_name(void) {        // $47D3
+	op_sub8(0x80, 0, 0); I(7);
+	if (!(cpu.f & FC)) {
+		I(7);
+		op_sub8(0x90, 0, 0); I(7);
+		if (!(cpu.f & FC)) {
+			I(7);
+			op_sub8(0x80, 0, 1); I(7);
+			cpu.a = op_rot(7, cpu.a); I(8);
+			cpu.a = op_rot(7, cpu.a); I(8);
+			op_add8(0x05, 0); I(7);
+		} else {
+			I(12);
+			op_sub8(0x80, 0, 1); I(7);
+			cpu.a = op_rot(7, cpu.a); I(8);
+			op_add8(0x01, 0); I(7);
+		}
+		I(12);
+	} else {
+		I(12);
+		op_sub8(0x38, 0, 0); I(7);
+		if (cpu.f & FZ) { I(7); cpu.a = 0x9F; I(7); I(12); }
+		else {
+			I(12);
+			int other = 0;
+			op_sub8(0x20, 0, 0); I(7);
+			if (cpu.f & FC) { I(12); other = 1; }
+			else {
+				I(7);
+				op_sub8(0x60, 0, 0); I(7);
+				if (!(cpu.f & FC)) { I(12); other = 1; }
+				else {
+					I(7);
+					op_sub8(0x30, 0, 0); I(7);
+					if (cpu.f & FC) I(12);
+					else {
+						I(7);
+						op_sub8(0x50, 0, 0); I(7);
+						if (cpu.f & FC) { I(12); other = 1; } else I(7);
+					}
+				}
+			}
+			if (other) { cpu.a = 0x14; I(7); }
+			else {
+				op_and(0x1F); I(7);
+				cpu.a = op_rot(7, cpu.a); I(8);
+				op_add8(0x4D, 0); I(7);
+				I(12);
+			}
+		}
+	}
+	I(10);
+	native_continue_at(0x340F);        // jp item_name
+}
+
 static void person_at(void) {          // $42B7
 	push(BC); push(DE);
 	push16(cpu.iy); I(15);
@@ -396,3 +454,4 @@ RECORD(member_graphic, 0x42F3, OUT_A | OUT_F)
 RECORD(member_unflash, 0x4999, OUT_A | OUT_F)
 RECORD(people_save, 0x40E9, OUT_F)
 RECORD(people_load, 0x4100, OUT_F)
+RECORD(figure_name, 0x47D3, OUT_A | OUT_F | OUT_HL)
