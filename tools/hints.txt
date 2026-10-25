@@ -293,6 +293,12 @@ name     02:B464 door_ahead                 # town step (L,H): locked door / doo
 name     02:B5A4 town_cell                  # HL = town map cell (L,H)
 native   02:B464 native_door_ahead
 native   02:B5A4 native_town_cell
+name     02:957C in_balloon                 # Z: the party travels by balloon ($C959 = $18)
+name     02:B4EE afflictions                # sleep, poison, then food and starving
+name     02:B55E hull_mend                  # the ship's hull ($C961) mends, 1 in 4, to 50
+native   02:957C native_in_balloon
+native   02:B4EE native_afflictions
+native   02:B55E native_hull_mend
 native   00:33D4 native_music_later_start
 native   00:33DC native_music_later_play
 name     00:2FFB frame_tick                 # per-frame work of a waiting task, then yield
