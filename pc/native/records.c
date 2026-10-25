@@ -37,6 +37,8 @@
 //   ($9F), people $20-$2F and $50-$5F by twos ($4D + ...), others $14.
 // - is_foe ($430A): carry when figure A is a creature ($80 and up) but
 //   not one of the six at $431E.
+// - member_step_place ($4CA3): (L, H) = the current member's figure's
+//   place one step in direction A.
 // - person_at ($42B7): which of the first B people of the place ($C651)
 //   stands at (L, H): A = its number, or carry for none.
 // Cycle counts are the original's, instruction by instruction (I).
@@ -418,6 +420,18 @@ static void is_foe(void) {             // $430A
 	I(10);
 }
 
+static void member_step_place(void) {  // $4CA3
+	I(17); call_original(0x40B9);      // HL = the step
+	I(17); call_original(0x48E1);      // current_object
+	cpu.a = mem_read(cpu.iy); I(19);
+	op_add8(cpu.l, 0); I(4);
+	cpu.l = cpu.a; I(4);
+	cpu.a = mem_read((uint16_t)(cpu.iy + 1)); I(19);
+	op_add8(cpu.h, 0); I(4);
+	cpu.h = cpu.a; I(4);
+	I(10);
+}
+
 static void person_at(void) {          // $42B7
 	push(BC); push(DE);
 	push16(cpu.iy); I(15);
@@ -477,3 +491,4 @@ RECORD(people_save, 0x40E9, OUT_F)
 RECORD(people_load, 0x4100, OUT_F)
 RECORD(figure_name, 0x47D3, OUT_A | OUT_F | OUT_HL)
 RECORD(is_foe, 0x430A, OUT_A | OUT_F)
+RECORD(member_step_place, 0x4CA3, OUT_A | OUT_F | OUT_HL | OUT_IY)

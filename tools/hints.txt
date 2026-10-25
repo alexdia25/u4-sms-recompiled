@@ -423,6 +423,8 @@ name     02:B42E wind_holds_back            # carry: a sail in direction A held 
 native   03:B7EA native_divide_16_b3
 native   03:B805 native_divide_step
 native   02:B42E native_wind_holds_back
+name     01:4CA3 member_step_place          # (L,H) = the current member's figure one step in direction A
+native   01:4CA3 native_member_step_place
 native   00:33D4 native_music_later_start
 native   00:33DC native_music_later_play
 name     00:2FFB frame_tick                 # per-frame work of a waiting task, then yield
