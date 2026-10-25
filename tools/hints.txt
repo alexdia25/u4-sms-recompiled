@@ -239,6 +239,14 @@ ram      C0C7 wait_flag_value
 name     00:33AF play_music_later           # A = tune: start a music_later task
 name     00:33D4 music_later                # task: stop music, wait 20 frames, play slot +$1A
 native   00:33AF native_play_music_later
+name     00:141B window_reset               # the map window's frame and text again (map mode changed)
+name     00:1431 window_clear
+name     00:1449 window_strip
+name     00:1461 window_border
+native   00:141B native_window_reset
+native   00:1431 native_window_clear
+native   00:1449 native_window_strip
+native   00:1461 native_window_border
 native   00:33D4 native_music_later_start
 native   00:33DC native_music_later_play
 name     00:2FFB frame_tick                 # per-frame work of a waiting task, then yield
