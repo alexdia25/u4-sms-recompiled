@@ -14,6 +14,11 @@
 // - member_hurt ($4679): member C takes DE damage (member_take_damage,
 //   $467F), then the status window is drawn again ($4324).
 // - print_avatar_name ($5650): the Avatar's name printed.
+// - eat ($4753): A hundredths of food eaten ($C906, then the 2-byte food
+//   at $C907); none left: all three bytes 0.
+// - magic_regain ($4776): each member not dead ($1C != $44) gains a magic
+//   point, up to its class's most (the jump table at $47B3, from its
+//   intelligence: x2, x1, 0, x1.5 or x0.5), 99 at most.
 // - person_at ($42B7): which of the first B people of the place ($C651)
 //   stands at (L, H): A = its number, or carry for none.
 // Cycle counts are the original's, instruction by instruction (I).
@@ -130,6 +135,95 @@ static void print_avatar_name(void) {  // $5650
 	I(10);
 }
 
+static void eat(void) {                // $4753
+	push(BC); push(HL);
+	cpu.b = cpu.a; I(4);
+	SET_HL(0xC906); I(10);
+	cpu.a = mem_read(HL); I(7);
+	op_sub8(cpu.b, 0, 1); I(4);
+	mem_write(HL, cpu.a); I(7);
+	if (!(cpu.f & FC)) I(12);
+	else {
+		I(7);
+		op_add8(0x64, 0); I(7);
+		mem_write(HL, cpu.a); I(7);
+		op_scf(); I(4);
+		SET_BC(0x0200); I(10);
+		do {                           // the borrow through the food
+			SET_HL(HL + 1); I(6);
+			cpu.a = mem_read(HL); I(7);
+			op_sub8(cpu.c, cpu.f & FC, 1); I(4);
+			mem_write(HL, cpu.a); I(7);
+			if (--cpu.b) I(13); else I(8);
+		} while (cpu.b);
+		if (!(cpu.f & FC)) I(12);
+		else {
+			I(7);
+			cpu.b = 0x03; I(7);
+			do {                       // none left
+				mem_write(HL, cpu.c); I(7);
+				SET_HL(HL - 1); I(6);
+				if (--cpu.b) I(13); else I(8);
+			} while (cpu.b);
+		}
+	}
+	SET_HL(pop16()); I(10);
+	SET_BC(pop16()); I(10);
+	I(10);
+}
+
+static void class_magic(uint8_t class_) {   // rst $18 on the table at $47B3: A from C
+	I(11 + 10 + 52);
+	switch (rd16((uint16_t)(0x47B3 + 2 * class_))) {
+	case 0x47D0: cpu.a = cpu.c; I(4); op_add8(cpu.a, 0); I(4); break;
+	case 0x47C9: cpu.a = cpu.c; I(4); break;
+	case 0x47C3: op_xor(cpu.a); I(4); break;
+	case 0x47CB: cpu.a = cpu.c; I(4); cpu.a = op_rot(7, cpu.a); I(8); op_add8(cpu.c, 0); I(4); break;
+	default:     cpu.a = cpu.c; I(4); cpu.a = op_rot(7, cpu.a); I(8); break;   // $47C5
+	}
+	I(10);
+}
+
+static void magic_regain(void) {       // $4776
+	push(BC); push(DE); push(HL);
+	push16(cpu.iy); I(15);
+	cpu.iy = 0xC751; I(14);
+	SET_DE(0x001D); I(10);
+	cpu.a = mem_read(0xC957); I(13);
+	cpu.b = cpu.a; I(4);
+	do {
+		cpu.a = mem_read((uint16_t)(cpu.iy + 0x1C)); I(19);
+		op_sub8(0x44, 0, 0); I(7);
+		if (cpu.f & FZ) I(12);
+		else {
+			I(7);
+			cpu.c = mem_read((uint16_t)(cpu.iy + 0x08)); I(19);
+			cpu.a = mem_read((uint16_t)(cpu.iy + 0x1B)); I(19);
+			SET_HL(0x47B3); I(10);
+			uint8_t class_ = cpu.a;
+			SET_HL(rd16((uint16_t)(0x47B3 + 2 * class_)));   // as rst $18 leaves it
+			class_magic(class_);
+			op_sub8(0x64, 0, 0); I(7);
+			if (cpu.f & FC) I(12);
+			else { I(7); cpu.a = 0x63; I(7); }
+			cpu.c = cpu.a; I(4);
+			cpu.a = mem_read((uint16_t)(cpu.iy + 0x09)); I(19);
+			cpu.a = op_inc8(cpu.a); I(4);
+			op_sub8(cpu.c, 0, 0); I(4);
+			if (cpu.f & FC) I(12);
+			else { I(7); cpu.a = cpu.c; I(4); }
+			mem_write((uint16_t)(cpu.iy + 0x09), cpu.a); I(19);
+		}
+		cpu.iy = op_add16(cpu.iy, DE); I(15);
+		if (--cpu.b) I(13); else I(8);
+	} while (cpu.b);
+	cpu.iy = pop16(); I(14);
+	SET_HL(pop16()); I(10);
+	SET_DE(pop16()); I(10);
+	SET_BC(pop16()); I(10);
+	I(10);
+}
+
 static void person_at(void) {          // $42B7
 	push(BC); push(DE);
 	push16(cpu.iy); I(15);
@@ -177,3 +271,5 @@ RECORD(party_iter_setup, 0x4098, OUT_A | OUT_BC | OUT_DE | OUT_IY)
 RECORD(member_hurt, 0x4679, OUT_A | OUT_F)
 RECORD(print_avatar_name, 0x5650, OUT_A | OUT_F | OUT_BC | OUT_DE)
 RECORD(person_at, 0x42B7, OUT_A | OUT_F)
+RECORD(eat, 0x4753, OUT_A | OUT_F)
+RECORD(magic_regain, 0x4776, OUT_A | OUT_F)

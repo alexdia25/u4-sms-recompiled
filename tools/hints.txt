@@ -285,6 +285,14 @@ native   00:36ED native_times_11
 native   00:36F7 native_times_12
 native   00:3991 native_screen_place
 native   00:399C native_screen_cell
+name     01:4753 eat                        # A hundredths of food eaten
+name     01:4776 magic_regain               # each living member +1 magic point, up to its class's most
+native   01:4753 native_eat
+native   01:4776 native_magic_regain
+name     02:B464 door_ahead                 # town step (L,H): locked door / door opens; carry = stopped
+name     02:B5A4 town_cell                  # HL = town map cell (L,H)
+native   02:B464 native_door_ahead
+native   02:B5A4 native_town_cell
 native   00:33D4 native_music_later_start
 native   00:33DC native_music_later_play
 name     00:2FFB frame_tick                 # per-frame work of a waiting task, then yield
