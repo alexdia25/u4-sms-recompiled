@@ -26,6 +26,10 @@
 //   window (row C * 2 + 1, column 18, 2 x 14); member_flash ($49A6): that
 //   line highlighted; party_flash ($4896): every member's, then a wait
 //   for the vertical blank.
+// - member_graphic ($42F3): A = member C's figure: $38 asleep, else by
+//   its class ($20 + class * 2).
+// - member_unflash ($4999): member C's line of the status window back to
+//   normal (highlight_off).
 // - person_at ($42B7): which of the first B people of the place ($C651)
 //   stands at (L, H): A = its number, or carry for none.
 // Cycle counts are the original's, instruction by instruction (I).
@@ -289,6 +293,33 @@ static void party_flash(void) {        // $4896
 	native_continue_at(0x041C);        // jp wait_vblank
 }
 
+static void member_graphic(void) {     // $42F3
+	push16(cpu.iy); I(15);
+	I(17); call_original(0x48B6);      // member_record
+	cpu.a = mem_read((uint16_t)(cpu.iy + 0x1C)); I(19);
+	op_sub8(0x53, 0, 0); I(7);
+	cpu.a = 0x38; I(7);
+	if (cpu.f & FZ) I(12);
+	else {
+		I(7);
+		cpu.a = mem_read((uint16_t)(cpu.iy + 0x1B)); I(19);
+		op_add8(cpu.a, 0); I(4);
+		op_add8(0x20, 0); I(7);
+	}
+	cpu.iy = pop16(); I(14);
+	I(10);
+}
+
+static void member_unflash(void) {     // $4999
+	push(BC); push(DE); push(HL);
+	I(17); member_row();
+	I(17); call_original(0x2DC4);      // highlight_off
+	SET_HL(pop16()); I(10);
+	SET_DE(pop16()); I(10);
+	SET_BC(pop16()); I(10);
+	I(10);
+}
+
 static void person_at(void) {          // $42B7
 	push(BC); push(DE);
 	push16(cpu.iy); I(15);
@@ -342,3 +373,5 @@ RECORD(party_alive, 0x465D, OUT_A | OUT_F)
 RECORD(member_row, 0x49B3, OUT_A | OUT_F | OUT_BC | OUT_DE)
 RECORD(member_flash, 0x49A6, OUT_A | OUT_F)
 RECORD(party_flash, 0x4896, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL)
+RECORD(member_graphic, 0x42F3, OUT_A | OUT_F)
+RECORD(member_unflash, 0x4999, OUT_A | OUT_F)

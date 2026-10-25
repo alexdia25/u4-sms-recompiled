@@ -34,6 +34,8 @@
 //   on screen from (L, H) (IX+$0B, $0D: $3991), its step towards (E, D)
 //   (aim, four times over: IX+$0E/$0F, $10/$11), 8 steps (IX+9), and
 //   sound $18.
+// - times_11_b3 ($B856) and times_12_b3 ($B860): A times 11 or 12 (bank
+//   3's copies of $36ED and $36F7).
 // Cycle counts are the original's, instruction by instruction (I).
 #include "../runtime/native.h"
 #include "../runtime/sms.h"
@@ -550,6 +552,30 @@ static void missile_start(void) {      // $38FC
 	native_continue_at(0x05F1);        // jp play_sound
 }
 
+static void times_11_b3(void) {        // $B856
+	push(BC);
+	cpu.b = cpu.a; I(4);
+	op_add8(cpu.a, 0); I(4);
+	cpu.c = cpu.a; I(4);
+	op_add8(cpu.a, 0); I(4);
+	op_add8(cpu.a, 0); I(4);
+	op_add8(cpu.b, 0); I(4);
+	op_add8(cpu.c, 0); I(4);
+	SET_BC(pop16()); I(10);
+	I(10);
+}
+
+static void times_12_b3(void) {        // $B860
+	push(BC);
+	op_add8(cpu.a, 0); I(4);
+	op_add8(cpu.a, 0); I(4);
+	cpu.b = cpu.a; I(4);
+	op_add8(cpu.a, 0); I(4);
+	op_add8(cpu.b, 0); I(4);
+	SET_BC(pop16()); I(10);
+	I(10);
+}
+
 static void target_in_pattern(void) {  // $A279
 	for (;;) {
 		cpu.a = mem_read(HL); I(7);
@@ -577,6 +603,8 @@ Native native_foe_can_step = { "foe_can_step", 0xA9E2, 3, foe_can_step, OUT_A | 
 Native native_damage_monster = { "damage_monster", 0x39B5, 0, damage_monster, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL | OUT_IY, .long_calls = 1 };
 Native native_compact_records = { "compact_records", 0xB868, 3, compact_records, OUT_A | OUT_F, .long_calls = 1 };
 Native native_missile_start = { "missile_start", 0x38FC, 0, missile_start, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL, .long_calls = 1 };
+Native native_times_11_b3 = { "times_11_b3", 0xB856, 3, times_11_b3, OUT_A | OUT_F, .long_calls = 1 };
+Native native_times_12_b3 = { "times_12_b3", 0xB860, 3, times_12_b3, OUT_A | OUT_F, .long_calls = 1 };
 Native native_target_in_pattern = { "target_in_pattern", 0xA279, 3, target_in_pattern, OUT_A | OUT_F | OUT_HL, .long_calls = 1 };
 Native native_load_dungeon_room = { "load_dungeon_room", 0x3D82, 0, load_dungeon_room, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL | OUT_IY, .long_calls = 1 };
 Native native_load_arena = { "load_arena", 0x377E, 0, load_arena, OUT_A | OUT_F, .long_calls = 1 };

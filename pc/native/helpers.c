@@ -36,6 +36,9 @@
 // - queue_glyphs ($30DA): $100 bytes of bank $13 from $A40F + A * 256
 //   queued for VRAM $2920.
 // - times_11 ($36ED), times_12 ($36F7): A times 11 or 12.
+// - far_word ($0807): HL = the word HL[C] in bank A.
+// - input_reset ($06E2): the pads as if every button were held and none
+//   just pressed ($C0AF = $FF, $C0B0 = $C0B2 = $C0B5 = 0, direction 8).
 // - screen_place ($3991): (L, H) cells as pixels (12 a cell);
 //   screen_cell ($399C): back from the missile's pixels (IX+$0B, $0D,
 //   from a cell's middle) to its cell (L, H).
@@ -608,6 +611,30 @@ static void screen_cell(void) {        // $399C
 	I(10);
 }
 
+static void far_word(void) {           // $0807
+	vram_bank_push(0x0807);
+	cpu.b = 0x00; I(7);
+	SET_HL(op_add16(HL, BC)); I(11);
+	SET_HL(op_add16(HL, BC)); I(11);
+	cpu.a = mem_read(HL); I(7);
+	SET_HL(HL + 1); I(6);
+	cpu.h = mem_read(HL); I(7);
+	cpu.l = cpu.a; I(4);
+	vram_bank_pop();
+}
+
+static void input_reset(void) {        // $06E2
+	op_xor(cpu.a); I(4);
+	mem_write(0xC0B0, cpu.a); I(13);
+	mem_write(0xC0B2, cpu.a); I(13);
+	mem_write(0xC0B5, cpu.a); I(13);
+	op_cpl(); I(4);
+	mem_write(0xC0AF, cpu.a); I(13);
+	cpu.a = 0x08; I(7);
+	mem_write(0xC0B1, cpu.a); I(13);
+	I(10);
+}
+
 #define HELPER(name, addr, out) Native native_##name = { #name, addr, 0, name, out, .long_calls = 1 };
 HELPER(wait_vdp, 0x0262, 0)
 HELPER(far_read, 0x0815, OUT_A)
@@ -642,3 +669,5 @@ HELPER(times_11, 0x36ED, OUT_A | OUT_F)
 HELPER(times_12, 0x36F7, OUT_A | OUT_F)
 HELPER(screen_place, 0x3991, OUT_A | OUT_F | OUT_HL)
 HELPER(screen_cell, 0x399C, OUT_A | OUT_F | OUT_BC | OUT_HL)
+HELPER(far_word, 0x0807, OUT_A | OUT_F | OUT_BC | OUT_HL)
+HELPER(input_reset, 0x06E2, OUT_A | OUT_F)

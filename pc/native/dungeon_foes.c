@@ -15,6 +15,8 @@
 //   rest is left to the original: the message, then the fight at $3B52);
 //   others but $B0 and $AC try three random steps ($40B9's offsets) onto
 //   a cell that isn't a wall-like thing ($A0, $C0, $D0, $F0) and is free.
+// - step_cell ($6C59): (L, H) one step in direction A from (E, D), on the
+//   16x16 level.
 // Cycle counts are the original's, instruction by instruction (I).
 #include "../runtime/native.h"
 #include "../runtime/sms.h"
@@ -260,6 +262,22 @@ static void creatures_walk(void) {     // $6D1A
 	I(10);
 }
 
+static void step_cell(void) {          // $6C59
+	push(DE);
+	{ uint16_t t = HL; SET_HL(DE); SET_DE(t); } I(4);
+	call(0x40B9);                      // HL = the step
+	cpu.a = cpu.e; I(4);
+	op_add8(cpu.l, 0); I(4);
+	op_and(0x0F); I(7);
+	cpu.l = cpu.a; I(4);
+	cpu.a = cpu.d; I(4);
+	op_add8(cpu.h, 0); I(4);
+	op_and(0x0F); I(7);
+	cpu.h = cpu.a; I(4);
+	SET_DE(pop16()); I(10);
+	I(10);
+}
+
 #define FOES(name, addr, out) Native native_##name = { #name, addr, 1, name, out, .long_calls = 1 };
 FOES(cell_address, 0x6DC0, OUT_A | OUT_F | OUT_HL)
 FOES(cell_at, 0x6DB9, OUT_A | OUT_F)
@@ -267,3 +285,4 @@ FOES(level_creatures, 0x6C97, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL | OUT_IY)
 FOES(creature_at, 0x6C6A, OUT_A | OUT_F)
 FOES(creatures_spawn, 0x6CB9, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL | OUT_IY)
 FOES(creatures_walk, 0x6D1A, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL | OUT_IY)
+FOES(step_cell, 0x6C59, OUT_A | OUT_F | OUT_HL)

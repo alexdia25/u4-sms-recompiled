@@ -309,6 +309,20 @@ native   01:49A6 native_member_flash
 native   01:49B3 native_member_row
 name     02:ACDC world_step                 # moongates, entering a place
 native   02:ACDC native_world_step
+name     00:0807 far_word                   # HL = word HL[C] in bank A
+name     00:06E2 input_reset
+name     01:42F3 member_graphic             # A = member C's figure
+name     01:4999 member_unflash
+name     01:6C59 step_cell                  # (L,H) = (E,D) one step in direction A
+name     03:B856 times_11_b3
+name     03:B860 times_12_b3
+native   00:0807 native_far_word
+native   00:06E2 native_input_reset
+native   01:42F3 native_member_graphic
+native   01:4999 native_member_unflash
+native   01:6C59 native_step_cell
+native   03:B856 native_times_11_b3
+native   03:B860 native_times_12_b3
 native   00:33D4 native_music_later_start
 native   00:33DC native_music_later_play
 name     00:2FFB frame_tick                 # per-frame work of a waiting task, then yield
