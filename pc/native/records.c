@@ -30,6 +30,8 @@
 //   its class ($20 + class * 2).
 // - member_unflash ($4999): member C's line of the status window back to
 //   normal (highlight_off).
+// - people_save ($40E9) / people_load ($4100): the place's 256 bytes of
+//   people ($C651) to or from the battery RAM at $8200.
 // - person_at ($42B7): which of the first B people of the place ($C651)
 //   stands at (L, H): A = its number, or carry for none.
 // Cycle counts are the original's, instruction by instruction (I).
@@ -320,6 +322,23 @@ static void member_unflash(void) {     // $4999
 	I(10);
 }
 
+static void people_copy(uint16_t from, uint16_t to) {   // $40E9 / $4100
+	I(17); call_original(0x0C2D);      // sram_on
+	push(BC); push(DE); push(HL);
+	SET_HL(from); I(10);
+	SET_DE(to); I(10);
+	SET_BC(0x0100); I(10);
+	while (op_block(6, 0)) I(21);      // ldir
+	I(16);
+	SET_HL(pop16()); I(10);
+	SET_DE(pop16()); I(10);
+	SET_BC(pop16()); I(10);
+	I(10);
+	native_continue_at(0x0C35);        // jp sram_off
+}
+static void people_save(void) { people_copy(0xC651, 0x8200); }
+static void people_load(void) { people_copy(0x8200, 0xC651); }
+
 static void person_at(void) {          // $42B7
 	push(BC); push(DE);
 	push16(cpu.iy); I(15);
@@ -375,3 +394,5 @@ RECORD(member_flash, 0x49A6, OUT_A | OUT_F)
 RECORD(party_flash, 0x4896, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL)
 RECORD(member_graphic, 0x42F3, OUT_A | OUT_F)
 RECORD(member_unflash, 0x4999, OUT_A | OUT_F)
+RECORD(people_save, 0x40E9, OUT_F)
+RECORD(people_load, 0x4100, OUT_F)

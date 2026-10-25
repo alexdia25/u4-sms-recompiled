@@ -343,6 +343,10 @@ name     00:0B6D end_tasks_of               # clear every task slot of kind A
 native   00:0BA4 native_slot_step_add
 native   00:0BC9 native_slot_step_sub
 native   00:0B6D native_end_tasks_of
+name     01:40E9 people_save                # the place's people to battery RAM $8200
+name     01:4100 people_load
+native   01:40E9 native_people_save
+native   01:4100 native_people_load
 native   00:33D4 native_music_later_start
 native   00:33DC native_music_later_play
 name     00:2FFB frame_tick                 # per-frame work of a waiting task, then yield
