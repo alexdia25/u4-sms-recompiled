@@ -14,6 +14,8 @@
 //   the two keywords ($0A, $0B) once known ($C595, $C596), eight at most
 //   from IX+$1C, each a name from $360D or (from $0A) a dialogue string;
 //   the cursor on row IX+$1D.
+// - say_welcome ($AE20, bank 2): "Welcome to" ($BCC6), the place's name
+//   at HL, "!", a new line, and the text at $BCCD.
 // Cycle counts are the original's, instruction by instruction (I).
 #include "../runtime/native.h"
 #include "../runtime/sms.h"
@@ -244,9 +246,25 @@ static void talk_topics(void) {        // $3578
 	vram_bank_pop();
 }
 
+static void say_welcome(void) {        // $AE20
+	if (!native_on_fiber()) { native_decline(); return; }   // shadow mode: printing may wait for frames
+	push(HL);
+	SET_HL(0xBCC6); I(10);
+	call(0x5519);                      // print_text_hl
+	SET_HL(pop16()); I(10);
+	call(0x5519);
+	cpu.a = 0x21; I(7);
+	call(0x548F);                      // print_char
+	call(0x54CE);                      // print_newline
+	SET_HL(0xBCCD); I(10);
+	I(10);
+	native_continue_at(0x5519);        // jp print_text_hl
+}
+
 #define DIALOGUE(name, addr, out) Native native_##name = { #name, addr, 0, name, out, .long_calls = 1 };
 DIALOGUE(talk_setup, 0x34DD, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL)
 DIALOGUE(dialogue_print, 0x354D, OUT_A | OUT_F | OUT_BC | OUT_DE)
 DIALOGUE(dialogue_print_hl, 0x3553, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL)
 DIALOGUE(dialogue_string, 0x355F, OUT_A | OUT_F | OUT_BC | OUT_HL)
 DIALOGUE(talk_topics, 0x3578, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL)
+Native native_say_welcome = { "say_welcome", 0xAE20, 2, say_welcome, OUT_A | OUT_F | OUT_HL, .long_calls = 1 };

@@ -255,6 +255,8 @@ name     00:3095 selection_blink
 name     00:30DA queue_glyphs
 native   00:3095 native_selection_blink
 native   00:30DA native_queue_glyphs
+name     03:A9E2 foe_can_step               # foe C to (L,H)? carry: no
+native   03:A9E2 native_foe_can_step
 name     01:6C6A creature_at                # A = dungeon creature at (L,H), carry for none
 name     01:6C97 level_creatures            # IY = the level's four records, DE = 8, B = 4
 name     01:6CB9 creatures_spawn
@@ -267,6 +269,14 @@ native   01:6CB9 native_creatures_spawn
 native   01:6D1A native_creatures_walk
 native   01:6DB9 native_cell_at
 native   01:6DC0 native_cell_address
+name     01:42B7 person_at                  # A = which of the first B people stands at (L,H), carry for none
+native   01:42B7 native_person_at
+name     02:AE20 say_welcome                # "Welcome to <HL>!"
+native   02:AE20 native_say_welcome
+name     03:B868 compact_records            # B 8-byte records at HL: empty ones taken out
+name     00:38FC missile_start
+native   03:B868 native_compact_records
+native   00:38FC native_missile_start
 native   00:33D4 native_music_later_start
 native   00:33DC native_music_later_play
 name     00:2FFB frame_tick                 # per-frame work of a waiting task, then yield

@@ -14,6 +14,8 @@
 // - member_hurt ($4679): member C takes DE damage (member_take_damage,
 //   $467F), then the status window is drawn again ($4324).
 // - print_avatar_name ($5650): the Avatar's name printed.
+// - person_at ($42B7): which of the first B people of the place ($C651)
+//   stands at (L, H): A = its number, or carry for none.
 // Cycle counts are the original's, instruction by instruction (I).
 #include "../runtime/native.h"
 #include "../runtime/sms.h"
@@ -128,6 +130,41 @@ static void print_avatar_name(void) {  // $5650
 	I(10);
 }
 
+static void person_at(void) {          // $42B7
+	push(BC); push(DE);
+	push16(cpu.iy); I(15);
+	cpu.iy = 0xC651; I(14);
+	SET_DE(0x0008); I(10);
+	cpu.c = cpu.b; I(4);
+	int found = 0;
+	do {
+		cpu.a = mem_read((uint16_t)(cpu.iy + 3)); I(19);
+		op_or(cpu.a); I(4);
+		if (cpu.f & FZ) I(12);
+		else {
+			I(7);
+			cpu.a = mem_read((uint16_t)(cpu.iy + 1)); I(19);
+			op_sub8(cpu.l, 0, 0); I(4);
+			if (!(cpu.f & FZ)) I(12);
+			else {
+				I(7);
+				cpu.a = mem_read((uint16_t)(cpu.iy + 2)); I(19);
+				op_sub8(cpu.h, 0, 0); I(4);
+				if (cpu.f & FZ) { I(12); found = 1; break; }
+				I(7);
+			}
+		}
+		cpu.iy = op_add16(cpu.iy, DE); I(15);
+		if (--cpu.b) I(13); else I(8);
+	} while (cpu.b);
+	if (found) { cpu.a = cpu.c; I(4); op_sub8(cpu.b, 0, 1); I(4); }
+	else { op_scf(); I(4); I(12); }
+	cpu.iy = pop16(); I(14);
+	SET_DE(pop16()); I(10);
+	SET_BC(pop16()); I(10);
+	I(10);
+}
+
 #define RECORD(name, addr, out) Native native_##name = { #name, addr, 1, name, out, .long_calls = 1 };
 RECORD(member_record, 0x48B6, OUT_F | OUT_IY)
 RECORD(current_record, 0x48CB, OUT_F | OUT_IY)
@@ -139,3 +176,4 @@ RECORD(person_with_graphic, 0x4906, OUT_A | OUT_F | OUT_IY)
 RECORD(party_iter_setup, 0x4098, OUT_A | OUT_BC | OUT_DE | OUT_IY)
 RECORD(member_hurt, 0x4679, OUT_A | OUT_F)
 RECORD(print_avatar_name, 0x5650, OUT_A | OUT_F | OUT_BC | OUT_DE)
+RECORD(person_at, 0x42B7, OUT_A | OUT_F)

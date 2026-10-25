@@ -22,6 +22,18 @@
 //   "Killed!", and member B (unless $FF) gains experience by its strength
 //   ($3CFB's high nibble + 1); else how it fares, by its hit points left
 //   against its strength (the strings at $3A42).
+// - foe_can_step ($A9E2, bank 3): whether foe C may step to (L, H): off
+//   the battlefield only when it is weak enough to flee (hit points below
+//   $18); not onto a hazard, nor (most of the time) where it stands, nor
+//   onto another foe or a member; then by its kind (graphic below $80:
+//   where people walk, $3EB7; below $8E: water; others by the table at
+//   $AA93, left to the original). Carry: it may not.
+// - compact_records ($B868, bank 3): of the B 8-byte records at HL, the
+//   empty ones (first byte 0) taken out, the rest moved up, zeroes after.
+// - missile_start ($38FC): the missile's glyphs queued ($30DA), its place
+//   on screen from (L, H) (IX+$0B, $0D: $3991), its step towards (E, D)
+//   (aim, four times over: IX+$0E/$0F, $10/$11), 8 steps (IX+9), and
+//   sound $18.
 // Cycle counts are the original's, instruction by instruction (I).
 #include "../runtime/native.h"
 #include "../runtime/sms.h"
@@ -270,6 +282,123 @@ static void load_dungeon_room(void) {  // $3D82
 	vram_bank_pop();
 }
 
+static void cp_iy(uint8_t d) { op_sub8(mem_read((uint16_t)(cpu.iy + d)), 0, 0); I(19); }
+
+// a figure at (L, H) among n records from `records` whose byte `alive` is
+// set: Z when one is found
+static int someone_at(uint16_t records, uint16_t size, uint8_t n, uint8_t alive) {
+	cpu.iy = records; I(14);
+	SET_DE(size); I(10);
+	cpu.b = n; I(7);
+	do {
+		cpu.a = mem_read((uint16_t)(cpu.iy + alive)); I(19);
+		op_or(cpu.a); I(4);
+		if (cpu.f & FZ) I(12);
+		else {
+			I(7);
+			cpu.a = cpu.l; I(4);
+			cp_iy(0);
+			if (!(cpu.f & FZ)) I(12);
+			else {
+				I(7);
+				cpu.a = cpu.h; I(4);
+				cp_iy(1);
+				if (cpu.f & FZ) { I(12); return 1; }
+				I(7);
+			}
+		}
+		cpu.iy = op_add16(cpu.iy, DE); I(15);
+		if (--cpu.b) I(13); else I(8);
+	} while (cpu.b);
+	return 0;
+}
+
+static void foe_can_step(void) {       // $A9E2
+	push(BC); push(DE); push(HL);
+	push16(cpu.iy); I(15);
+	mem_write((uint16_t)(cpu.ix + 0x22), cpu.c); I(19);
+	call(0x7E8D);                      // foe_record
+	int blocked = -1;                  // -1: carry as it stands
+	cpu.a = cpu.l; I(4);
+	op_sub8(0x0B, 0, 0); I(7);
+	int off = !(cpu.f & FC);
+	if (off) I(12);
+	else {
+		I(7);
+		cpu.a = cpu.h; I(4);
+		op_sub8(0x0B, 0, 0); I(7);
+		off = !(cpu.f & FC);
+		I(off ? 7 : 12);
+	}
+	if (off) {                         // $A9F7: only a weak foe flees
+		cpu.a = mem_read((uint16_t)(cpu.iy + 4)); I(19);
+		op_sub8(0x18, 0, 0); I(7);
+		op_ccf(); I(4);
+		I(10);
+	} else {
+		call(0xA460);                  // A = the cell's tile
+		mem_write((uint16_t)(cpu.ix + 0x23), cpu.a); I(19);
+		call(0x7F47);                  // hazard
+		I(10);
+		if (!(cpu.f & FC)) {
+			int here = 0;
+			cpu.a = cpu.l; I(4);
+			cp_iy(0);
+			if (!(cpu.f & FZ)) I(12);
+			else {
+				I(7);
+				cpu.a = cpu.h; I(4);
+				cp_iy(1);
+				if (!(cpu.f & FZ)) I(12);
+				else {
+					I(7);
+					call(0x7ED8);      // random
+					op_and(0x03); I(7);
+					if (!(cpu.f & FZ)) { I(12); here = 1; }
+					else I(7);
+				}
+			}
+			if (here || someone_at(0xC839, 0x0008, 0x10, 5) || someone_at(0xC8B9, 0x0005, 0x08, 2))
+				blocked = 1;
+			else {
+				cpu.c = mem_read((uint16_t)(cpu.ix + 0x22)); I(19);
+				call(0x7E8D);
+				cpu.a = mem_read((uint16_t)(cpu.iy + 5)); I(19);
+				op_sub8(0x80, 0, 0); I(7);
+				if (cpu.f & FC) {
+					I(7);
+					cpu.a = mem_read((uint16_t)(cpu.ix + 0x23)); I(19);
+					call(0x7E99);      // people_ground
+					I(12);
+				} else {
+					I(12);
+					op_sub8(0x8E, 0, 0); I(7);
+					if (cpu.f & FC) {
+						I(7);
+						cpu.a = mem_read((uint16_t)(cpu.ix + 0x23)); I(19);
+						op_sub8(0x03, 0, 0); I(7);
+						op_ccf(); I(4);
+						I(12);
+					} else {           // $AA7E: by the table, in the original
+						I(12);
+						SET_HL(0xAA93); I(10);
+						I(17);
+						push16(0xAA84);
+						native_continue_at(0x7E18);   // switch_on_a
+						return;
+					}
+				}
+			}
+		}
+	}
+	if (blocked == 1) { op_scf(); I(4); }  // $AA8C
+	cpu.iy = pop16(); I(14);           // $AA8D
+	SET_HL(pop16()); I(10);
+	SET_DE(pop16()); I(10);
+	SET_BC(pop16()); I(10);
+	I(10);
+}
+
 static void damage_monster(void) {     // $39B5
 	if (!native_on_fiber()) { native_decline(); return; }   // shadow mode: printing may wait for frames
 	call(0x54CE);                      // print_newline
@@ -351,6 +480,76 @@ static void damage_monster(void) {     // $39B5
 	native_continue_at(0x5519);        // jp print_text_hl
 }
 
+static void compact_records(void) {    // $B868
+	push(BC); push(DE); push(HL);
+	cpu.b = op_dec8(cpu.b); I(4);
+	do {
+		cpu.a = mem_read(HL); I(7);
+		op_or(cpu.a); I(4);
+		if (!(cpu.f & FZ)) {
+			I(7);
+			SET_DE(0x0008); I(10);
+			SET_HL(op_add16(HL, DE)); I(11);
+			I(12);
+		} else {
+			I(12);
+			push(BC); push(HL);
+			cpu.d = cpu.h; I(4);
+			cpu.e = cpu.l; I(4);
+			cpu.a = cpu.b; I(4);
+			SET_BC(0x0008); I(10);
+			SET_HL(op_add16(HL, BC)); I(11);
+			for (int i = 0; i < 3; i++) { op_add8(cpu.a, 0); I(4); }
+			cpu.c = cpu.a; I(4);
+			while (op_block(6, 0)) I(21);   // ldir: the rest moved up
+			I(16);
+			op_xor(cpu.a); I(4);
+			cpu.b = 0x08; I(7);
+			do {
+				mem_write(DE, cpu.a); I(7);
+				SET_DE(DE + 1); I(6);
+				if (--cpu.b) I(13); else I(8);
+			} while (cpu.b);
+			SET_HL(pop16()); I(10);
+			SET_BC(pop16()); I(10);
+		}
+		if (--cpu.b) I(13); else I(8);
+	} while (cpu.b);
+	SET_HL(pop16()); I(10);
+	SET_DE(pop16()); I(10);
+	SET_BC(pop16()); I(10);
+	I(10);
+}
+
+static void ix_set(uint8_t d, uint8_t v) { mem_write((uint16_t)(cpu.ix + d), v); I(19); }
+
+static void missile_start(void) {      // $38FC
+	// shadow mode: queueing the glyphs may wait for room
+	if (!native_on_fiber() && mem_read(0xC063) >= 0x20) { native_decline(); return; }
+	call(0x30DA);                      // queue_glyphs
+	push(HL);
+	call(0x3991);                      // the place on screen
+	ix_set(0x0B, cpu.l);
+	ix_set(0x0D, cpu.h);
+	ix_set(0x0A, 0x00);
+	ix_set(0x0C, 0x00);
+	SET_HL(pop16()); I(10);
+	call(0x2BFE);                      // aim
+	SET_HL(op_add16(HL, HL)); I(11);
+	SET_HL(op_add16(HL, HL)); I(11);
+	ix_set(0x0E, cpu.l);
+	ix_set(0x0F, cpu.h);
+	{ uint16_t t = HL; SET_HL(DE); SET_DE(t); } I(4);
+	SET_HL(op_add16(HL, HL)); I(11);
+	SET_HL(op_add16(HL, HL)); I(11);
+	ix_set(0x10, cpu.l);
+	ix_set(0x11, cpu.h);
+	ix_set(0x09, 0x08);
+	cpu.a = 0x18; I(7);
+	I(10);
+	native_continue_at(0x05F1);        // jp play_sound
+}
+
 static void target_in_pattern(void) {  // $A279
 	for (;;) {
 		cpu.a = mem_read(HL); I(7);
@@ -374,7 +573,10 @@ static void target_in_pattern(void) {  // $A279
 	}
 }
 
+Native native_foe_can_step = { "foe_can_step", 0xA9E2, 3, foe_can_step, OUT_A | OUT_F, .long_calls = 1 };
 Native native_damage_monster = { "damage_monster", 0x39B5, 0, damage_monster, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL | OUT_IY, .long_calls = 1 };
+Native native_compact_records = { "compact_records", 0xB868, 3, compact_records, OUT_A | OUT_F, .long_calls = 1 };
+Native native_missile_start = { "missile_start", 0x38FC, 0, missile_start, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL, .long_calls = 1 };
 Native native_target_in_pattern = { "target_in_pattern", 0xA279, 3, target_in_pattern, OUT_A | OUT_F | OUT_HL, .long_calls = 1 };
 Native native_load_dungeon_room = { "load_dungeon_room", 0x3D82, 0, load_dungeon_room, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL | OUT_IY, .long_calls = 1 };
 Native native_load_arena = { "load_arena", 0x377E, 0, load_arena, OUT_A | OUT_F, .long_calls = 1 };
