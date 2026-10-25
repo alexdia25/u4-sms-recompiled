@@ -2,7 +2,7 @@
 // leaving, "It's Dark!", the ">" prompt, then each frame the pad: a
 // direction steps ($6B58), button 1 passes, button 2 opens the command menu
 // ($8000, a C task of its own, so this one hands over to it). Then the end
-// of the turn: the creatures ($3F14) and the dungeon's own ($6AEA). Entering
+// of the turn: the creatures ($3F14) and the dungeon's own ($6AEA, here). Entering
 // a room (by a door or not) loads it and goes on to the room's fight.
 // Cycle counts are the original's.
 #include "../runtime/native.h"
@@ -35,6 +35,29 @@ static void say_inline(uint16_t text) {   // call print_inline / the text follow
 static void tcall(uint16_t addr, uint16_t site) {
 	cpu.cycles += 17;
 	task_call(addr, (uint16_t)(site + 3));
+}
+
+// $6AEA: the dungeon's end of the turn: everyone dead is the end
+// ($465D), afflictions and food ($B4EE), magic points ($4776), the level's
+// creatures walk and appear ($6D1A, $6CB9), the light ($C95B) wanes, the
+// move counts ($372E, $3754), the status window ($4324, by jp: its ret
+// goes back to $6A50)
+static void dungeon_turn_end(void) {
+	tcall(0x465D, 0x6AEA);
+	tcall(0xB4EE, 0x6AED);
+	tcall(0x4776, 0x6AF0);
+	tcall(0x6D1A, 0x6AF3);
+	tcall(0x6CB9, 0x6AF6);
+	cpu.cycles += 10 + 7 + 4;
+	SET_HL(LIGHT);
+	cpu.a = mem_read(LIGHT);
+	op_or(cpu.a);
+	if (cpu.f & FZ) cpu.cycles += 12;
+	else { cpu.cycles += 7 + 11; mem_write(LIGHT, op_dec8(cpu.a)); }
+	tcall(0x372E, 0x6B01);
+	tcall(0x3754, 0x6B04);
+	cpu.cycles += 10;                  // jp $4324
+	task_call(0x4324, 0x6A50);
 }
 
 // $6A52: the party has left the dungeon (level $FF): original code takes it
@@ -298,7 +321,8 @@ static void dungeon_turn(void) {
 			if (left(0x6A4A)) return;
 		} else cpu.cycles += 5;
 		tcall(0x3F14, 0x6A4A);         // the end of the turn
-		tcall(0x6AEA, 0x6A4D);
+		cpu.cycles += 17;              // call $6AEA
+		dungeon_turn_end();
 		cpu.cycles += 12;
 	}
 }
