@@ -279,6 +279,13 @@ native   00:0458 native_queue_screen
 native   00:0463 native_queue_bank2_copy
 native   00:024C native_vram_write
 native   00:022A native_vram_fill
+name     00:009C init_hw
+name     00:014D vdp_init
+name     00:0453 queue_reset
+native   00:0042 native_power_on
+native   00:009C native_init_hw
+native   00:014D native_vdp_init
+native   00:0453 native_queue_reset
 name     00:0A22 fade_start                 # a task fading the palette (B: what, C: frames a step, HL: to)
 name     00:0A3F fade_task
 native   00:0A22 native_fade_start
