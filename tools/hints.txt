@@ -277,6 +277,14 @@ name     03:B868 compact_records            # B 8-byte records at HL: empty ones
 name     00:38FC missile_start
 native   03:B868 native_compact_records
 native   00:38FC native_missile_start
+name     00:36ED times_11
+name     00:36F7 times_12
+name     00:3991 screen_place               # (L,H) cells -> pixels (x12)
+name     00:399C screen_cell                # missile pixels -> cell (L,H)
+native   00:36ED native_times_11
+native   00:36F7 native_times_12
+native   00:3991 native_screen_place
+native   00:399C native_screen_cell
 native   00:33D4 native_music_later_start
 native   00:33DC native_music_later_play
 name     00:2FFB frame_tick                 # per-frame work of a waiting task, then yield

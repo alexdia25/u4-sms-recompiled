@@ -35,6 +35,10 @@
 //   $30B6), and colour $1F the next of the six shades at $30CB ($C63B).
 // - queue_glyphs ($30DA): $100 bytes of bank $13 from $A40F + A * 256
 //   queued for VRAM $2920.
+// - times_11 ($36ED), times_12 ($36F7): A times 11 or 12.
+// - screen_place ($3991): (L, H) cells as pixels (12 a cell);
+//   screen_cell ($399C): back from the missile's pixels (IX+$0B, $0D,
+//   from a cell's middle) to its cell (L, H).
 // Cycle counts are the original's, instruction by instruction (I).
 #include "../runtime/native.h"
 #include "../runtime/sms.h"
@@ -555,6 +559,55 @@ static void queue_glyphs(void) {       // $30DA
 	I(10);
 }
 
+static void times_11(void) {           // $36ED
+	push(BC);
+	cpu.b = cpu.a; I(4);
+	op_add8(cpu.a, 0); I(4);
+	cpu.c = cpu.a; I(4);
+	op_add8(cpu.a, 0); I(4);
+	op_add8(cpu.a, 0); I(4);
+	op_add8(cpu.b, 0); I(4);
+	op_add8(cpu.c, 0); I(4);
+	SET_BC(pop16()); I(10);
+	I(10);
+}
+
+static void times_12(void) {           // $36F7
+	push(BC);
+	op_add8(cpu.a, 0); I(4);
+	op_add8(cpu.a, 0); I(4);
+	cpu.b = cpu.a; I(4);
+	op_add8(cpu.a, 0); I(4);
+	op_add8(cpu.b, 0); I(4);
+	SET_BC(pop16()); I(10);
+	I(10);
+}
+static uint8_t times_12_of(uint8_t v) { cpu.a = v; I(17); times_12(); return cpu.a; }
+
+static void screen_place(void) {       // $3991
+	cpu.a = cpu.l; I(4);
+	cpu.l = times_12_of(cpu.a); I(4);
+	cpu.a = cpu.h; I(4);
+	cpu.h = times_12_of(cpu.a); I(4);
+	I(10);
+}
+
+static void screen_cell(void) {        // $399C
+	cpu.a = mem_read((uint16_t)(cpu.ix + 0x0D)); I(19);
+	op_add8(0x06, 0); I(7);
+	cpu.l = cpu.a; I(4);
+	cpu.h = 0x0C; I(7);
+	I(17); call_original(0x2AFC);      // divide_8
+	cpu.b = cpu.l; I(4);
+	cpu.a = mem_read((uint16_t)(cpu.ix + 0x0B)); I(19);
+	op_add8(0x06, 0); I(7);
+	cpu.l = cpu.a; I(4);
+	cpu.h = 0x0C; I(7);
+	I(17); call_original(0x2AFC);
+	cpu.h = cpu.b; I(4);
+	I(10);
+}
+
 #define HELPER(name, addr, out) Native native_##name = { #name, addr, 0, name, out, .long_calls = 1 };
 HELPER(wait_vdp, 0x0262, 0)
 HELPER(far_read, 0x0815, OUT_A)
@@ -585,3 +638,7 @@ HELPER(aim, 0x2BFE, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL)
 HELPER(text_cell, 0x2D0C, OUT_A | OUT_F | OUT_DE)
 HELPER(selection_blink, 0x3095, OUT_A | OUT_F)
 HELPER(queue_glyphs, 0x30DA, OUT_A | OUT_F)
+HELPER(times_11, 0x36ED, OUT_A | OUT_F)
+HELPER(times_12, 0x36F7, OUT_A | OUT_F)
+HELPER(screen_place, 0x3991, OUT_A | OUT_F | OUT_HL)
+HELPER(screen_cell, 0x399C, OUT_A | OUT_F | OUT_BC | OUT_HL)
