@@ -9,6 +9,14 @@
 //   eats (one hundredth of food each, $4753); with none left it is
 //   "Starving!", every member who can act takes 2 damage, a sound, and
 //   the party's state is checked ($4896).
+// - below_c8fd ($BBC6): carry when the 4-byte number at $C8FD is below
+//   the one at HL (both low byte first); HL 4 on.
+// - ship_wind ($B36C): a ship's move takes longer by the wind ($C98A, 4
+//   calm) against its heading ($C9B9): calm x4, the wind's direction the
+//   same as the heading x5, the opposite one x2 (the move's time at
+//   $C99A), each told; across it, as it is.
+// - palette_dim ($A81A, bank 2): every colour of the palette's copy whose
+//   bits A are not 0 one step darker in them; sent next frame.
 // Cycle counts are the original's, instruction by instruction (I).
 #include "../runtime/native.h"
 #include "../runtime/sms.h"
@@ -118,7 +126,119 @@ static void afflictions(void) {        // $B4EE
 	native_continue_at(0x4896);
 }
 
+static void below_c8fd(void) {         // $BBC6
+	push16(BC); I(11);
+	push16(DE); I(11);
+	SET_DE(0xC8FD); I(10);
+	op_xor(cpu.a); I(4);
+	cpu.b = 0x04; I(7);
+	do {
+		cpu.a = mem_read(DE); I(7);
+		op_sub8(mem_read(HL), cpu.f & FC, 1); I(7);
+		SET_DE(DE + 1); I(6);
+		SET_HL(HL + 1); I(6);
+		if (--cpu.b) I(13); else I(8);
+	} while (cpu.b);
+	SET_DE(pop16()); I(10);
+	SET_BC(pop16()); I(10);
+	I(10);
+}
+
+static void say_inline(uint16_t text) {   // call print_inline / the text follows
+	uint16_t hl = HL;
+	uint8_t b = cpu.b, c = cpu.c;
+	cpu.cycles += 17 + 19 + 17;
+	text_print(text);
+	cpu.cycles += 19 + 10;
+	cpu.b = b; cpu.c = c;
+	cpu.a = 0;
+	SET_HL(hl);
+}
+
+static void ship_wind(void) {          // $B36C
+	uint8_t heading = mem_read(0xC9B9), wind = mem_read(0xC98A);
+	if (!native_on_fiber() && (wind == 4 || wind == heading || ((wind + 2) & 3) == heading)) {
+		native_decline();              // shadow mode: it prints, which may wait for frames
+		return;
+	}
+	cpu.a = heading; I(13);
+	cpu.b = cpu.a; I(4);
+	cpu.a = wind; I(13);
+	op_sub8(0x04, 0, 0); I(7);
+	int times;
+	if (cpu.f & FZ) {                  // calm
+		I(12);
+		say_inline(0xB3B8);
+		times = 4;
+	} else {
+		I(7);
+		op_sub8(cpu.b, 0, 0); I(4);
+		if (cpu.f & FZ) {              // the same direction
+			I(12);
+			say_inline(0xB3A0);
+			times = 5;
+		} else {
+			I(7);
+			op_add8(0x02, 0); I(7);
+			op_and(0x03); I(7);
+			op_sub8(cpu.b, 0, 0); I(4);
+			if (!(cpu.f & FZ)) { I(7); I(10); return; }
+			I(12);
+			say_inline(0xB385);
+			times = 2;
+		}
+	}
+	SET_HL(rd16(0xC99A)); I(16);
+	if (times == 5) {
+		cpu.e = cpu.l; I(4);
+		cpu.d = cpu.h; I(4);
+		SET_HL(op_add16(HL, HL)); I(11);
+		SET_HL(op_add16(HL, HL)); I(11);
+		SET_HL(op_add16(HL, DE)); I(11);
+		I(12);
+	} else if (times == 4) {
+		SET_HL(op_add16(HL, HL)); I(11);
+		SET_HL(op_add16(HL, HL)); I(11);
+		I(12);
+	} else {
+		SET_HL(op_add16(HL, HL)); I(11);
+	}
+	wr16(0xC99A, HL); I(16);
+	I(10);
+}
+
+static void palette_dim(void) {        // $A81A
+	cpu.d = cpu.a; I(4);
+	op_cpl(); I(4);
+	cpu.e = cpu.a; I(4);
+	SET_HL(0xC023); I(10);
+	cpu.b = 0x20; I(7);
+	do {
+		cpu.a = mem_read(HL); I(7);
+		op_and(cpu.d); I(4);
+		if (cpu.f & FZ) I(12);
+		else {
+			I(7);
+			cpu.a = op_dec8(cpu.a); I(4);
+			op_and(cpu.d); I(4);
+			cpu.c = cpu.a; I(4);
+			cpu.a = mem_read(HL); I(7);
+			op_and(cpu.e); I(4);
+			op_or(cpu.c); I(4);
+			mem_write(HL, cpu.a); I(7);
+		}
+		SET_HL(HL + 1); I(6);
+		if (--cpu.b) I(13); else I(8);
+	} while (cpu.b);
+	cpu.a = 0xFF; I(7);
+	mem_write(0xC009, cpu.a); I(13);
+	I(10);
+}
+
 #define UPKEEP(name, addr, out) Native native_##name = { #name, addr, 2, name, out, .long_calls = 1 };
 UPKEEP(in_balloon, 0x957C, OUT_A | OUT_F)
 UPKEEP(hull_mend, 0xB55E, OUT_A | OUT_F | OUT_HL)
 UPKEEP(afflictions, 0xB4EE, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL | OUT_IY)
+UPKEEP(below_c8fd, 0xBBC6, OUT_A | OUT_F | OUT_HL)
+UPKEEP(ship_wind, 0xB36C, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL)
+UPKEEP(palette_dim, 0xA81A, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL)
