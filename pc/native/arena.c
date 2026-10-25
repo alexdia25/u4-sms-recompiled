@@ -36,6 +36,9 @@
 //   sound $18.
 // - times_11_b3 ($B856) and times_12_b3 ($B860): A times 11 or 12 (bank
 //   3's copies of $36ED and $36F7).
+// - divide_16_b3 ($B7EA, bank 3's own): HL = HL / DE, DE = the remainder
+//   (HL = 0 when DE is 0), by two runs of divide_step ($B805: eight bits
+//   of A into the remainder HL, A the quotient's bits).
 // Cycle counts are the original's, instruction by instruction (I).
 #include "../runtime/native.h"
 #include "../runtime/sms.h"
@@ -576,6 +579,42 @@ static void times_12_b3(void) {        // $B860
 	I(10);
 }
 
+static void divide_step(void) {        // $B805
+	for (int i = 0; i < 8; i++) {
+		op_add8(cpu.a, 0); I(4);
+		op_adc16(HL); I(15);           // adc hl,hl
+		cpu.a = op_inc8(cpu.a); I(4);
+		op_sbc16(DE); I(15);
+		if (!(cpu.f & FC)) I(12);
+		else {
+			I(7);
+			SET_HL(op_add16(HL, DE)); I(11);
+			cpu.a = op_dec8(cpu.a); I(4);
+		}
+	}
+	I(10);
+}
+
+static void divide_16(void) {          // $B7EA
+	cpu.a = cpu.d; I(4);
+	op_or(cpu.e); I(4);
+	if (cpu.f & FZ) { I(12); SET_HL(0x0000); I(10); I(10); return; }
+	I(7);
+	push(BC);
+	cpu.a = cpu.h; I(4);
+	cpu.b = cpu.l; I(4);
+	SET_HL(0x0000); I(10);
+	I(17); divide_step();
+	cpu.c = cpu.a; I(4);
+	cpu.a = cpu.b; I(4);
+	I(17); divide_step();
+	{ uint16_t t = HL; SET_HL(DE); SET_DE(t); } I(4);
+	cpu.h = cpu.c; I(4);
+	cpu.l = cpu.a; I(4);
+	SET_BC(pop16()); I(10);
+	I(10);
+}
+
 static void target_in_pattern(void) {  // $A279
 	for (;;) {
 		cpu.a = mem_read(HL); I(7);
@@ -605,6 +644,8 @@ Native native_compact_records = { "compact_records", 0xB868, 3, compact_records,
 Native native_missile_start = { "missile_start", 0x38FC, 0, missile_start, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL, .long_calls = 1 };
 Native native_times_11_b3 = { "times_11_b3", 0xB856, 3, times_11_b3, OUT_A | OUT_F, .long_calls = 1 };
 Native native_times_12_b3 = { "times_12_b3", 0xB860, 3, times_12_b3, OUT_A | OUT_F, .long_calls = 1 };
+Native native_divide_step = { "divide_step", 0xB805, 3, divide_step, OUT_A | OUT_F | OUT_HL, .long_calls = 1 };
+Native native_divide_16_b3 = { "divide_16_b3", 0xB7EA, 3, divide_16, OUT_A | OUT_F | OUT_DE | OUT_HL, .long_calls = 1 };
 Native native_target_in_pattern = { "target_in_pattern", 0xA279, 3, target_in_pattern, OUT_A | OUT_F | OUT_HL, .long_calls = 1 };
 Native native_load_dungeon_room = { "load_dungeon_room", 0x3D82, 0, load_dungeon_room, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL | OUT_IY, .long_calls = 1 };
 Native native_load_arena = { "load_arena", 0x377E, 0, load_arena, OUT_A | OUT_F, .long_calls = 1 };

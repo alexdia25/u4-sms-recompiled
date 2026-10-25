@@ -20,6 +20,10 @@
 // - whirl_check ($BBE7): on the world, whether one of the first four
 //   figures ($C651) is a whirlpool ($8C) or a twister ($8E) on the party;
 //   what it does then is left to the original ($BC1F, $BC54).
+// - wind_holds_back ($B42E): whether a sail in direction A is held back
+//   this turn (carry), by the wind ($C98A) and the move count ($C8FD):
+//   calm, 7 turns in 8; the wind's own direction, 3 in 4; the opposite
+//   one, 1 in 4; across it, never.
 // Cycle counts are the original's, instruction by instruction (I).
 #include "../runtime/native.h"
 #include "../runtime/sms.h"
@@ -285,6 +289,44 @@ static void whirl_check(void) {        // $BBE7
 	I(10);
 }
 
+static void wind_holds_back(void) {    // $B42E
+	push16(BC); I(11);
+	cpu.b = cpu.a; I(4);
+	cpu.a = mem_read(0xC98A); I(13);
+	int held;
+	op_sub8(0x04, 0, 0); I(7);
+	if (cpu.f & FZ) {                  // calm
+		I(12);
+		cpu.a = mem_read(0xC8FD); I(13);
+		op_and(0x07); I(7);
+		if (cpu.f & FZ) { I(12); held = 0; } else { I(7); I(12); held = 1; }
+	} else {
+		I(7);
+		op_sub8(cpu.b, 0, 0); I(4);
+		if (cpu.f & FZ) {              // the wind's direction
+			I(12);
+			cpu.a = mem_read(0xC8FD); I(13);
+			op_and(0x03); I(7);
+			if (cpu.f & FZ) { I(12); held = 0; } else { I(7); I(12); held = 1; }
+		} else {
+			I(7);
+			op_add8(0x02, 0); I(7);
+			op_and(0x03); I(7);
+			op_sub8(cpu.b, 0, 0); I(4);
+			if (cpu.f & FZ) {          // the opposite one
+				I(12);
+				cpu.a = mem_read(0xC8FD); I(13);
+				op_and(0x03); I(7);
+				if (cpu.f & FZ) { I(12); held = 1; } else { I(7); I(12); held = 0; }
+			} else { I(7); I(12); held = 0; }
+		}
+	}
+	if (held) { op_scf(); I(4); }
+	else { op_or(cpu.a); I(4); I(12); }
+	SET_BC(pop16()); I(10);
+	I(10);
+}
+
 #define UPKEEP(name, addr, out) Native native_##name = { #name, addr, 2, name, out, .long_calls = 1 };
 UPKEEP(in_balloon, 0x957C, OUT_A | OUT_F)
 UPKEEP(hull_mend, 0xB55E, OUT_A | OUT_F | OUT_HL)
@@ -293,3 +335,4 @@ UPKEEP(below_c8fd, 0xBBC6, OUT_A | OUT_F | OUT_HL)
 UPKEEP(ship_wind, 0xB36C, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL)
 UPKEEP(palette_dim, 0xA81A, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL)
 UPKEEP(whirl_check, 0xBBE7, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL | OUT_IY)
+UPKEEP(wind_holds_back, 0xB42E, OUT_A | OUT_F)
