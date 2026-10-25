@@ -425,6 +425,18 @@ native   03:B805 native_divide_step
 native   02:B42E native_wind_holds_back
 name     01:4CA3 member_step_place          # (L,H) = the current member's figure one step in direction A
 native   01:4CA3 native_member_step_place
+name     00:389F east_wrap
+name     00:38A7 west_wrap
+name     00:38AE south_wrap
+name     00:38B6 north_wrap
+name     00:38EB arena_cell_at
+name     00:38F2 arena_cell
+native   00:389F native_east_wrap
+native   00:38A7 native_west_wrap
+native   00:38AE native_south_wrap
+native   00:38B6 native_north_wrap
+native   00:38EB native_arena_cell_at
+native   00:38F2 native_arena_cell
 native   00:33D4 native_music_later_start
 native   00:33DC native_music_later_play
 name     00:2FFB frame_tick                 # per-frame work of a waiting task, then yield

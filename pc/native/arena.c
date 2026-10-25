@@ -39,6 +39,11 @@
 // - divide_16_b3 ($B7EA, bank 3's own): HL = HL / DE, DE = the remainder
 //   (HL = 0 when DE is 0), by two runs of divide_step ($B805: eight bits
 //   of A into the remainder HL, A the quotient's bits).
+// - east_wrap ($389F), west_wrap ($38A7), south_wrap ($38AE),
+//   north_wrap ($38B6): E (x) or D (y) one step on the 11x11 battlefield,
+//   round to the other side; carry when it stayed on.
+// - arena_cell ($38F2): HL = the cell (L, H) of the battlefield's map at
+//   $D800; arena_cell_at ($38EB): A = what is there.
 // Cycle counts are the original's, instruction by instruction (I).
 #include "../runtime/native.h"
 #include "../runtime/sms.h"
@@ -615,6 +620,47 @@ static void divide_16(void) {          // $B7EA
 	I(10);
 }
 
+static void up_wrap(uint8_t *r) {      // inc r / ld a,r / cp $0B / ret c / ld r,0 / ret
+	*r = op_inc8(*r); I(4);
+	cpu.a = *r; I(4);
+	op_sub8(0x0B, 0, 0); I(7);
+	if (cpu.f & FC) { I(11); return; }
+	I(5);
+	*r = 0x00; I(7);
+	I(10);
+}
+static void down_wrap(uint8_t *r) {    // dec r / scf / ret p / ld r,$0A / or a / ret
+	*r = op_dec8(*r); I(4);
+	op_scf(); I(4);
+	if (!(cpu.f & FS)) { I(11); return; }
+	I(5);
+	*r = 0x0A; I(7);
+	op_or(cpu.a); I(4);
+	I(10);
+}
+static void east_wrap(void) { up_wrap(&cpu.e); }     // $389F
+static void west_wrap(void) { down_wrap(&cpu.e); }   // $38A7
+static void south_wrap(void) { up_wrap(&cpu.d); }    // $38AE
+static void north_wrap(void) { down_wrap(&cpu.d); }  // $38B6
+
+static void arena_cell(void) {         // $38F2
+	cpu.a = cpu.h; I(4);
+	call(0x36ED);                      // times_11
+	op_add8(cpu.l, 0); I(4);
+	op_add8(cpu.a, 0); I(4);
+	cpu.l = cpu.a; I(4);
+	cpu.h = 0xD8; I(7);
+	I(10);
+}
+
+static void arena_cell_at(void) {      // $38EB
+	push(HL);
+	I(17); arena_cell();
+	cpu.a = mem_read(HL); I(7);
+	SET_HL(pop16()); I(10);
+	I(10);
+}
+
 static void target_in_pattern(void) {  // $A279
 	for (;;) {
 		cpu.a = mem_read(HL); I(7);
@@ -646,6 +692,12 @@ Native native_times_11_b3 = { "times_11_b3", 0xB856, 3, times_11_b3, OUT_A | OUT
 Native native_times_12_b3 = { "times_12_b3", 0xB860, 3, times_12_b3, OUT_A | OUT_F, .long_calls = 1 };
 Native native_divide_step = { "divide_step", 0xB805, 3, divide_step, OUT_A | OUT_F | OUT_HL, .long_calls = 1 };
 Native native_divide_16_b3 = { "divide_16_b3", 0xB7EA, 3, divide_16, OUT_A | OUT_F | OUT_DE | OUT_HL, .long_calls = 1 };
+Native native_east_wrap = { "east_wrap", 0x389F, 0, east_wrap, OUT_A | OUT_F | OUT_DE, .long_calls = 1 };
+Native native_west_wrap = { "west_wrap", 0x38A7, 0, west_wrap, OUT_A | OUT_F | OUT_DE, .long_calls = 1 };
+Native native_south_wrap = { "south_wrap", 0x38AE, 0, south_wrap, OUT_A | OUT_F | OUT_DE, .long_calls = 1 };
+Native native_north_wrap = { "north_wrap", 0x38B6, 0, north_wrap, OUT_A | OUT_F | OUT_DE, .long_calls = 1 };
+Native native_arena_cell = { "arena_cell", 0x38F2, 0, arena_cell, OUT_A | OUT_F | OUT_HL, .long_calls = 1 };
+Native native_arena_cell_at = { "arena_cell_at", 0x38EB, 0, arena_cell_at, OUT_A | OUT_F, .long_calls = 1 };
 Native native_target_in_pattern = { "target_in_pattern", 0xA279, 3, target_in_pattern, OUT_A | OUT_F | OUT_HL, .long_calls = 1 };
 Native native_load_dungeon_room = { "load_dungeon_room", 0x3D82, 0, load_dungeon_room, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL | OUT_IY, .long_calls = 1 };
 Native native_load_arena = { "load_arena", 0x377E, 0, load_arena, OUT_A | OUT_F, .long_calls = 1 };
