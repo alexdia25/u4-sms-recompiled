@@ -193,6 +193,8 @@ native   00:0605 native_sound_silence
 native   00:0613 native_sound_tick
 native   00:0621 native_play_music
 native   00:0646 native_read_pad1
+native   03:A279 native_target_in_pattern
+native   00:39B5 native_damage_monster
 ram      C580 talk_flags                    # +topic: 1 once asked; $C595/$C596 keyword 1/2 shown
 name     02:88F3 spell_recipes              # reagent bits per spell (Sulfur Ash = $80)
 name     01:5DE1 spell_mp_cost
