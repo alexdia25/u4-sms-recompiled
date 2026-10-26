@@ -13,8 +13,11 @@
 
 static void call(uint16_t addr) { cpu.cycles += 17; call_original(addr); }
 
+static void menu_backdrop(uint16_t site);
+
 // call an original routine that may wait for frames, from `site`
 static void tcall(uint16_t addr, uint16_t site) {
+	if (addr == 0x8A97) { menu_backdrop(site); return; }
 	cpu.cycles += 17;
 	task_call(addr, (uint16_t)(site + 3));
 }
@@ -2521,3 +2524,56 @@ static void logo_skip(void) {          // $812F: a button skips the logo
 	mem_write(GAME_MODE, 2);
 }
 Native native_logo_skip = { "logo_skip", 0x812F, 3, logo_skip, 0, 0, 0, .task = 1 };
+
+// $8A97 (called at site): the backdrop of the title's menus: the window
+// (bank $15 $833E, $280 bytes, through $CD80) queued for VRAM $3B80, a
+// turn, then 28 rows of $F0 bytes of patterns cleared from $0100 ($30
+// apart) and five times the 2 bytes at $8AE6, $30 bytes each.
+static void menu_backdrop(uint16_t site) {
+	cpu.cycles += 17 + 17 + 10 + 19 + 19 + 19 + 10;   // call task_enter_1: the caller's return kept in the slot
+	wr16((uint16_t)(cpu.sp - 2), 0x8A9A);   // what ex (sp),hl leaves on the stack
+	wr16((uint16_t)(cpu.sp - 4), 0x8A9A);
+	wr16(SLOT + 0x24, (uint16_t)(site + 3));
+	SET_HL((uint16_t)(site + 3));
+	cpu.cycles += 7 + 10 + 10 + 10;
+	cpu.a = 0x15;
+	SET_HL(0x833E); SET_DE(0xCD80); SET_BC(0x0280);
+	call(0x07EC);                      // far_ldir
+	cpu.cycles += 10 + 10 + 10;
+	SET_HL(0xCD80); SET_DE(0x3B80); SET_BC(0x0280);
+	tcall(0x0463, 0x8AB1);             // queued
+	yield_at(0x8AB4);
+	cpu.cycles += 10 + 10 + 7;
+	SET_HL(0x0100); SET_DE(0x0030);
+	cpu.b = 0x1C;
+	do {
+		cpu.cycles += 11 + 10 + 4;
+		push16(BC);
+		SET_BC(0x00F0);
+		op_xor(cpu.a);
+		call(0x0219);                  // vram_fill_bytes
+		cpu.cycles += 4 + 11 + 4 + 10;
+		{ uint16_t t = HL; SET_HL(DE); SET_DE(t); }
+		SET_HL(op_add16(HL, DE));
+		{ uint16_t t = HL; SET_HL(DE); SET_DE(t); }
+		SET_BC(pop16());
+		cpu.cycles += --cpu.b ? 13 : 8;
+	} while (cpu.b);
+	cpu.cycles += 7;
+	cpu.b = 0x05;
+	do {
+		cpu.cycles += 11 + 11 + 10 + 10;
+		push16(BC); push16(DE);
+		SET_HL(0x8AE6); SET_BC(0x0030);
+		call(0x024C);                  // vram_write
+		cpu.cycles += 10 + 10 + 11 + 4 + 10;
+		SET_HL(pop16());
+		SET_BC(0x0030);
+		SET_HL(op_add16(HL, BC));
+		{ uint16_t t = HL; SET_HL(DE); SET_DE(t); }
+		SET_BC(pop16());
+		cpu.cycles += --cpu.b ? 13 : 8;
+	} while (cpu.b);
+	cpu.cycles += 10 + 19 + 19 + 4;    // jp task_return_1
+	SET_HL(rd16(SLOT + 0x24));
+}

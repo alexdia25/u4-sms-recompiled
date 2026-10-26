@@ -463,6 +463,18 @@ native   01:4D0A native_letter_grid_start
 native   01:4D2B native_letter_grid
 name     03:AAC7 foe_ranged                 # what foe A shoots: E = shot, D = effect; carry for none
 native   03:AAC7 native_foe_ranged
+name     00:2E88 cell_block                 # by jp from $7EFF: a block of cells numbered on, in the text area copy
+name     00:1B0A wide_view_start            # by jp from $7E42: the view forgotten, the wide view's frame, then $1B3B
+native   00:2E88 native_cell_block
+native   00:1B0A native_wide_view_start
+name     00:326D picture_cells              # by jp from $7EF9: picture A's patterns to VRAM DE, its 14x6 cells (+C) at HL
+native   00:326D native_picture_cells
+name     00:0DC5 mode_reset                 # a game mode's start: sound off, VDP, pads, sprites, tasks cleared, display on
+name     00:0DDD mode_over_ff               # $C0C6 = $FF, game mode bit 7 (next mode)
+name     00:0DE1 mode_over_0                # $C0C6 = 0, game mode bit 7
+native   00:0DC5 native_mode_reset
+native   00:0DDD native_mode_over_ff
+native   00:0DE1 native_mode_over_0
 native   00:33D4 native_music_later_start
 native   00:33DC native_music_later_play
 name     00:2FFB frame_tick                 # per-frame work of a waiting task, then yield

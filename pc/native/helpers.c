@@ -59,6 +59,21 @@
 //   same, letters' case aside (to_upper, $34D4); else carry.
 // - missile_flip ($3074): the missile's other frame (IX+9 ^ 1), then
 //   missile_draw ($307C): drawn at its place (IX+$0B, $0D; put_picture).
+// - cell_block ($2E88): at HL four words: $C608, $C60A, the place in the
+//   text area's copy and the first cell number, then the block's height
+//   and width; the block's cells numbered on from it, column by column.
+// - wide_view_start ($1B0A, by jp from $7E42): the view forgotten
+//   ($276D), 28 rows of 16 bytes of bank $15 $81FE into VRAM from $0020
+//   ($100 apart), then $821E, then on into the 19 x 5 view ($1B3B).
+// - picture_cells ($326D, by jp from $7EF9): picture A (bank and address
+//   from the 3-byte entries at $32A6): its patterns unpacked to VRAM DE
+//   ($0788), then its 14 x 6 map of cells (each + C) into the text area's
+//   copy at HL.
+// - mode_reset ($0DC5): a game mode's start: the sound off ($05C7), the
+//   VDP set up ($014D), the pads read afresh ($06CD), the sprites cleared
+//   ($0950), every task cleared ($0B21), then the display on ($043D).
+// - mode_over ($0DDD with $FF, $0DE1 with 0): A to $C0C6, and the game
+//   mode's bit 7 set (the main loop starts the next one).
 // - tile_effect ($3F67): what the tile under the party ($C990) does: $03
 //   and $44 ($4071), $4C and $46 ($4812), $47 ($404A).
 // - screen_place ($3991): (L, H) cells as pixels (12 a cell);
@@ -879,6 +894,152 @@ static void missile_flip(void) {       // $3074
 	missile_draw();
 }
 
+static void de_at_hl(void) {          // call $2EB8: DE = the word at HL, HL past it
+	I(17);
+	cpu.e = mem_read(HL); I(7);
+	SET_HL(HL + 1); I(6);
+	cpu.d = mem_read(HL); I(7);
+	SET_HL(HL + 1); I(6);
+	I(10);
+}
+
+static void cell_block(void) {         // $2E88
+	de_at_hl();
+	wr16(0xC608, DE); I(20);
+	de_at_hl();
+	wr16(0xC60A, DE); I(20);
+	de_at_hl();
+	push(DE);
+	de_at_hl();
+	cpu.b = mem_read(HL); I(7);
+	SET_HL(HL + 1); I(6);
+	cpu.c = mem_read(HL); I(7);
+	SET_HL(pop16()); I(10);
+	do {                               // $2EA1: a column
+		push(BC);
+		push(HL);
+		cpu.b = cpu.c; I(4);
+		do {
+			mem_write(HL, cpu.e); I(7);
+			cpu.l = op_inc8(cpu.l); I(4);
+			mem_write(HL, cpu.d); I(7);
+			cpu.a = cpu.l; I(4);
+			op_add8(0x3F, 0); I(7);
+			cpu.l = cpu.a; I(4);
+			op_add8(cpu.h, cpu.f & FC); I(4);
+			op_sub8(cpu.l, 0, 1); I(4);
+			cpu.h = cpu.a; I(4);
+			SET_DE(DE + 1); I(6);
+			if (--cpu.b) I(13); else I(8);
+		} while (cpu.b);
+		SET_HL(pop16()); I(10);
+		SET_BC(pop16()); I(10);
+		cpu.l = op_inc8(cpu.l); I(4);
+		cpu.l = op_inc8(cpu.l); I(4);
+		if (--cpu.b) I(13); else I(8);
+	} while (cpu.b);
+	I(10);
+}
+
+static void wide_view_start(void) {    // $1B0A
+	op_xor(cpu.a); I(4);
+	mem_write(0xC602, cpu.a); I(13);
+	cpu.a = op_inc8(cpu.a); I(4);
+	mem_write(0xC601, cpu.a); I(13);
+	I(17); call_original(0x276D);      // forget_screen
+	SET_DE(0x0020); I(10);
+	cpu.b = 0x1C; I(7);
+	do {
+		push(BC);
+		push(DE);
+		cpu.a = 0x15; I(7);
+		SET_HL(0x81FE); I(10);
+		SET_BC(0x0010); I(10);
+		I(17); call_original(0x07F4);  // far_vram_write
+		SET_HL(pop16()); I(10);
+		SET_BC(0x0100); I(10);
+		SET_HL(op_add16(HL, BC)); I(11);
+		{ uint16_t t = HL; SET_HL(DE); SET_DE(t); } I(4);
+		SET_BC(pop16()); I(10);
+		if (--cpu.b) I(13); else I(8);
+	} while (cpu.b);
+	cpu.a = 0x15; I(7);
+	SET_HL(0x821E); I(10);
+	SET_BC(0x0010); I(10);
+	I(17); call_original(0x07F4);
+	native_continue_at(0x1B3B);        // on into compose_wide
+}
+
+static void picture_cells(void) {      // $326D
+	push(BC);
+	push(HL);
+	cpu.b = cpu.a; I(4);
+	op_add8(cpu.a, 0); I(4);
+	op_add8(cpu.b, 0); I(4);
+	SET_HL(0x32A6); I(10);
+	I(11);                             // rst $30: HL += A
+	op_add8(cpu.l, 0); I(4);
+	cpu.l = cpu.a; I(4);
+	if (!(cpu.f & FC)) I(11);
+	else { I(5); cpu.h = op_inc8(cpu.h); I(4); I(10); }
+	push(DE);
+	cpu.a = mem_read(HL); I(7);
+	SET_HL(HL + 1); I(6);
+	cpu.e = mem_read(HL); I(7);
+	SET_HL(HL + 1); I(6);
+	cpu.d = mem_read(HL); I(7);
+	{ uint16_t t = HL; SET_HL(DE); SET_DE(t); } I(4);
+	SET_DE(pop16()); I(10);
+	push((uint16_t)(cpu.a << 8 | cpu.f));
+	I(17); call_original(0x0788);      // far_vram_rle_slow: the patterns
+	{ uint16_t af = pop16(); cpu.a = af >> 8; cpu.f = (uint8_t)af; } I(10);
+	SET_DE(pop16()); I(10);
+	SET_BC(pop16()); I(10);
+	vram_bank_push(0x3285);
+	cpu.a = 0x0E; I(7);
+	do {                               // $328A: a row
+		op_ex_af(); I(4);
+		cpu.b = 0x06; I(7);
+		do {
+			cpu.a = mem_read(HL); I(7);
+			SET_HL(HL + 1); I(6);
+			op_add8(cpu.c, 0); I(4);
+			mem_write(DE, cpu.a); I(7);
+			cpu.e = op_inc8(cpu.e); I(4);
+			cpu.a = mem_read(HL); I(7);
+			SET_HL(HL + 1); I(6);
+			mem_write(DE, cpu.a); I(7);
+			cpu.e = op_inc8(cpu.e); I(4);
+			if (--cpu.b) I(13); else I(8);
+		} while (cpu.b);
+		cpu.a = cpu.e; I(4);
+		op_add8(0x34, 0); I(7);
+		cpu.e = cpu.a; I(4);
+		if (!(cpu.f & FC)) I(12);
+		else { I(7); cpu.d = op_inc8(cpu.d); I(4); }
+		op_ex_af(); I(4);
+		cpu.a = op_dec8(cpu.a); I(4);
+		I(cpu.a ? 12 : 7);
+	} while (cpu.a);
+	vram_bank_pop();
+}
+
+static void mode_reset(void) {         // $0DC5
+	static const uint16_t steps[5] = { 0x05C7, 0x014D, 0x06CD, 0x0950, 0x0B21 };
+	for (int i = 0; i < 5; i++) { I(17); call_original(steps[i]); }
+	I(10);
+	native_continue_at(0x043D);        // jp display_on
+}
+
+static void mode_over_with_a(void) {   // $0DE2
+	mem_write(0xC0C6, cpu.a); I(13);
+	SET_HL(0xC600); I(10);
+	mem_write(HL, mem_read(HL) | 0x80); I(15);
+	I(10);
+}
+static void mode_over_ff(void) { cpu.a = 0xFF; I(7); I(12); mode_over_with_a(); }   // $0DDD
+static void mode_over_0(void) { op_xor(cpu.a); I(4); mode_over_with_a(); }          // $0DE1
+
 static void tile_effect(void) {        // $3F67
 	static const struct { uint8_t tile; uint16_t to; } effects[5] = {
 		{ 0x03, 0x4071 }, { 0x44, 0x4071 }, { 0x4C, 0x4812 }, { 0x46, 0x4812 }, { 0x47, 0x404A },
@@ -941,5 +1102,12 @@ HELPER(end_tasks_of, 0x0B6D, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL)
 HELPER(count_move, 0x372E, OUT_A | OUT_F)
 HELPER(bcd_text, 0x36FF, OUT_A | OUT_F | OUT_HL)
 HELPER(same_word, 0x34BB, OUT_A | OUT_F)
+HELPER(cell_block, 0x2E88, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL)
+HELPER(wide_view_start, 0x1B0A, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL)
+HELPER(mode_reset, 0x0DC5, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL)
+HELPER(mode_over_ff, 0x0DDD, OUT_A | OUT_F | OUT_HL)
+HELPER(mode_over_0, 0x0DE1, OUT_A | OUT_F | OUT_HL)
+static const uint16_t bank_scratch[] = { 0xC0C2, 0xC0C3 };
+Native native_picture_cells = { "picture_cells", 0x326D, 0, picture_cells, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL, bank_scratch, 2, .long_calls = 1 };
 HELPER(missile_flip, 0x3074, OUT_A | OUT_F | OUT_DE)
 HELPER(missile_draw, 0x307C, OUT_A | OUT_F | OUT_DE)
