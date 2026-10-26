@@ -33,6 +33,7 @@ static void say_inline(uint16_t text) {   // call print_inline / the text follow
 }
 
 static void tcall(uint16_t addr, uint16_t site) {
+	if (window_anim_call(addr, site)) return;
 	cpu.cycles += 17;
 	task_call(addr, (uint16_t)(site + 3));
 }

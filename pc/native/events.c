@@ -12,6 +12,7 @@
 static void call(uint16_t addr) { cpu.cycles += 17; call_original(addr); }
 
 static void tcall(uint16_t addr, uint16_t site) {   // a routine that may wait for frames
+	if (window_anim_call(addr, site)) return;
 	cpu.cycles += 17;
 	task_call(addr, (uint16_t)(site + 3));
 }

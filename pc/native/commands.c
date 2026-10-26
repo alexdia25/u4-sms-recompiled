@@ -136,7 +136,7 @@ Native native_get_chest = { "get_chest", 0x890D, 2, get_chest, 0, 0, 0, .task = 
 // asks anyway), the list of what the party has (status page $0F/$10), one
 // picked, the class allowed to use it (the table at $5960/$5970), and the
 // old one back to the party's store. Returns with carry if cancelled.
-static int ready_thing(int armour, uint16_t site) {
+int ready_thing(int armour, uint16_t site) {
 	cpu.cycles += 17 + 17 + 10 + 19 + 19 + 19 + 10;   // the call; call $0AB5: its return kept in the slot
 	wr16(SLOT + 0x26, (uint16_t)(site + 3));
 	SET_HL((uint16_t)(site + 3));
@@ -344,7 +344,7 @@ Native native_ready = { "ready", 0x8B28, 2, ready, 0, 0, 0, .task = 1 };
 // right pick the member), 1-5 the party's things, 6 the reagents or the
 // mixtures (left and right); up and down turn the pages, button 2 starts
 // over, button 1 leaves
-static void status(uint16_t site) {
+void status_pages(uint16_t site) {
 	cpu.cycles += 17 + 17 + 10 + 19 + 19 + 19 + 10;   // call $0AB5: its return kept in the slot
 	wr16(SLOT + 0x26, (uint16_t)(site + 3));
 	SET_HL((uint16_t)(site + 3));
@@ -685,7 +685,7 @@ static void camp_menu(void) {
 	case 0: rest(); break;
 	case 1: new_order(); break;
 	case 2:                            // $9367: Status
-		status(0x9367);
+		status_pages(0x9367);
 		newline();
 		done();
 		break;

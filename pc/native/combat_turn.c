@@ -50,6 +50,7 @@ static void combat_attack(void);
 
 // call an original routine that may wait for frames, from `site`
 static void tcall(uint16_t addr, uint16_t site) {
+	if (window_anim_call(addr, site)) return;
 	cpu.cycles += 17;
 	task_call(addr, (uint16_t)(site + 3));
 }
@@ -333,17 +334,20 @@ static void combat_menu(uint16_t back) {
 		command_end(END_DONE);
 		break;
 	case 3:                            // $A2E3: Ready Weapon
-		tcall(0x7EDE, 0xA2E3);
+		cpu.cycles += 10;              // call $7EDE: jp $57D7
+		ready_thing(0, 0xA2E3);
 		cpu.cycles += 10;
 		command_end(END_AS_IS);
 		break;
 	case 4:                            // $A2E9: Use Item
-		tcall(0x7E2D, 0xA2E9);
+		cpu.cycles += 10;              // call $7E2D: jp $651E
+		if (use_things(0xA2E9)) return;
 		cpu.cycles += 10;
 		command_end(END_DONE);
 		break;
 	default:                           // $A2EF: Status
-		tcall(0x7E2A, 0xA2EF);
+		cpu.cycles += 10;              // call $7E2A: jp $7588
+		status_pages(0xA2EF);
 		cpu.cycles += 10;
 		command_end(END_DONE);
 		break;

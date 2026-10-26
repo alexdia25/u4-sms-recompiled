@@ -35,10 +35,13 @@ static void enter(void) {              // call task_enter_1: the caller's return
 	SET_HL(back);
 }
 
+static unsigned called_from_c;         // slots (bit by IX) run by window_anim_call: back to the C caller
+static unsigned slot_bit(void) { return 1u << ((cpu.ix - 0xC300) / 0x30 & 31); }
+
 static void leave(void) {              // jp task_return_1
 	cpu.cycles += 10 + 19 + 19 + 4;
 	SET_HL(rd16((uint16_t)(SLOT + 0x24)));
-	native_continue_at(HL);
+	if (!(called_from_c & slot_bit())) native_continue_at(HL);
 }
 
 static void frame(uint16_t frame_at) { // call window_frame
@@ -198,3 +201,24 @@ ANIM(window_wipe_b9ac, 0x30F1)
 ANIM(window_grow, 0x3164)
 ANIM(window_grow_b9ac, 0x315F)
 ANIM(window_open, 0x31B1)
+
+// From another C task: "call addr" at site, for addr one of the above or a
+// bank-1 vector to one (jp: 10 more); 0 for any other address. (Entered by
+// task_call, the C task would not run: see task_in_call in native.c.)
+int window_anim_call(uint16_t addr, uint16_t site) {
+	static const struct { uint16_t addr, vector; void (*fn)(void); } anims[6] = {
+		{ 0x310B, 0x7EA2, window_wipe }, { 0x30F6, 0, window_wipe_bc10 },
+		{ 0x30F1, 0x7EAB, window_wipe_b9ac }, { 0x3164, 0, window_grow },
+		{ 0x315F, 0, window_grow_b9ac }, { 0x31B1, 0x7EA5, window_open },
+	};
+	for (int i = 0; i < 6; i++) {
+		if (addr != anims[i].addr && (!anims[i].vector || addr != anims[i].vector)) continue;
+		cpu.cycles += 17 + (addr == anims[i].vector ? 10 : 0);
+		push16((uint16_t)(site + 3));
+		called_from_c |= slot_bit();
+		anims[i].fn();
+		called_from_c &= ~slot_bit();
+		return 1;
+	}
+	return 0;
+}

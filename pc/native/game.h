@@ -19,6 +19,9 @@ int multiply_cycles(uint8_t h, uint8_t l);
 void frame_tick_work(void);           // what frame_tick ($2FFB) does before it yields
 void task_frame_tick(uint16_t site);  // "call frame_tick" at site: ends the turn
 int use_things(uint16_t site);         // the special things (items.c)
+int ready_thing(int armour, uint16_t site);   // Ready's lists, bank 1 $57D7/$5855 (commands.c); 1: cancelled
+void status_pages(uint16_t site);      // the status pages, bank 1 $7588 (commands.c)
+int window_anim_call(uint16_t addr, uint16_t site);   // the window animations from a C task (window_anim.c)
 void task_wait_button(uint16_t site); // "call wait_button" at site: waits for button 1 or 2
 void task_wait_frames(uint16_t site, uint8_t n);   // "ld a,n / call $3046" at site: n turns
 
