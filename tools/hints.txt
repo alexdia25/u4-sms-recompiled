@@ -514,6 +514,12 @@ native   02:B3DF native_view_west
 native   02:B3E8 native_view_north
 native   02:B3F1 native_view_east
 native   02:B3FA native_view_south
+name     00:07FD far_byte
+native   00:07FD native_far_byte
+name     00:3754 effect_wane
+native   00:3754 native_effect_wane
+name     02:AEDA abyss_isle                 # the Abyss isle's people, when come in from the north onto ($DC,$E0)
+native   02:AEDA native_abyss_isle
 native   00:33D4 native_music_later_start
 native   00:33DC native_music_later_play
 name     00:2FFB frame_tick                 # per-frame work of a waiting task, then yield

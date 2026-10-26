@@ -36,6 +36,9 @@
 // - queue_glyphs ($30DA): $100 bytes of bank $13 from $A40F + A * 256
 //   queued for VRAM $2920.
 // - times_11 ($36ED), times_12 ($36F7): A times 11 or 12.
+// - far_byte ($07FD): A = the byte HL[C] in bank A.
+// - effect_wane ($3754): the spell effect's turns ($C977) one less; at
+//   0 the effect ($C976) ends.
 // - far_word ($0807): HL = the word HL[C] in bank A.
 // - input_reset ($06E2): the pads as if every button were held and none
 //   just pressed ($C0AF = $FF, $C0B0 = $C0B2 = $C0B5 = 0, direction 8).
@@ -648,6 +651,27 @@ static void screen_cell(void) {        // $399C
 	I(10);
 }
 
+static void effect_wane(void) {        // $3754
+	cpu.a = mem_read(0xC977); I(13);
+	op_or(cpu.a); I(4);
+	if (cpu.f & FZ) { I(11); return; }
+	I(5);
+	cpu.a = op_dec8(cpu.a); I(4);
+	mem_write(0xC977, cpu.a); I(13);
+	if (!(cpu.f & FZ)) { I(11); return; }
+	I(5);
+	mem_write(0xC976, cpu.a); I(13);
+	I(10);
+}
+
+static void far_byte(void) {           // $07FD
+	vram_bank_push(0x07FD);
+	cpu.b = 0x00; I(7);
+	SET_HL(op_add16(HL, BC)); I(11);
+	cpu.a = mem_read(HL); I(7);
+	vram_bank_pop();
+}
+
 static void far_word(void) {           // $0807
 	vram_bank_push(0x0807);
 	cpu.b = 0x00; I(7);
@@ -1087,6 +1111,8 @@ HELPER(times_11, 0x36ED, OUT_A | OUT_F)
 HELPER(times_12, 0x36F7, OUT_A | OUT_F)
 HELPER(screen_place, 0x3991, OUT_A | OUT_F | OUT_HL)
 HELPER(screen_cell, 0x399C, OUT_A | OUT_F | OUT_BC | OUT_HL)
+HELPER(far_byte, 0x07FD, OUT_A | OUT_F | OUT_BC | OUT_HL)
+HELPER(effect_wane, 0x3754, OUT_A | OUT_F)
 HELPER(far_word, 0x0807, OUT_A | OUT_F | OUT_BC | OUT_HL)
 HELPER(input_reset, 0x06E2, OUT_A | OUT_F)
 HELPER(input_repeat, 0x06DA, OUT_A | OUT_F)

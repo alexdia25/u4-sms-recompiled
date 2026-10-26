@@ -23,6 +23,9 @@
 //   of the 32x32 map at $D000 (DE its address); on the world ($BAD5)
 //   (E, D) made relative to the loaded 32x32 chunks ($C987, $C988), carry
 //   when off them.
+// - view_step ($B3DF west, $B3E8 north, $B3F1 east, $B3FA south): the
+//   party's place in the loaded window ($C985/$C986) and on the map
+//   ($C953/$C954) one step on.
 #include "../runtime/native.h"
 #include "../runtime/sms.h"
 #include "../runtime/z80.h"
@@ -124,6 +127,18 @@ static void door_ahead(void) {         // $B464
 	call(0x05F1);
 	op_scf(); I(4);
 	I(10);
+}
+
+// $AEDA: come in from the north ($C9B9 = 2) onto ($DC, $E0), the Abyss's
+// isle: its people set up (the original's, $AEEC)
+static void abyss_isle(void) {
+	static const struct { uint16_t at; uint8_t v; } need[3] = { { 0xC9B9, 0x02 }, { PARTY_X, 0xDC }, { PARTY_Y, 0xE0 } };
+	for (int i = 0; i < 3; i++) {
+		cpu.a = mem_read(need[i].at); I(13);
+		op_sub8(need[i].v, 0, 0); I(7);
+		if (ret_if(!(cpu.f & FZ))) return;
+	}
+	native_continue_at(0xAEEC);
 }
 
 static int world_event_here(void) {    // a moongate, or a place's entrance, under the party
@@ -318,6 +333,18 @@ static void tile_at(void) {            // $BACF
 	else { I(12); map_cell_de(); }
 }
 
+static void view_step(uint16_t view, uint16_t party, int d) {   // ld hl / inc or dec (hl), twice / ret
+	SET_HL(view); I(10);
+	mem_write(HL, d > 0 ? op_inc8(mem_read(HL)) : op_dec8(mem_read(HL))); I(11);
+	SET_HL(party); I(10);
+	mem_write(HL, d > 0 ? op_inc8(mem_read(HL)) : op_dec8(mem_read(HL))); I(11);
+	I(10);
+}
+static void view_west(void) { view_step(0xC985, PARTY_X, -1); }   // $B3DF
+static void view_north(void) { view_step(0xC986, PARTY_Y, -1); }  // $B3E8
+static void view_east(void) { view_step(0xC985, PARTY_X, 1); }    // $B3F1
+static void view_south(void) { view_step(0xC986, PARTY_Y, 1); }   // $B3FA
+
 Native native_town_cell = { "town_cell", 0xB5A4, 2, town_cell, OUT_A | OUT_F | OUT_HL, .long_calls = 1 };
 Native native_door_ahead = { "door_ahead", 0xB464, 2, door_ahead, OUT_A | OUT_F | OUT_DE | OUT_HL, .long_calls = 1 };
 Native native_world_step = { "world_step", 0xACDC, 2, world_step, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL, .long_calls = 1 };
@@ -325,3 +352,8 @@ Native native_town_step = { "town_step", 0xAFAA, 2, town_step, OUT_A | OUT_F, .l
 Native native_tile_at = { "tile_at", 0xBACF, 2, tile_at, OUT_A | OUT_F | OUT_DE, .long_calls = 1 };
 Native native_world_tile_at = { "world_tile_at", 0xBAD5, 2, world_tile_at, OUT_A | OUT_F | OUT_DE, .long_calls = 1 };
 Native native_map_cell_de = { "map_cell_de", 0xBAF3, 2, map_cell_de, OUT_A | OUT_F | OUT_DE, .long_calls = 1 };
+Native native_view_west = { "view_west", 0xB3DF, 2, view_west, OUT_A | OUT_F | OUT_HL, .long_calls = 1 };
+Native native_view_north = { "view_north", 0xB3E8, 2, view_north, OUT_A | OUT_F | OUT_HL, .long_calls = 1 };
+Native native_view_east = { "view_east", 0xB3F1, 2, view_east, OUT_A | OUT_F | OUT_HL, .long_calls = 1 };
+Native native_view_south = { "view_south", 0xB3FA, 2, view_south, OUT_A | OUT_F | OUT_HL, .long_calls = 1 };
+Native native_abyss_isle = { "abyss_isle", 0xAEDA, 2, abyss_isle, OUT_A | OUT_F, .long_calls = 1 };
