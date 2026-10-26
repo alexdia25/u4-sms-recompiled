@@ -57,6 +57,8 @@
 //   $C06F (a 0 after them), leading zeros (but the last) as spaces.
 // - same_word ($34BB): Z (no carry) when the words at HL and DE are the
 //   same, letters' case aside (to_upper, $34D4); else carry.
+// - missile_flip ($3074): the missile's other frame (IX+9 ^ 1), then
+//   missile_draw ($307C): drawn at its place (IX+$0B, $0D; put_picture).
 // - tile_effect ($3F67): what the tile under the party ($C990) does: $03
 //   and $44 ($4071), $4C and $46 ($4812), $47 ($404A).
 // - screen_place ($3991): (L, H) cells as pixels (12 a cell);
@@ -864,6 +866,19 @@ static void same_word(void) {          // $34BB
 	I(10);
 }
 
+static void missile_draw(void) {       // $307C
+	cpu.e = ix_at(0x0B); I(19);
+	cpu.d = ix_at(0x0D); I(19);
+	native_continue_at(0x3082);        // falls into put_picture
+}
+
+static void missile_flip(void) {       // $3074
+	cpu.a = ix_at(0x09); I(19);
+	op_xor(0x01); I(7);
+	mem_write((uint16_t)(cpu.ix + 0x09), cpu.a); I(19);
+	missile_draw();
+}
+
 static void tile_effect(void) {        // $3F67
 	static const struct { uint8_t tile; uint16_t to; } effects[5] = {
 		{ 0x03, 0x4071 }, { 0x44, 0x4071 }, { 0x4C, 0x4812 }, { 0x46, 0x4812 }, { 0x47, 0x404A },
@@ -926,3 +941,5 @@ HELPER(end_tasks_of, 0x0B6D, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL)
 HELPER(count_move, 0x372E, OUT_A | OUT_F)
 HELPER(bcd_text, 0x36FF, OUT_A | OUT_F | OUT_HL)
 HELPER(same_word, 0x34BB, OUT_A | OUT_F)
+HELPER(missile_flip, 0x3074, OUT_A | OUT_F | OUT_DE)
+HELPER(missile_draw, 0x307C, OUT_A | OUT_F | OUT_DE)

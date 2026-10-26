@@ -437,6 +437,22 @@ native   00:38AE native_south_wrap
 native   00:38B6 native_north_wrap
 native   00:38EB native_arena_cell_at
 native   00:38F2 native_arena_cell
+name     00:310B window_wipe                # the window frame wiped in, two rows a frame (task)
+name     00:30F6 window_wipe_bc10
+name     00:30F1 window_wipe_b9ac
+name     00:3164 window_grow                # the window grown from the middle, a frame a step (task)
+name     00:315F window_grow_b9ac
+native   00:310B native_window_wipe
+native   00:30F6 native_window_wipe_bc10
+native   00:30F1 native_window_wipe_b9ac
+native   00:3164 native_window_grow
+native   00:315F native_window_grow_b9ac
+name     00:31B1 window_open                # the window frame opened from the middle (task)
+native   00:31B1 native_window_open
+name     00:3074 missile_flip
+name     00:307C missile_draw
+native   00:3074 native_missile_flip
+native   00:307C native_missile_draw
 native   00:33D4 native_music_later_start
 native   00:33DC native_music_later_play
 name     00:2FFB frame_tick                 # per-frame work of a waiting task, then yield

@@ -103,7 +103,7 @@ static int ladder(void) {
 	text_char((uint8_t)(mem_read(LEVEL) + '1'));
 	newline();
 	cpu.cycles += 10;                  // pop af
-	call(0x31B1);
+	tcall(0x31B1, 0x6AE4);             // the window opens (it waits for frames)
 	cpu.cycles += 10;                  // jp $69E4: the new level
 	native_continue_at(0x69E4);
 	return 1;
