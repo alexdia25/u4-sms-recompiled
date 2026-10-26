@@ -659,6 +659,32 @@ static void yield_at(uint16_t site) {  // "call yield" at site: the next turn go
 	task_wait_turn((uint16_t)(site + 3));
 }
 
+// $ABB7 (called at site): member C struck: its figure ($7E90) blinks
+// three frames at its place, pictures 4, 5, 6 ($A48A) with the screen's
+// moving parts ($7F4D) each; the return kept at IX+$14 meanwhile
+static void member_struck(uint16_t site) {
+	cpu.cycles += 17 + 10 + 19 + 19;   // call / pop hl / ld (ix+$14),l / ld (ix+$15),h
+	wr16(SLOT + 0x14, (uint16_t)(site + 3));
+	SET_HL((uint16_t)(site + 3));
+	tcall(0x7E90, 0xABBE);
+	cpu.cycles += 19 + 19;
+	SET_HL(rd16(cpu.iy));
+	tcall(0xA477, 0xABC7);
+	cpu.cycles += 19 + 19;
+	mem_write(SLOT + 0x0B, cpu.l);
+	mem_write(SLOT + 0x0D, cpu.h);
+	for (int i = 0; i < 3; i++) {
+		uint16_t at = (uint16_t)(0xABD0 + 11 * i);
+		cpu.cycles += 7;
+		cpu.a = (uint8_t)(4 + i);
+		tcall(0xA48A, (uint16_t)(at + 2));
+		tcall(0x7F4D, (uint16_t)(at + 5));
+		yield_at((uint16_t)(at + 8));
+	}
+	cpu.cycles += 19 + 19 + 4;         // jp (hl): back
+	SET_HL(rd16(SLOT + 0x14));
+}
+
 static uint8_t random_v(void) {        // call random by its vector
 	call(0x7ED8);
 	return cpu.a;
@@ -1019,7 +1045,7 @@ static void missile(uint16_t site) {
 	}
 	cpu.cycles += 19;                  // $A8FB: the damage
 	cpu.c = mem_read(HIT_MEMBER);
-	tcall(0xABB7, 0xA8FE);
+	member_struck(0xA8FE);
 	cpu.cycles += 19 + 19;
 	cpu.b = mem_read(FOE_INDEX);
 	cpu.c = mem_read(HIT_MEMBER);
@@ -1058,7 +1084,7 @@ static void foe_strikes(void) {
 	if (!(cpu.f & FC)) { cpu.cycles += 5; goto done; }
 	cpu.cycles += 19;
 	cpu.c = mem_read(TARGET_MEMBER);
-	tcall(0xABB7, 0xA785);
+	member_struck(0xA785);
 	cpu.cycles += 19 + 19;
 	cpu.b = mem_read(FOE_INDEX);
 	cpu.c = mem_read(TARGET_MEMBER);

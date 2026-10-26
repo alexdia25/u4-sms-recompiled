@@ -262,7 +262,14 @@ static int step(uint8_t dir) {
 	return 0;
 }
 
-static void dungeon_turn(void) {
+// stage 0: the turn's top ($6A0F); 1: back at $6A45 from the input step
+// (a command or a room, which the original runs, returns there)
+static void dungeon_loop(int stage) {
+	int first;
+	if (stage == 1) {                  // jr c,$6A3C: no move yet, more input
+		if (cpu.f & FC) { cpu.cycles += 12; first = 0; goto input; }
+		goto after_input;
+	}
 	for (;;) {
 		call(0x129D);                  // $6A0F: the screen's moving parts
 		cpu.cycles += 17 + 58;         // yield
@@ -279,7 +286,8 @@ static void dungeon_turn(void) {
 			cpu.cycles += 7 + 17;
 			text_char(0x7F);           // ">"
 			cpu.cycles += 12;
-			for (int first = 1;; first = 0) {
+			for (first = 1;; first = 0) {
+			input:
 				if (!first) task_frame_tick(0x6A3C);
 				tcall(0x5726, 0x6A3F); // both buttons: the party's stats
 				// $6B0A: one frame of input
@@ -318,6 +326,7 @@ static void dungeon_turn(void) {
 				cpu.cycles += 4 + 10 + 7 + 5;   // scf / ret / jr c,$6A3C
 				cpu.f |= FC;
 			}
+		after_input:
 			cpu.cycles += 7;           // jr c not taken
 			if (left(0x6A4A)) return;
 		} else cpu.cycles += 5;
@@ -327,4 +336,7 @@ static void dungeon_turn(void) {
 		cpu.cycles += 12;
 	}
 }
+static void dungeon_turn(void) { dungeon_loop(0); }          // $6A0F
+static void dungeon_after_input(void) { dungeon_loop(1); }   // $6A45
 Native native_dungeon_turn = { "dungeon_turn", 0x6A0F, 1, dungeon_turn, 0, 0, 0, .task = 1 };
+Native native_dungeon_after_input = { "dungeon_after_input", 0x6A45, 1, dungeon_after_input, 0, 0, 0, .task = 1 };

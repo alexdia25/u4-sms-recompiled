@@ -475,6 +475,15 @@ name     00:0DE1 mode_over_0                # $C0C6 = 0, game mode bit 7
 native   00:0DC5 native_mode_reset
 native   00:0DDD native_mode_over_ff
 native   00:0DE1 native_mode_over_0
+name     02:AFAA town_step                  # after a step in a town: off the map, or an Abyss ladder
+native   02:AFAA native_town_step
+name     02:BACF tile_at                    # A = the tile at (E, D), town or world (carry: off the loaded map)
+name     02:BAD5 world_tile_at
+name     02:BAF3 map_cell_de                # A = (DE = $D000 cell of (E, D))
+native   02:BACF native_tile_at
+native   02:BAD5 native_world_tile_at
+native   02:BAF3 native_map_cell_de
+native   01:6A45 native_dungeon_after_input
 native   00:33D4 native_music_later_start
 native   00:33DC native_music_later_play
 name     00:2FFB frame_tick                 # per-frame work of a waiting task, then yield

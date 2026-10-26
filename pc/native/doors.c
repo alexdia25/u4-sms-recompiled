@@ -14,6 +14,15 @@
 //   the 32 at $AE60 is entered: location = its number + 2 (with the
 //   carry), the way back kept, and what happens by the figure the party
 //   travels as ($C9BB, the table at $AD6D, in the original).
+// - town_step ($AFAA): after a step in a town (unless travel is off,
+//   $C9A1): off the 32x32 map the party leaves for the world ($AFC9); in
+//   the Abyss ($C959 = $1F) a ladder down ($1B) or up ($1C) under it
+//   ($C990) takes it on ($AFEF, $B02A): those, which print and wait, are
+//   the original's.
+// - tile_at ($BACF): A = the tile at (E, D): in a town ($BAF3) the cell
+//   of the 32x32 map at $D000 (DE its address); on the world ($BAD5)
+//   (E, D) made relative to the loaded 32x32 chunks ($C987, $C988), carry
+//   when off them.
 #include "../runtime/native.h"
 #include "../runtime/sms.h"
 #include "../runtime/z80.h"
@@ -231,6 +240,88 @@ static void world_step(void) {         // $ACDC
 	native_continue_at(0x334A);
 }
 
+static int town_event_here(void) {     // town_step would go on into the original
+	if (mem_read(PARTY_X) >= 0x20 || mem_read(PARTY_Y) >= 0x20) return 1;
+	uint8_t t = mem_read(0xC990);
+	return (t == 0x1B || t == 0x1C) && mem_read(0xC959) == 0x1F;
+}
+
+static void town_step(void) {          // $AFAA
+	if (mem_read(0xC9A1) && !native_on_fiber() && town_event_here()) { native_decline(); return; }
+	cpu.a = mem_read(0xC9A1); I(13);
+	op_or(cpu.a); I(4);
+	if (ret_if(cpu.f & FZ)) return;
+	cpu.a = mem_read(PARTY_X); I(13);
+	op_sub8(0x20, 0, 0); I(7);
+	int off = !(cpu.f & FC);
+	if (!off) {
+		I(7);
+		cpu.a = mem_read(PARTY_Y); I(13);
+		op_sub8(0x20, 0, 0); I(7);
+		off = !(cpu.f & FC);
+	}
+	if (off) { I(12); native_continue_at(0xAFC9); return; }   // off the map: to the world
+	I(7);
+	cpu.a = mem_read(0xC990); I(13);
+	op_sub8(0x1B, 0, 0); I(7);
+	uint16_t on = 0;
+	if (cpu.f & FZ) { I(12); on = 0xAFEF; }
+	else {
+		I(7);
+		op_sub8(0x1C, 0, 0); I(7);
+		if (cpu.f & FZ) { I(12); on = 0xB02A; }
+		else { I(7); I(10); return; }
+	}
+	cpu.a = mem_read(0xC959); I(13);   // a ladder: in the Abyss only
+	op_sub8(0x1F, 0, 0); I(7);
+	if (ret_if(!(cpu.f & FZ))) return;
+	native_continue_at(on);
+}
+
+static void map_cell_de(void) {        // $BAF3
+	op_xor(cpu.a); I(4);
+	cpu.d = op_rot(7, cpu.d); I(8);    // srl d / rra, twice
+	op_rra(); I(4);
+	cpu.d = op_rot(7, cpu.d); I(8);
+	op_rra(); I(4);
+	op_add8(cpu.e, 0); I(4);
+	op_add8(cpu.e, 0); I(4);
+	cpu.e = cpu.a; I(4);
+	cpu.a = cpu.d; I(4);
+	op_or(0xD0); I(7);
+	cpu.d = cpu.a; I(4);
+	cpu.a = mem_read(DE); I(7);
+	I(10);
+}
+
+static int chunk_relative(uint16_t chunk, uint8_t *v) {   // $BAD5 / $BAE4: carry when off the map
+	cpu.a = mem_read(chunk); I(13);
+	for (int i = 0; i < 4; i++) { op_add8(cpu.a, 0); I(4); }
+	op_neg(); I(8);
+	op_add8(*v, 0); I(4);
+	*v = cpu.a; I(4);
+	op_sub8(0x20, 0, 0); I(7);
+	op_ccf(); I(4);
+	return ret_if(cpu.f & FC);
+}
+
+static void world_tile_at(void) {      // $BAD5
+	if (chunk_relative(0xC987, &cpu.e)) return;
+	if (chunk_relative(0xC988, &cpu.d)) return;
+	map_cell_de();
+}
+
+static void tile_at(void) {            // $BACF
+	cpu.a = mem_read(0xC9A0); I(13);
+	op_or(cpu.a); I(4);
+	if (cpu.f & FZ) { I(7); world_tile_at(); }
+	else { I(12); map_cell_de(); }
+}
+
 Native native_town_cell = { "town_cell", 0xB5A4, 2, town_cell, OUT_A | OUT_F | OUT_HL, .long_calls = 1 };
 Native native_door_ahead = { "door_ahead", 0xB464, 2, door_ahead, OUT_A | OUT_F | OUT_DE | OUT_HL, .long_calls = 1 };
 Native native_world_step = { "world_step", 0xACDC, 2, world_step, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL, .long_calls = 1 };
+Native native_town_step = { "town_step", 0xAFAA, 2, town_step, OUT_A | OUT_F, .long_calls = 1 };
+Native native_tile_at = { "tile_at", 0xBACF, 2, tile_at, OUT_A | OUT_F | OUT_DE, .long_calls = 1 };
+Native native_world_tile_at = { "world_tile_at", 0xBAD5, 2, world_tile_at, OUT_A | OUT_F | OUT_DE, .long_calls = 1 };
+Native native_map_cell_de = { "map_cell_de", 0xBAF3, 2, map_cell_de, OUT_A | OUT_F | OUT_DE, .long_calls = 1 };
