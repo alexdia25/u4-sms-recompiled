@@ -1064,7 +1064,7 @@ static void use_sextant(void) {
 // attacked (the table at $85CD). In towns everyone guarding (guards $50,
 // Lord British $5E) turns hostile; elsewhere attacking the harmless costs
 // karma. Then the fight ($3BD9). Nobody there: on a ship the broadsides
-// ($8534, original code: the cannonballs fly frame by frame), else
+// ($8534: the cannonballs fly frame by frame), else
 // "Nothing to Attack!". In dungeons the dungeon's own ($8077).
 static void karma_cost(void) {        // $85EE: compassion, justice, honour -5
 	static const uint8_t virtues[3] = { 1, 3, 5 };
@@ -1079,6 +1079,111 @@ static void karma_cost(void) {        // $85EE: compassion, justice, honour -5
 static void attack_nothing(void) {     // $85D2
 	call(0x40D1);
 	say_inline(0x85D8);                // "Nothing to Attack!"
+	done();
+}
+
+// $8534: the ship's broadside: "Fire broadside!", a cannonball from the
+// ship's side (direction IX+$1A, $40B9) flies, 4 times 3 steps
+// ($3945); whoever of the place's people it reaches (but $8C and $18) is
+// sunk (the first 8 only one time in four), a burst ($3A91); then the
+// command ends ($8084)
+static void ball_step_at(uint16_t site);
+static void broadside(void) {
+	say_inline(0x8537);
+	cpu.cycles += 19;
+	cpu.a = mem_read(SLOT + 0x1A);
+	call(0x40B9);                      // HL = the direction's step
+	cpu.cycles += 4 + 10 + 4 + 4 + 4 + 4 + 4 + 4 + 7;
+	SET_DE(HL);
+	cpu.a = 0x05; op_add8(cpu.e, 0); cpu.e = cpu.a;
+	cpu.a = 0x05; op_add8(cpu.d, 0); cpu.d = cpu.a;
+	SET_HL(0x0505);
+	cpu.a = 0x07;
+	tcall(0x38FC, 0x8557);             // the cannonball set off
+	cpu.cycles += 7;
+	cpu.a = 0x1C;
+	call(0x05F1);                      // play_sound
+	cpu.cycles += 19;
+	mem_write(SLOT + 0x16, 0x04);
+	do {
+		cpu.cycles += 19;              // $8563
+		mem_write(SLOT + 0x17, 0x03);
+		do {
+			ball_step_at(0x8567);
+			cpu.cycles += 23;
+			mem_write(SLOT + 0x17, op_dec8(mem_read(SLOT + 0x17)));
+			cpu.cycles += mem_read(SLOT + 0x17) ? 12 : 7;
+		} while (mem_read(SLOT + 0x17));
+		cpu.cycles += 13 + 4 + 7 + 4 + 13 + 4 + 7 + 4 + 14 + 10 + 7;
+		cpu.a = mem_read(0xC953); op_add8(cpu.l, 0); op_add8(0xFB, 0); cpu.l = cpu.a;
+		cpu.a = mem_read(0xC954); op_add8(cpu.h, 0); op_add8(0xFB, 0); cpu.h = cpu.a;
+		cpu.iy = 0xC651;
+		SET_DE(0x0008);
+		cpu.b = 0x20;
+		do {                           // $8586: someone there?
+			cpu.cycles += 19 + 4;
+			cpu.a = mem_read((uint16_t)(cpu.iy + 3));
+			op_or(cpu.a);
+			int hit = 0;
+			if (cpu.f & FZ) cpu.cycles += 12;
+			else {
+				cpu.cycles += 7 + 7;
+				op_sub8(0x8C, 0, 0);
+				if (cpu.f & FZ) cpu.cycles += 12;
+				else {
+					cpu.cycles += 7 + 7;
+					op_sub8(0x18, 0, 0);
+					if (cpu.f & FZ) cpu.cycles += 12;
+					else {
+						cpu.cycles += 7 + 19 + 4;
+						cpu.a = mem_read((uint16_t)(cpu.iy + 1));
+						op_sub8(cpu.l, 0, 0);
+						if (!(cpu.f & FZ)) cpu.cycles += 12;
+						else {
+							cpu.cycles += 7 + 19 + 4;
+							cpu.a = mem_read((uint16_t)(cpu.iy + 2));
+							op_sub8(cpu.h, 0, 0);
+							if (cpu.f & FZ) { cpu.cycles += 12; hit = 1; }
+							else cpu.cycles += 7;
+						}
+					}
+				}
+			}
+			if (hit) {                 // $85AC: sunk
+				cpu.cycles += 7 + 4 + 11;
+				cpu.a = 0x20;
+				op_sub8(cpu.b, 0, 1);
+				push16((uint16_t)(cpu.a << 8 | cpu.f));
+				call(0x48F7);          // IY = that person's record
+				cpu.cycles += 10 + 7;
+				{ uint16_t af = pop16(); cpu.a = af >> 8; cpu.f = (uint8_t)af; }
+				op_sub8(0x08, 0, 0);
+				int sink = 1;
+				if (cpu.f & FC) {
+					cpu.cycles += 7;
+					call(0x2BBF);      // random
+					cpu.cycles += 7;
+					op_and(0x03);
+					if (!(cpu.f & FZ)) { cpu.cycles += 12; sink = 0; }
+					else cpu.cycles += 7;
+				} else cpu.cycles += 12;
+				if (sink) {
+					cpu.cycles += 19 + 19;
+					mem_write((uint16_t)(cpu.iy + 3), 0);
+					mem_write(cpu.iy, 0);
+				}
+				burst_at(0x85C7);
+				done();
+				return;
+			}
+			cpu.cycles += 15;          // add iy,de
+			cpu.iy = op_add16(cpu.iy, DE);
+			cpu.cycles += --cpu.b ? 13 : 8;
+		} while (cpu.b);
+		cpu.cycles += 23;
+		mem_write(SLOT + 0x16, op_dec8(mem_read(SLOT + 0x16)));
+		cpu.cycles += mem_read(SLOT + 0x16) ? 12 : 7;
+	} while (mem_read(SLOT + 0x16));
 	done();
 }
 
@@ -1175,7 +1280,7 @@ static void attack(void) {
 	int odd = mem_read(SLOT + 0x1A) & 1;   // broadside: the direction across the ship
 	if ((t & 1) ? odd : !odd) { attack_nothing(); return; }
 	if (!(t & 1)) cpu.cycles += 12;
-	native_continue_at(0x8534);
+	broadside();
 }
 Native native_attack = { "attack", 0x848A, 2, attack, 0, 0, 0, .task = 1 };
 
@@ -2258,14 +2363,13 @@ static void open_chest(void) {
 	spell_done();
 }
 
-// View ($61EB): the map (its own task routine, which waits for frames)
+// View ($61EB): the map, as Gem's (call $61FC at $61F6)
 static void view(void) {
 	if (!spend_mp()) return;
 	cpu.cycles += 13 + 7 + 10;
 	if (mem_read(MAP_KIND) >= 3) { spell_failed(); return; }
-	cpu.cycles += 17;
-	push16(0x61F9);
-	native_continue_at(0x61FC);
+	gem_map(0x61F6);
+	spell_done();
 }
 
 // Winds ($6263): the wind blows the way chosen
@@ -2461,6 +2565,34 @@ void missile_step_at(uint16_t site) {
 	cpu.cycles += 19 + 19 + 11 + 10;   // ld l / ld h / push hl / jp $399C
 	SET_HL(rd16(SLOT + 0x2A));
 	call_original(0x399C);             // its ret is the caller's
+}
+
+// $3945 (called at site): the cannonball one step on, like missile_step
+// but its other frame drawn only where the view's cell ($D900 + 2 *
+// (11 * y + x)) is not $7E; returns its cell (L, H)
+static void ball_step_at(uint16_t site) {
+	cpu.cycles += 17 + 17 + 10 + 19 + 19 + 19 + 10;   // call $3945 / call task_enter_4
+	wr16(SLOT + 0x2A, (uint16_t)(site + 3));
+	SET_HL((uint16_t)(site + 3));
+	call(0x0BA4);                      // slot_step_add
+	call(0x399C);                      // its cell
+	cpu.cycles += 19 + 19 + 4;
+	mem_write(SLOT + 0x2C, cpu.l);
+	mem_write(SLOT + 0x2D, cpu.h);
+	cpu.a = cpu.h;
+	call(0x36ED);                      // times_11
+	cpu.cycles += 4 + 4 + 4 + 7 + 7 + 7;
+	op_add8(cpu.l, 0);
+	op_add8(cpu.a, 0);
+	cpu.l = cpu.a;
+	cpu.h = 0xD9;
+	cpu.a = mem_read(HL);
+	op_sub8(0x7E, 0, 0);
+	if (!(cpu.f & FZ)) call(0x3074);   // the other frame, drawn
+	else cpu.cycles += 10;
+	tcall(0x305A, 0x3963);             // a frame
+	cpu.cycles += 19 + 19 + 11 + 19 + 19 + 10;   // ... push hl / ld l / ld h / ret
+	SET_HL(rd16(SLOT + 0x2C));
 }
 
 // $3A91 (called at $63C6): the burst where the missile stopped: a sound,
