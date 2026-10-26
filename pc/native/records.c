@@ -467,6 +467,19 @@ static void person_at(void) {          // $42B7
 	I(10);
 }
 
+// $42E3: person_at ($42B7) over the first 8 people on the world, 32 in a place
+static void person_here(void) {
+	push(BC);
+	cpu.a = mem_read(0xC9A0); I(13);
+	op_or(cpu.a); I(4);
+	cpu.b = 0x08; I(7);
+	if (cpu.f & FZ) I(12);
+	else { I(7); cpu.b = 0x20; I(7); }
+	I(17); call_original(0x42B7);
+	SET_BC(pop16()); I(10);
+	I(10);
+}
+
 #define RECORD(name, addr, out) Native native_##name = { #name, addr, 1, name, out, .long_calls = 1 };
 RECORD(member_record, 0x48B6, OUT_F | OUT_IY)
 RECORD(current_record, 0x48CB, OUT_F | OUT_IY)
@@ -479,6 +492,7 @@ RECORD(party_iter_setup, 0x4098, OUT_A | OUT_BC | OUT_DE | OUT_IY)
 RECORD(member_hurt, 0x4679, OUT_A | OUT_F)
 RECORD(print_avatar_name, 0x5650, OUT_A | OUT_F | OUT_BC | OUT_DE)
 RECORD(person_at, 0x42B7, OUT_A | OUT_F)
+RECORD(person_here, 0x42E3, OUT_A | OUT_F)
 RECORD(eat, 0x4753, OUT_A | OUT_F)
 RECORD(magic_regain, 0x4776, OUT_A | OUT_F)
 RECORD(party_alive, 0x465D, OUT_A | OUT_F)

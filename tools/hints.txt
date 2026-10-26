@@ -484,6 +484,8 @@ native   02:BACF native_tile_at
 native   02:BAD5 native_world_tile_at
 native   02:BAF3 native_map_cell_de
 native   01:6A45 native_dungeon_after_input
+name     01:42E3 person_here                # person_at over the first 8 people (world) or 32 (a place)
+native   01:42E3 native_person_here
 native   00:33D4 native_music_later_start
 native   00:33DC native_music_later_play
 name     00:2FFB frame_tick                 # per-frame work of a waiting task, then yield

@@ -165,14 +165,13 @@ Native native_player_move = { "player_move", 0xB263, 2, nat_player_move, 0, 0, 0
 
 // input_step ($B08B): one frame of the player's turn. A direction moves;
 // button 1 passes or leaves the vehicle ($B0A6); button 2 opens the command
-// menu ($B161, original code: it waits for frames). Returns carry set while
-// nothing happened.
+// menu ($8000, a C task; on foot, next to some people, their own: the
+// original's). Returns carry set while nothing happened.
 static void nat_input_step(void) {
 	uint8_t held = mem_read(JOY_HELD);
 	static const uint8_t keys[4] = { 0x01, 0x02, 0x04, 0x08 };
 	int i;
 	for (i = 0; i < 4 && keys[i] != held; i++) {}
-	if (i == 4 && mem_read(JOY_PRESSED) == 0x20) { native_decline(); return; }
 	cpu.cycles += 4 + 13 + 13 + 10 + 17;
 	mem_write(TURN_DONE, 0);
 	cpu.a = held;
@@ -194,7 +193,44 @@ static void nat_input_step(void) {
 	cpu.a = pressed;
 	cpu.cycles += 13 + 7 + 7;
 	if (pressed == 0x10) { cpu.cycles += 5; native_continue_at(0xB0A6); return; }
-	cpu.cycles += 7 + 10 + 4 + 10;
-	cpu.f |= FC;
+	cpu.cycles += 7 + 10;
+	op_sub8(0x20, 0, 0);
+	if (pressed != 0x20) { cpu.cycles += 4 + 10; cpu.f |= FC; return; }
+	// $B161: button 2, the command menu ($8000); on foot, next to someone
+	// who stands out (the table at $B189, by their graphic), theirs instead
+	cpu.cycles += 10 + 16 + 13 + 7 + 10;
+	wr16(MOVE_TIME, 0x0100);
+	cpu.a = mem_read(TRANSPORT);
+	op_sub8(0x1F, 0, 0);
+	if (cpu.a != 0x1F) { SET_HL(0x0100); native_continue_at(0x8000); return; }
+	cpu.cycles += 16 + 7 + 17;
+	SET_HL(rd16(0xC953));
+	cpu.b = 0x20;
+	call_original(0x42B7);             // person_at
+	cpu.cycles += 10;
+	if (cpu.f & FC) { native_continue_at(0x8000); return; }
+	cpu.cycles += 17;
+	call_original(0x48F7);             // person_record
+	cpu.cycles += 19 + 10 + 17;
+	cpu.a = mem_read(cpu.iy);
+	SET_HL(0xB189);
+	for (;;) {                         // switch_on_a
+		cpu.b = op_inc8(mem_read(HL));
+		if (cpu.f & FZ) break;
+		op_sub8(mem_read(HL), 0, 0);
+		SET_HL(HL + 1);
+		if (cpu.f & FZ) {
+			cpu.cycles += 41 + 38;
+			SET_HL(rd16(HL));
+			cpu.a = cpu.l;
+			cpu.f = 0x86;              // (its return, $B186, popped into AF)
+			native_continue_at(HL);
+			return;
+		}
+		cpu.cycles += 58;
+		SET_HL(HL + 2);
+	}
+	cpu.cycles += 22 + 10;             // none: jp command_menu
+	native_continue_at(0x8000);
 }
 Native native_input_step = { "input_step", 0xB08B, 2, nat_input_step, OUT_A | OUT_F, 0, 0, .blocking = 1 };
