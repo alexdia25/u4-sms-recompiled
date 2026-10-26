@@ -471,6 +471,48 @@ static void miss(uint16_t then, uint16_t site) {   // "Miss", then $A219 or $A21
 	command_end(END_NEWLINE);
 }
 
+// $A221 (called at site): after a blow, by the weapon: flaming oil
+// ($09) sets the foe's cell on fire ($46 $82) unless it is one of the
+// first three tiles; the magic axe ($0B) flies back to the member, a
+// frame a step (IX+$16 steps; its return kept by task_enter_2)
+static void weapon_after(uint16_t site) {
+	cpu.cycles += 17 + 19 + 7;
+	cpu.a = mem_read(WEAPON);
+	op_sub8(0x0B, 0, 0);
+	if (cpu.f & FZ) {                  // $A23B: the axe comes back
+		cpu.cycles += 12 + 17 + 10 + 19 + 19 + 19 + 10;
+		wr16((uint16_t)(cpu.sp - 2), 0xA23E);   // what ex (sp),hl leaves on the stack
+		wr16((uint16_t)(cpu.sp - 4), 0xA23E);
+		wr16(SLOT + 0x26, (uint16_t)(site + 3));
+		SET_HL((uint16_t)(site + 3));
+		do {
+			call(0x0BC9);              // slot_step_sub
+			call(0xA482);              // figure_flip
+			tcall(0x7F59, 0xA244);     // a frame
+			cpu.cycles += 23;
+			mem_write(SLOT + 0x16, op_dec8(mem_read(SLOT + 0x16)));
+			cpu.cycles += mem_read(SLOT + 0x16) ? 12 : 7;
+		} while (mem_read(SLOT + 0x16));
+		cpu.cycles += 10 + 19 + 19 + 4;   // jp task_return_2
+		SET_HL(rd16(SLOT + 0x26));
+		return;
+	}
+	cpu.cycles += 7 + 7;
+	op_sub8(0x09, 0, 0);
+	if (!(cpu.f & FZ)) { cpu.cycles += 11; return; }
+	cpu.cycles += 5;
+	call(0xA43E);
+	call(0xA469);                      // HL = the foe's cell
+	cpu.cycles += 7 + 7;
+	cpu.a = mem_read(HL);
+	op_sub8(0x03, 0, 0);
+	if (cpu.f & FC) { cpu.cycles += 11; return; }
+	cpu.cycles += 5 + 10 + 4 + 10 + 10;
+	mem_write(HL, 0x46);
+	cpu.l = op_inc8(cpu.l);
+	mem_write(HL, 0x82);
+}
+
 // combat_attack ($A0D8): aim at a foe; hand weapons strike next to the
 // member (the pattern at $A2A2, or $A2B3 for the halberd), the others fly
 // up to their range. A hit: dexterity decides, then damage by weapon and
@@ -640,7 +682,7 @@ static void combat_attack(void) {
 	call(0x7EDB);                      // random_below
 	tcall(0x7E36, 0xA201);             // damage_monster
 	tcall(0x7F4D, 0xA204);
-	tcall(0xA221, 0xA207);
+	weapon_after(0xA207);
 	cpu.cycles += 10;
 	command_end(END_NEWLINE);
 }

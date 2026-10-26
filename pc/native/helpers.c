@@ -37,6 +37,8 @@
 //   queued for VRAM $2920.
 // - times_11 ($36ED), times_12 ($36F7): A times 11 or 12.
 // - far_byte ($07FD): A = the byte HL[C] in bank A.
+// - menu_texts ($2D5D): the texts at HL (each: its place DE, the text;
+//   $FF ends the list) into the text area's copy ($2D65).
 // - effect_wane ($3754): the spell effect's turns ($C977) one less; at
 //   0 the effect ($C976) ends.
 // - far_word ($0807): HL = the word HL[C] in bank A.
@@ -664,6 +666,17 @@ static void effect_wane(void) {        // $3754
 	I(10);
 }
 
+static void menu_texts(void) {         // $2D5D
+	for (;;) {
+		cpu.a = mem_read(HL); I(7);
+		cpu.a = op_inc8(cpu.a); I(4);
+		if (cpu.f & FZ) { I(11); return; }
+		I(5);
+		I(17); call_original(0x2D65);  // menu_text_at
+		I(12);
+	}
+}
+
 static void far_byte(void) {           // $07FD
 	vram_bank_push(0x07FD);
 	cpu.b = 0x00; I(7);
@@ -1112,6 +1125,7 @@ HELPER(times_12, 0x36F7, OUT_A | OUT_F)
 HELPER(screen_place, 0x3991, OUT_A | OUT_F | OUT_HL)
 HELPER(screen_cell, 0x399C, OUT_A | OUT_F | OUT_BC | OUT_HL)
 HELPER(far_byte, 0x07FD, OUT_A | OUT_F | OUT_BC | OUT_HL)
+HELPER(menu_texts, 0x2D5D, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL)
 HELPER(effect_wane, 0x3754, OUT_A | OUT_F)
 HELPER(far_word, 0x0807, OUT_A | OUT_F | OUT_BC | OUT_HL)
 HELPER(input_reset, 0x06E2, OUT_A | OUT_F)

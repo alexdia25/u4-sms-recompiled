@@ -480,6 +480,18 @@ static void person_here(void) {
 	I(10);
 }
 
+// $62F8: Z for the figures $9C, $BC, $C4, $E4 (the undead and such)
+static void undead(void) {
+	static const uint8_t kinds[4] = { 0x9C, 0xBC, 0xC4, 0xE4 };
+	for (int i = 0; i < 4; i++) {
+		op_sub8(kinds[i], 0, 0); I(7);
+		if (i == 3) break;
+		if (cpu.f & FZ) { I(11); return; }
+		I(5);
+	}
+	I(10);
+}
+
 #define RECORD(name, addr, out) Native native_##name = { #name, addr, 1, name, out, .long_calls = 1 };
 RECORD(member_record, 0x48B6, OUT_F | OUT_IY)
 RECORD(current_record, 0x48CB, OUT_F | OUT_IY)
@@ -493,6 +505,7 @@ RECORD(member_hurt, 0x4679, OUT_A | OUT_F)
 RECORD(print_avatar_name, 0x5650, OUT_A | OUT_F | OUT_BC | OUT_DE)
 RECORD(person_at, 0x42B7, OUT_A | OUT_F)
 RECORD(person_here, 0x42E3, OUT_A | OUT_F)
+RECORD(undead, 0x62F8, OUT_F)
 RECORD(eat, 0x4753, OUT_A | OUT_F)
 RECORD(magic_regain, 0x4776, OUT_A | OUT_F)
 RECORD(party_alive, 0x465D, OUT_A | OUT_F)
