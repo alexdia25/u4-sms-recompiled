@@ -42,6 +42,15 @@
 // - east_wrap ($389F), west_wrap ($38A7), south_wrap ($38AE),
 //   north_wrap ($38B6): E (x) or D (y) one step on the 11x11 battlefield,
 //   round to the other side; carry when it stayed on.
+// - the pad's steps round the battlefield (table $387B, for Aim): up
+//   ($3883: north_wrap, and if it went round, west_wrap too), down
+//   ($388A: south, east), left ($3891: west, north), right ($3898: east,
+//   south).
+// - bank 3's battlefield cells: view_cell ($A46F): L = 2 * (11 * H + L);
+//   view_cell_at ($A460): A = $D8xx there; view_cell_hl ($A469): HL =
+//   $D8xx; cell_pixels ($A477): (L, H) times 12; figure_flip ($A482): the
+//   slot's figure's other frame (IX+9 ^ 1), then figure_draw ($A48A): at
+//   its place (IX+$0B, $0D), by $7F26.
 // - arena_cell ($38F2): HL = the cell (L, H) of the battlefield's map at
 //   $D800; arena_cell_at ($38EB): A = what is there.
 // Cycle counts are the original's, instruction by instruction (I).
@@ -684,6 +693,65 @@ static void target_in_pattern(void) {  // $A279
 	}
 }
 
+static void pad_step(uint16_t first, uint16_t then) {   // call first / call nc,then / ret
+	call(first);
+	if (!(cpu.f & FC)) call(then);
+	else I(10);
+	I(10);
+}
+static void pad_up(void) { pad_step(0x38B6, 0x38A7); }      // $3883
+static void pad_down(void) { pad_step(0x38AE, 0x389F); }    // $388A
+static void pad_left(void) { pad_step(0x38A7, 0x38B6); }    // $3891
+static void pad_right(void) { pad_step(0x389F, 0x38AE); }   // $3898
+
+static void view_cell(void) {          // $A46F
+	cpu.a = cpu.h; I(4);
+	call(0xB856);                      // times_11_b3
+	op_add8(cpu.l, 0); I(4);
+	op_add8(cpu.a, 0); I(4);
+	cpu.l = cpu.a; I(4);
+	I(10);
+}
+
+static void view_cell_at(void) {       // $A460
+	push(HL);
+	I(17); view_cell();
+	cpu.h = 0xD8; I(7);
+	cpu.a = mem_read(HL); I(7);
+	SET_HL(pop16()); I(10);
+	I(10);
+}
+
+static void view_cell_hl(void) {       // $A469
+	I(17); view_cell();
+	cpu.h = 0xD8; I(7);
+	I(10);
+}
+
+static void cell_pixels(void) {        // $A477
+	cpu.a = cpu.l; I(4);
+	call(0xB860);                      // times_12_b3
+	cpu.l = cpu.a; I(4);
+	cpu.a = cpu.h; I(4);
+	call(0xB860);
+	cpu.h = cpu.a; I(4);
+	I(10);
+}
+
+static void figure_draw(void) {        // $A48A
+	cpu.e = mem_read((uint16_t)(cpu.ix + 0x0B)); I(19);
+	cpu.d = mem_read((uint16_t)(cpu.ix + 0x0D)); I(19);
+	I(10);
+	native_continue_at(0x7F26);
+}
+
+static void figure_flip(void) {        // $A482
+	cpu.a = mem_read((uint16_t)(cpu.ix + 0x09)); I(19);
+	op_xor(0x01); I(7);
+	mem_write((uint16_t)(cpu.ix + 0x09), cpu.a); I(19);
+	figure_draw();
+}
+
 Native native_foe_can_step = { "foe_can_step", 0xA9E2, 3, foe_can_step, OUT_A | OUT_F, .long_calls = 1 };
 Native native_damage_monster = { "damage_monster", 0x39B5, 0, damage_monster, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL | OUT_IY, .long_calls = 1 };
 Native native_compact_records = { "compact_records", 0xB868, 3, compact_records, OUT_A | OUT_F, .long_calls = 1 };
@@ -701,3 +769,13 @@ Native native_arena_cell_at = { "arena_cell_at", 0x38EB, 0, arena_cell_at, OUT_A
 Native native_target_in_pattern = { "target_in_pattern", 0xA279, 3, target_in_pattern, OUT_A | OUT_F | OUT_HL, .long_calls = 1 };
 Native native_load_dungeon_room = { "load_dungeon_room", 0x3D82, 0, load_dungeon_room, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL | OUT_IY, .long_calls = 1 };
 Native native_load_arena = { "load_arena", 0x377E, 0, load_arena, OUT_A | OUT_F, .long_calls = 1 };
+Native native_pad_up = { "pad_up", 0x3883, 0, pad_up, OUT_A | OUT_F | OUT_DE, .long_calls = 1 };
+Native native_pad_down = { "pad_down", 0x388A, 0, pad_down, OUT_A | OUT_F | OUT_DE, .long_calls = 1 };
+Native native_pad_left = { "pad_left", 0x3891, 0, pad_left, OUT_A | OUT_F | OUT_DE, .long_calls = 1 };
+Native native_pad_right = { "pad_right", 0x3898, 0, pad_right, OUT_A | OUT_F | OUT_DE, .long_calls = 1 };
+Native native_view_cell = { "view_cell", 0xA46F, 3, view_cell, OUT_A | OUT_F | OUT_HL, .long_calls = 1 };
+Native native_view_cell_at = { "view_cell_at", 0xA460, 3, view_cell_at, OUT_A | OUT_F, .long_calls = 1 };
+Native native_view_cell_hl = { "view_cell_hl", 0xA469, 3, view_cell_hl, OUT_A | OUT_F | OUT_HL, .long_calls = 1 };
+Native native_cell_pixels = { "cell_pixels", 0xA477, 3, cell_pixels, OUT_A | OUT_F | OUT_HL, .long_calls = 1 };
+Native native_figure_flip = { "figure_flip", 0xA482, 3, figure_flip, OUT_A | OUT_F | OUT_DE, .long_calls = 1 };
+Native native_figure_draw = { "figure_draw", 0xA48A, 3, figure_draw, OUT_A | OUT_F | OUT_DE, .long_calls = 1 };

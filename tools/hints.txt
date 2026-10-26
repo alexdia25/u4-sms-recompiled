@@ -486,6 +486,34 @@ native   02:BAF3 native_map_cell_de
 native   01:6A45 native_dungeon_after_input
 name     01:42E3 person_here                # person_at over the first 8 people (world) or 32 (a place)
 native   01:42E3 native_person_here
+name     00:3883 pad_up
+name     00:388A pad_down
+name     00:3891 pad_left
+name     00:3898 pad_right
+name     03:A46F view_cell
+name     03:A460 view_cell_at
+name     03:A469 view_cell_hl
+name     03:A477 cell_pixels
+name     03:A482 figure_flip
+name     03:A48A figure_draw
+name     02:B3DF view_west
+name     02:B3E8 view_north
+name     02:B3F1 view_east
+name     02:B3FA view_south
+native   00:3883 native_pad_up
+native   00:388A native_pad_down
+native   00:3891 native_pad_left
+native   00:3898 native_pad_right
+native   03:A46F native_view_cell
+native   03:A460 native_view_cell_at
+native   03:A469 native_view_cell_hl
+native   03:A477 native_cell_pixels
+native   03:A482 native_figure_flip
+native   03:A48A native_figure_draw
+native   02:B3DF native_view_west
+native   02:B3E8 native_view_north
+native   02:B3F1 native_view_east
+native   02:B3FA native_view_south
 native   00:33D4 native_music_later_start
 native   00:33DC native_music_later_play
 name     00:2FFB frame_tick                 # per-frame work of a waiting task, then yield
