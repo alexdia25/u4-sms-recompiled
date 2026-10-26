@@ -453,6 +453,16 @@ name     00:3074 missile_flip
 name     00:307C missile_draw
 native   00:3074 native_missile_flip
 native   00:307C native_missile_draw
+name     01:4C42 direction_pick             # a direction picked with the pad, a frame a step (Z: not yet, C: cancelled)
+name     01:4C8F neighbour_pick             # the same, next to the current figure
+name     01:4D0A letter_grid_start          # the letter grid for a word of up to A letters, at $C065
+name     01:4D2B letter_grid                # the letter grid, a frame a step (Z: not yet, C: nothing to take back)
+native   01:4C42 native_direction_pick
+native   01:4C8F native_neighbour_pick
+native   01:4D0A native_letter_grid_start
+native   01:4D2B native_letter_grid
+name     03:AAC7 foe_ranged                 # what foe A shoots: E = shot, D = effect; carry for none
+native   03:AAC7 native_foe_ranged
 native   00:33D4 native_music_later_start
 native   00:33DC native_music_later_play
 name     00:2FFB frame_tick                 # per-frame work of a waiting task, then yield

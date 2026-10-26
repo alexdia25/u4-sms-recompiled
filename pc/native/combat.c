@@ -99,3 +99,72 @@ static void nat_member_heal(void) {
 	cpu.cycles += 387 - 145 + member_record_cycles(cpu.c) + (room >= 0 ? 12 : 22);
 }
 Native native_member_heal = { "member_heal", 0x4221, 1, nat_member_heal, 0, 0, 0 };
+
+// foe_ranged ($AAC7, bank 3): what foe graphic A shoots or breathes, from
+// the 19 at $AAF7 (graphic, then E = its kind of shot, D = its effect), or
+// for $B0 and $FC one of the four fields at $AB30 at random; carry (DE =
+// 0) for a foe that has none. Instruction by instruction.
+static void I(int cycles) { cpu.cycles += cycles; native_boundary(); }
+
+static void foe_ranged(void) {
+	push16(BC); I(11);
+	push16(HL); I(11);
+	op_sub8(0xB0, 0, 0); I(7);
+	int fields = cpu.f & FZ;
+	if (!fields) {
+		I(7);
+		op_sub8(0xFC, 0, 0); I(7);
+		fields = cpu.f & FZ;
+	}
+	if (fields) {
+		I(12);
+		I(17); call_original(0x7ED8);  // random
+		op_and(0x03); I(7);
+		SET_HL(0xAB30); I(10);
+		I(11); I(10);                  // rst $20 / jp $008E: HL = the word HL[A]
+		op_add8(cpu.a, 0); I(4);
+		if (!(cpu.f & FC)) I(12);
+		else { I(7); cpu.h = op_inc8(cpu.h); I(4); }
+		op_add8(cpu.l, 0); I(4);
+		cpu.l = cpu.a; I(4);
+		op_add8(cpu.h, cpu.f & FC); I(4);
+		op_sub8(cpu.l, 0, 1); I(4);
+		cpu.h = cpu.a; I(4);
+		cpu.a = mem_read(HL); I(7);
+		SET_HL(HL + 1); I(6);
+		cpu.h = mem_read(HL); I(7);
+		cpu.l = cpu.a; I(4);
+		I(10);
+		{ uint16_t t = HL; SET_HL(DE); SET_DE(t); } I(4);
+		op_or(cpu.a); I(4);
+	} else {
+		I(7);
+		SET_HL(0xAAF7); I(10);
+		cpu.b = 0x13; I(7);
+		int found = 0;
+		do {
+			op_sub8(mem_read(HL), 0, 0); I(7);
+			SET_HL(HL + 1); I(6);
+			if (cpu.f & FZ) { I(12); found = 1; break; }
+			I(7);
+			SET_HL(HL + 1); I(6);
+			SET_HL(HL + 1); I(6);
+			if (--cpu.b) I(13); else I(8);
+		} while (cpu.b);
+		if (found) {
+			cpu.e = mem_read(HL); I(7);
+			SET_HL(HL + 1); I(6);
+			cpu.d = mem_read(HL); I(7);
+			I(12);
+			op_or(cpu.a); I(4);
+		} else {
+			SET_DE(0x0000); I(10);
+			op_scf(); I(4);
+			I(12);
+		}
+	}
+	SET_HL(pop16()); I(10);
+	SET_BC(pop16()); I(10);
+	I(10);
+}
+Native native_foe_ranged = { "foe_ranged", 0xAAC7, 3, foe_ranged, OUT_A | OUT_F | OUT_DE, .long_calls = 1 };

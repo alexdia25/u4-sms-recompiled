@@ -501,6 +501,168 @@ static void yield_at(uint16_t site) {  // "call yield" at site
 	task_wait_turn((uint16_t)(site + 3));
 }
 
+static void I(int cycles) { cpu.cycles += cycles; native_boundary(); }
+
+// call $B709 / $B77D from `back` - 3, then call task_enter_2: the caller's
+// return kept in the slot (+$26)
+static void enter_2(uint16_t back, uint16_t self) {
+	cpu.cycles += 17 + 17 + 10 + 19 + 19 + 19 + 10;
+	wr16((uint16_t)(cpu.sp - 2), self);   // what ex (sp),hl leaves on the stack
+	wr16((uint16_t)(cpu.sp - 4), self);
+	wr16(SLOT + 0x26, back);
+	SET_HL(back);
+}
+
+static void return_2(void) {           // jp task_return_2
+	cpu.cycles += 10 + 19 + 19 + 4;
+	SET_HL(rd16(SLOT + 0x26));
+}
+
+static void outi(void) {
+	uint8_t v = mem_read(HL);
+	cpu.b--;
+	io_out(BC, v);
+	SET_HL(HL + 1);
+	cpu.f = z80_sz[cpu.b] | FN;
+	I(16);
+}
+
+// $B709 (called at $B6C5): the page scrolled away to the left, a column
+// pair a turn: first the screen's 11 rows from VRAM $2220 masked ($F0) to
+// keep the patterns' upper half, then 17 turns of the text area's copy
+// moved left a cell, its last column cleared, and queued for the screen.
+static void scroll_out(void) {
+	enter_2(0xB6C8, 0xB70C);
+	SET_HL(0x2220); I(10);
+	cpu.b = 0x0B; I(7);
+	do {
+		push16(BC); I(11);
+		I(11); I(10);                  // rst $08 / jp $006F: the address to read
+		cpu.iff1 = cpu.iff2 = 0; I(4);
+		cpu.a = cpu.l; I(4);
+		io_out((uint16_t)(cpu.a << 8 | 0xBF), cpu.a); I(11);
+		cpu.a = cpu.h; I(4);
+		io_out((uint16_t)(cpu.a << 8 | 0xBF), cpu.a); I(11);
+		cpu.iff1 = cpu.iff2 = 1; cpu.cycles += 4 + 10;   // ei / ret: an interrupt pending comes after the ret
+		native_irq_point();
+		SET_DE(0xC1C0); I(10);
+		SET_BC(0x30F0); I(10);
+		do {
+			cpu.a = io_in((uint16_t)(cpu.a << 8 | 0xBE)); I(11);
+			op_and(cpu.c); I(4);
+			mem_write(DE, cpu.a); I(7);
+			cpu.e = op_inc8(cpu.e); I(4);
+			if (--cpu.b) I(13); else I(8);
+		} while (cpu.b);
+		{ uint16_t t = HL; SET_HL(DE); SET_DE(t); } I(4);
+		I(11); I(10);                  // rst $10 / jp $0078: the address to write
+		cpu.iff1 = cpu.iff2 = 0; I(4);
+		cpu.a = cpu.e; I(4);
+		io_out((uint16_t)(cpu.a << 8 | 0xBF), cpu.a); I(11);
+		cpu.a = cpu.d; I(4);
+		op_or(0x40); I(7);
+		io_out((uint16_t)(cpu.a << 8 | 0xBF), cpu.a); I(11);
+		cpu.iff1 = cpu.iff2 = 1; cpu.cycles += 4 + 10;
+		native_irq_point();
+		SET_HL(0xC1C0); I(10);
+		SET_BC(0x30BE); I(10);
+		do { outi(); I(cpu.b ? 12 : 7); } while (cpu.b);
+		SET_HL(0x0030); I(10);
+		SET_HL(op_add16(HL, DE)); I(11);
+		SET_BC(pop16()); I(10);
+		if (--cpu.b) I(13); else I(8);
+	} while (cpu.b);
+	SET_HL(0xB779); I(10);
+	SET_BC(0x04BE); I(10);
+	do { outi(); I(cpu.b ? 12 : 7); } while (cpu.b);
+	mem_write(SLOT + 0x17, 0x11); I(19);
+	do {                               // $B741
+		SET_HL(0xCA44); I(10);
+		SET_DE(0xCA42); I(10);
+		cpu.a = 0x11; I(7);
+		do {
+			op_ex_af(); I(4);
+			SET_BC(0x0020); I(10);
+			while (op_block(6, 0)) I(21);
+			I(16);
+			op_xor(cpu.a); I(4);
+			mem_write(DE, cpu.a); I(7);
+			cpu.e = op_inc8(cpu.e); I(4);
+			mem_write(DE, cpu.a); I(7);
+			cpu.e = op_dec8(cpu.e); I(4);
+			SET_BC(0x0020); I(10);
+			SET_HL(op_add16(HL, BC)); I(11);
+			{ uint16_t t = HL; SET_HL(DE); SET_DE(t); } I(4);
+			SET_HL(op_add16(HL, BC)); I(11);
+			{ uint16_t t = HL; SET_HL(DE); SET_DE(t); } I(4);
+			op_ex_af(); I(4);
+			cpu.a = op_dec8(cpu.a); I(4);
+			I(cpu.a ? 12 : 7);
+		} while (cpu.a);
+		SET_HL(0x0529); I(10);
+		wr16(0xCE62, HL); I(16);
+		SET_DE(0xCA42); I(10);
+		SET_BC(0x1111); I(10);
+		tcall(0x0499, 0xB76B);         // queue_text_copy
+		yield_at(0xB76E);
+		mem_write(SLOT + 0x17, op_dec8(mem_read(SLOT + 0x17)));
+		cpu.cycles += 23;
+		cpu.cycles += mem_read(SLOT + 0x17) ? 12 : 7;
+	} while (mem_read(SLOT + 0x17));
+	return_2();
+}
+
+// $B77D (called at $B6F9): the new page (its frame $B9AC first, by
+// $7EAE) scrolled in from the right, 17 turns: the bank-2 copy queued
+// ($0463) a row at a time, two cells wider each turn.
+static void scroll_in(void) {
+	enter_2(0xB6FC, 0xB780);
+	cpu.cycles += 10;
+	SET_HL(0xB9AC);
+	tcall(0x7EAE, 0xB783);
+	cpu.cycles += 19 * 4;
+	mem_write(SLOT + 0x1A, 0x62);
+	mem_write(SLOT + 0x1B, 0x38);
+	mem_write(SLOT + 0x1C, 0x02);
+	mem_write(SLOT + 0x17, 0x11);
+	do {                               // $B796
+		cpu.cycles += 10 + 19 + 19 + 7;
+		SET_HL(0xCA42);
+		cpu.e = mem_read(SLOT + 0x1A);
+		cpu.d = mem_read(SLOT + 0x1B);
+		cpu.b = 0x11;
+		do {
+			cpu.cycles += 11 + 11 + 11 + 19 + 7;
+			push16(BC); push16(DE); push16(HL);
+			cpu.c = mem_read(SLOT + 0x1C);
+			cpu.b = 0x00;
+			tcall(0x0463, 0xB7A9);     // queue_bank2_copy
+			cpu.cycles += 10 + 10 + 10 + 11 + 4 + 11 + 4 + 10;
+			SET_HL(pop16()); SET_DE(pop16());
+			SET_BC(0x0040);
+			SET_HL(op_add16(HL, BC));
+			{ uint16_t t = HL; SET_HL(DE); SET_DE(t); }
+			SET_HL(op_add16(HL, BC));
+			{ uint16_t t = HL; SET_HL(DE); SET_DE(t); }
+			SET_BC(pop16());
+			cpu.cycles += --cpu.b ? 13 : 8;
+		} while (cpu.b);
+		yield_at(0xB7B8);
+		for (int i = 0; i < 2; i++) {
+			mem_write(SLOT + 0x1A, op_dec8(mem_read(SLOT + 0x1A)));
+			cpu.cycles += 23;
+		}
+		for (int i = 0; i < 2; i++) {
+			mem_write(SLOT + 0x1C, op_inc8(mem_read(SLOT + 0x1C)));
+			cpu.cycles += 23;
+		}
+		mem_write(SLOT + 0x17, op_dec8(mem_read(SLOT + 0x17)));
+		cpu.cycles += 23;
+		cpu.cycles += mem_read(SLOT + 0x17) ? 12 : 7;
+	} while (mem_read(SLOT + 0x17));
+	return_2();
+}
+
 static void credits_page(uint8_t n, uint16_t site) {   // ld a,n / call $B6BF at site
 	cpu.cycles += 7 + 17 + 19;
 	cpu.a = n;
@@ -508,7 +670,7 @@ static void credits_page(uint8_t n, uint16_t site) {   // ld a,n / call $B6BF at
 	cpu.cycles += 17 + 10 + 19 + 19 + 19 + 10;   // call $0AA5: its return kept in the slot
 	wr16(SLOT + 0x24, (uint16_t)(site + 3));
 	SET_HL((uint16_t)(site + 3));
-	tcall(0xB709, 0xB6C5);             // the last page scrolled away
+	scroll_out();                      // the last page scrolled away (call $B709 at $B6C5)
 	cpu.cycles += 7 + 10 + 19;
 	cpu.a = 0x1F;
 	SET_HL(0xAA00);
@@ -529,7 +691,7 @@ static void credits_page(uint8_t n, uint16_t site) {   // ld a,n / call $B6BF at
 	cpu.cycles += 10;
 	SET_HL(0x9CEE);
 	tcall(0x0830, 0xB6F6);
-	tcall(0xB77D, 0xB6F9);             // scrolled in
+	scroll_in();                       // scrolled in (call $B77D at $B6F9)
 	sleep_turns(0xB4, 0xB6FE);
 	sleep_turns(0xB4, 0xB703);
 	cpu.cycles += 10 + 19 + 19 + 4;    // jp $0AAE
