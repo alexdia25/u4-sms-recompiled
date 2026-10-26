@@ -2360,10 +2360,10 @@ static int no_targets(void) {
 // ($387B: each direction, round the battlefield's edges, to the next cell
 // with a foe, 121 tries), button 2 picks (no carry), button 1 cancels
 // (carry). The target's place is left at IX+$20/$21, its number at IX+8.
-static void aim(void) {
+void aim_at(uint16_t site) {
 	cpu.cycles += 17 + 17 + 10 + 19 + 19 + 19 + 10;   // call $37DD / call task_enter_3
-	wr16(SLOT + 0x28, 0x6395);
-	SET_HL(0x6395);
+	wr16(SLOT + 0x28, (uint16_t)(site + 3));
+	SET_HL((uint16_t)(site + 3));
 	say_inline(0x37E3);
 	call(0x48E1);                      // IY = the caster's figure
 	cpu.cycles += 19;
@@ -2451,10 +2451,10 @@ static void aim(void) {
 // $392F (called at $63B0): the missile one step on (its place IX+$0A-$0D
 // by its step, $0BA4), its other frame drawn ($3074), a frame's wait, then
 // its cell (L, H) from its place ($399C)
-static void missile_step(void) {
+void missile_step_at(uint16_t site) {
 	cpu.cycles += 17 + 17 + 10 + 19 + 19 + 19 + 10;   // call $392F / call task_enter_4
-	wr16(SLOT + 0x2A, 0x63B3);
-	SET_HL(0x63B3);
+	wr16(SLOT + 0x2A, (uint16_t)(site + 3));
+	SET_HL((uint16_t)(site + 3));
 	call(0x0BA4);                      // slot_step_add
 	call(0x3074);                      // the other frame, drawn
 	tcall(0x305A, 0x3938);             // a frame
@@ -2465,10 +2465,10 @@ static void missile_step(void) {
 
 // $3A91 (called at $63C6): the burst where the missile stopped: a sound,
 // then the frames listed at $3AC1 (to a 0), one a frame
-static void burst(void) {
+void burst_at(uint16_t site) {
 	cpu.cycles += 17 + 17 + 10 + 19 + 19 + 19 + 10;   // call $3A91 / call task_enter_3
-	wr16(SLOT + 0x28, 0x63C9);
-	SET_HL(0x63C9);
+	wr16(SLOT + 0x28, (uint16_t)(site + 3));
+	SET_HL((uint16_t)(site + 3));
 	cpu.cycles += 7;
 	cpu.a = 0x14;
 	call(0x05F1);                      // play_sound
@@ -2505,7 +2505,7 @@ static void missile_spell(uint8_t graphic, uint8_t kind) {
 	if (!only_combat()) return;
 	if (no_targets()) { cpu.cycles += 10; cast_end(0); return; }
 	cpu.cycles += 10;
-	aim();                             // call $37DD at $6392
+	aim_at(0x6392);                    // call $37DD
 	cpu.cycles += 10;
 	if (cpu.f & FC) { cast_cancel(); return; }
 	if (!spend_mp()) return;
@@ -2516,7 +2516,7 @@ static void missile_spell(uint8_t graphic, uint8_t kind) {
 	cpu.a = mem_read(SLOT + 0x22);
 	tcall(0x38FC, 0x63AD);
 	for (;;) {                         // $63B0: it flies
-		missile_step();
+		missile_step_at(0x63B0);
 		tcall(0x38BD, 0x63B3);         // carry clear: a foe there
 		cpu.cycles += 7;
 		if (!(cpu.f & FC)) { cpu.cycles += 5; break; }
@@ -2528,7 +2528,7 @@ static void missile_spell(uint8_t graphic, uint8_t kind) {
 	}
 	cpu.cycles += 19;
 	mem_write(SLOT + 0x08, cpu.a);     // the foe
-	burst();                           // call $3A91 at $63C6
+	burst_at(0x63C6);                  // call $3A91
 	cpu.cycles += 19 + 10 + 17;        // ld a,(ix+$23) / ld hl / call switch_on_a
 	static const uint8_t kinds[3] = { 0x4D, 0x4E, 0x4F };
 	static const uint8_t range[3] = { 0x40, 0xE0, 0x80 }, base[3] = { 0x10, 0x20, 0x18 };

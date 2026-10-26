@@ -478,7 +478,8 @@ static void miss(uint16_t then, uint16_t site) {   // "Miss", then $A219 or $A21
 static void combat_attack(void) {
 	if (no_foes()) { cpu.cycles += 10; command_end(END_CANCELLED); return; }
 	cpu.cycles += 10;
-	tcall(0x7E06, 0xA0DE);             // "Aim:" at a foe
+	cpu.cycles += 10;                  // call $7E06: jp $37DD, "Aim:" at a foe
+	aim_at(0xA0DE);
 	cpu.cycles += 10;
 	if (cpu.f & FC) { command_end(END_ABORTED); return; }
 	cpu.cycles += 19 + 10 + 48 + 19 + 4 + 7;
@@ -581,7 +582,8 @@ static void combat_attack(void) {
 		for (;;) {                     // $A190: it flies
 			cpu.cycles += 23;
 			mem_write(SLOT + 0x16, mem_read(SLOT + 0x16) + 1);
-			tcall(0x7EBA, 0xA193);
+			cpu.cycles += 10;          // call $7EBA: jp $392F
+			missile_step_at(0xA193);
 			tcall(0x7E24, 0xA196);     // carry clear: a foe there
 			cpu.cycles += 7;
 			if (!(cpu.f & FC)) { cpu.cycles += 5; break; }
@@ -623,7 +625,8 @@ static void combat_attack(void) {
 	cpu.cycles += 10;                  // $A1DB: a hit
 	SET_HL(0xACAD);
 	call(0x7F62);                      // "Hit"
-	tcall(0x7F1A, 0xA1E1);
+	cpu.cycles += 10;                  // call $7F1A: jp $3A91
+	burst_at(0xA1E1);
 	member_record_iy();
 	cpu.cycles += 19 + 10 + 48 + 19 + 7;
 	SET_HL(0xAC34 + mem_read(cpu.iy + 0x0B));

@@ -22,6 +22,9 @@ int use_things(uint16_t site);         // the special things (items.c)
 int ready_thing(int armour, uint16_t site);   // Ready's lists, bank 1 $57D7/$5855 (commands.c); 1: cancelled
 void status_pages(uint16_t site);      // the status pages, bank 1 $7588 (commands.c)
 int window_anim_call(uint16_t addr, uint16_t site);   // the window animations from a C task (window_anim.c)
+void aim_at(uint16_t site);            // "call $37DD" (Aim:) at site, from a C task (commands.c)
+void missile_step_at(uint16_t site);   // "call $392F": the missile a step on
+void burst_at(uint16_t site);          // "call $3A91": its burst
 void task_wait_button(uint16_t site); // "call wait_button" at site: waits for button 1 or 2
 void task_wait_frames(uint16_t site, uint8_t n);   // "ld a,n / call $3046" at site: n turns
 

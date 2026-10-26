@@ -37,6 +37,78 @@ static void yield_at(uint16_t site) {  // "call yield" at site
 	task_wait_turn((uint16_t)(site + 3));
 }
 
+static void I(int cycles) { cpu.cycles += cycles; native_boundary(); }
+
+static void vram_write_at_de(void) {   // rst $10 / jp $0078: di, the address DE to write, ei, ret
+	I(11); I(10);
+	cpu.iff1 = cpu.iff2 = 0; I(4);
+	cpu.a = cpu.e; I(4);
+	io_out((uint16_t)(cpu.a << 8 | 0xBF), cpu.a); I(11);
+	cpu.a = cpu.d; I(4);
+	op_or(0x40); I(7);
+	io_out((uint16_t)(cpu.a << 8 | 0xBF), cpu.a); I(11);
+	cpu.iff1 = cpu.iff2 = 1; cpu.cycles += 4 + 10;   // ei / ret: an interrupt pending comes after the ret
+	native_irq_point();
+}
+
+// $B039 (called at $B006): the screen dissolved before the vision, in 12
+// frames: each, 11 times, 16 cells of the name table cleared a $220 step
+// apart (with wait_vdp, $0262, between the writes), then 4 bytes from
+// $B081; the start moves on each time.
+static void vision_dissolve(void) {
+	I(17);                             // call $B039
+	SET_DE(0x0020); I(10);
+	cpu.b = 0x0C; I(7);
+	do {
+		push16(BC); I(11);
+		tcall(0x041C, 0xB03F);         // wait_vblank
+		cpu.b = 0x0B; I(7);
+		do {
+			push16(BC); I(11);
+			SET_HL(0x0220); I(10);
+			cpu.b = 0x10; I(7);
+			do {
+				vram_write_at_de();
+				op_xor(cpu.a); I(4);
+				for (int i = 0; i < 4; i++) {
+					I(17);             // call wait_vdp: push af / pop af / ret
+					push16((uint16_t)(cpu.a << 8 | cpu.f)); I(11);
+					pop16(); I(10);
+					I(10);
+					io_out((uint16_t)(cpu.a << 8 | 0xBE), cpu.a); I(11);
+				}
+				{ uint16_t t = HL; SET_HL(DE); SET_DE(t); } I(4);
+				SET_HL(op_add16(HL, DE)); I(11);
+				{ uint16_t t = HL; SET_HL(DE); SET_DE(t); } I(4);
+				if (--cpu.b) I(13); else I(8);
+			} while (cpu.b);
+			vram_write_at_de();
+			SET_HL(0xB081); I(10);
+			SET_BC(0x04BE); I(10);
+			do {
+				uint8_t v = mem_read(HL);
+				cpu.b--;
+				io_out(BC, v);
+				SET_HL(HL + 1);
+				cpu.f = z80_sz[cpu.b] | FN;
+				I(16);
+				I(cpu.b ? 12 : 7);
+			} while (cpu.b);
+			SET_HL(0xDE30); I(10);
+			SET_HL(op_add16(HL, DE)); I(11);
+			{ uint16_t t = HL; SET_HL(DE); SET_DE(t); } I(4);
+			SET_BC(pop16()); I(10);
+			if (--cpu.b) I(13); else I(8);
+		} while (cpu.b);
+		SET_HL(0xFDF4); I(10);
+		SET_HL(op_add16(HL, DE)); I(11);
+		{ uint16_t t = HL; SET_HL(DE); SET_DE(t); } I(4);
+		SET_BC(pop16()); I(10);
+		if (--cpu.b) I(13); else I(8);
+	} while (cpu.b);
+	I(10);
+}
+
 static uint8_t random_v(void) { call(0x7ED8); return cpu.a; }
 
 // ------------------------------------------------------------ the fight --
@@ -461,7 +533,7 @@ static void shrine(void) {
 	tcall(0x7F29, 0xAFFD);
 	tcall(0x7F50, 0xB000);
 	tcall(0x7F71, 0xB003);
-	tcall(0xB039, 0xB006);             // the screen dissolved
+	vision_dissolve();                 // call $B039 at $B006: the screen dissolved
 	cpu.cycles += 19;
 	cpu.a = mem_read(SLOT + 0x1B);
 	tcall(0xB085, 0xB00C);             // the vision's picture
