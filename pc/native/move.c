@@ -44,6 +44,72 @@ static void say_direction(int jumped) { // $B3C6: "North" etc. and a new line (c
 	text_newline();
 }
 
+static void turn_done(void) {           // $B40C (its call counted by the caller): $C9A1 = $FF
+	cpu.cycles += 7 + 13 + 10;
+	cpu.a = 0xFF;
+	mem_write(TURN_DONE, 0xFF);
+}
+
+static void tile_ahead(void) {          // $B412: A = the tile ahead ($C998.. by MOVE_DIR, table $B41B)
+	cpu.cycles += 17 + 13 + 10 + 11;
+	cpu.a = mem_read(MOVE_DIR);
+	SET_HL(0xB41B);
+	call_original(0x0020);              // rst $20
+	cpu.cycles += 7 + 10;
+	cpu.a = mem_read(HL);
+}
+
+static void no_water(void) {            // $B423: carry unless A is water (below 2, or $8C-$8F)
+	cpu.cycles += 17 + 7 + 4;
+	op_sub8(0x02, 0, 0);
+	op_ccf();
+	if (!(cpu.f & FC)) { cpu.cycles += 11; return; }
+	cpu.cycles += 5 + 7;
+	op_sub8(0x8C, 0, 0);
+	if (cpu.f & FC) { cpu.cycles += 11; return; }
+	cpu.cycles += 5 + 7 + 4 + 10;
+	op_sub8(0x90, 0, 0);
+	op_ccf();
+}
+
+// $B309: slow ground, by the tile A (the table at $B310, switch_on_a):
+// $03 $05 $46 "Slow progress!" (the move takes twice as long), $06 $07
+// $09 $4C "Very slow!" (three times)
+static void slow_ground(void) {
+	static const uint8_t slow[] = { 0x03, 0x05, 0x46 };   // the rest: "Very slow!"
+	cpu.cycles += 17 + 10 + 17;
+	SET_HL(0xB310);
+	for (;;) {                          // switch_on_a
+		cpu.b = op_inc8(mem_read(HL));
+		cpu.cycles += 7 + 4;
+		if (cpu.f & FZ) { cpu.cycles += 11 + 10; return; }   // none: ret z, ret
+		cpu.cycles += 5 + 7 + 6;
+		op_sub8(mem_read(HL), 0, 0);
+		SET_HL(HL + 1);
+		if (cpu.f & FZ) { cpu.cycles += 12; break; }
+		cpu.cycles += 7 + 6 + 6 + 10;
+		SET_HL(HL + 2);
+	}
+	uint8_t tile = cpu.a;
+	cpu.cycles += 10 + 7 + 6 + 7 + 4 + 4;   // pop af / HL = the handler / jp (hl)
+	cpu.a = 0xB3; cpu.f = 0x0F;         // (its return, $B30F, popped into AF)
+	SET_HL(rd16(HL));
+	int is_slow = 0;
+	for (int i = 0; i < 3; i++) if (tile == slow[i]) is_slow = 1;
+	if (is_slow) {                      // $B382
+		say_inline(0xB385);
+		cpu.cycles += 16 + 11;
+		SET_HL((uint16_t)(rd16(MOVE_TIME) * 2));
+	} else {                            // $B39D
+		say_inline(0xB3A0);
+		cpu.cycles += 16 + 4 + 4 + 11 + 11 + 12;
+		SET_DE(rd16(MOVE_TIME));
+		SET_HL((uint16_t)(DE * 3));
+	}
+	cpu.cycles += 16 + 10;
+	wr16(MOVE_TIME, HL);
+}
+
 // $AEA0, after a step south on the world: into the waters at ($E5-$E9,
 // $D4-$D8), unless $C976 = 1, one of the people (a random one of the first
 // eight) becomes a whirlpool ($F0) at ($E7, a row below the party)
@@ -122,15 +188,15 @@ static void player_move(uint8_t dir) {
 		cpu.cycles += 5;
 		say_inline(0xB346);             // "Sail "
 		say_direction(0);
-		call(0xB412);                   // A = the tile ahead
-		call(0xB423);                   // carry: no water there
+		tile_ahead();
+		no_water();
 		cpu.cycles += 10;
 		if (cpu.f & FC) { native_continue_at(0x40A6); return; }   // "Blocked!"
 		call(0xB36C);                   // the wind: slower against it
 		cpu.cycles += 7;
 		cpu.a = 0x1F;
 		call(0x05F1);                   // sound
-		call(0xB40C);                   // the turn is done
+		cpu.cycles += 17; turn_done();
 		cpu.cycles += 13 + 10 + 10 + 10 + 52;
 		cpu.a = dir;
 		native_continue_at(rd16(0xB3CF + 2 * dir));
@@ -157,12 +223,12 @@ static void player_move(uint8_t dir) {
 		if (mem_read(0xC992) == 0x0E) { cpu.cycles += 5; checked = 1; }
 	} else cpu.cycles += 5;
 	if (!checked) {
-		call(0xB412);                   // A = the tile ahead
+		tile_ahead();
 		call(0x3EB7);                   // carry: can't go there
 		cpu.cycles += 7;
 		if (cpu.f & FC) {
 			cpu.cycles += 13 + 4 + 10;
-			if (mem_read(MAP_KIND) == 0) { cpu.cycles += 7; call_original(0xB40C); }
+			if (mem_read(MAP_KIND) == 0) { cpu.cycles += 7; turn_done(); }
 			cpu.cycles += 10;
 			native_continue_at(0x40A6);
 			return;
@@ -177,7 +243,7 @@ static void player_move(uint8_t dir) {
 	else cpu.cycles += 5;
 	cpu.cycles += 10;
 	cpu.a = a; cpu.f = f;
-	call(0xB309);                       // slow ground ("Slow progress")
+	slow_ground();
 	riding = on_horse();
 	cpu.cycles += 7 + 7;
 	uint8_t sound = 0x0A;
@@ -195,7 +261,7 @@ static void player_move(uint8_t dir) {
 	} else cpu.cycles += 5;
 	cpu.a = sound;
 	call(0x05F1);
-	call(0xB40C);
+	cpu.cycles += 17; turn_done();
 	step(dir);
 }
 
