@@ -208,17 +208,17 @@ static void dissolve(uint16_t site) {
 	mem_write(SLOT + 0x0D, 0x40);
 	mem_write(SLOT + 0x16, 0x21);
 	for (;;) {
-		tcall(0x7F59, 0xB4A9);
+		task_next_pass(0xB4A9);
 		cpu.cycles += 19 + 23 + 23;
 		cpu.a = mem_read(SLOT + 0x0A);
 		mem_write(SLOT + 0x0A, (uint8_t)(cpu.a + 2));
 		call(0xB4FB);
-		tcall(0x7F59, 0xB4B8);
+		task_next_pass(0xB4B8);
 		cpu.cycles += 19 + 23 + 23;
 		cpu.a = mem_read(SLOT + 0x0C);
 		mem_write(SLOT + 0x0C, (uint8_t)(cpu.a - 2));
 		call(0xB4FB);
-		tcall(0x7F59, 0xB4C7);
+		task_next_pass(0xB4C7);
 		cpu.cycles += 19 + 7 + 7;
 		cpu.a = mem_read(SLOT + 0x16);
 		op_sub8(0x20, 0, 0);
@@ -228,7 +228,7 @@ static void dissolve(uint16_t site) {
 			mem_write(SLOT + 0x0B, (uint8_t)(cpu.a + 2));
 			call(0xB4FB);
 		} else cpu.cycles += 5;
-		tcall(0x7F59, 0xB4DD);
+		task_next_pass(0xB4DD);
 		cpu.cycles += 19 + 7 + 7;
 		cpu.a = mem_read(SLOT + 0x16);
 		op_sub8(0x20, 0, 0);

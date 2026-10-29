@@ -262,3 +262,22 @@ void task_wait_flag(uint16_t site) {
 	cpu.cycles += 7 + 19 + 19 + 4;     // ld hl from the slot / jp (hl)
 	SET_HL(back);
 }
+
+// "call $7F59" at site ($305A by the vector): the next turn at once, the
+// main loop not waiting for frames ($C00C = 0) for this one pass
+void task_next_pass(uint16_t site) {
+	uint16_t back = site + 3;
+	cpu.cycles += 17 + 10 + 10 + 19 + 19 + 4 + 13;
+	mem_write(SLOT + 0x14, (uint8_t)back);
+	mem_write(SLOT + 0x15, back >> 8);
+	cpu.a = 0;
+	op_xor(0);
+	mem_write(0xC00C, 0);
+	cpu.cycles += 17 + 58;             // call yield
+	SET_HL(0x3068);
+	task_wait_turn(0x3068);
+	cpu.cycles += 7 + 13 + 19 + 19 + 4;
+	cpu.a = 2;
+	mem_write(0xC00C, 2);
+	SET_HL(back);
+}

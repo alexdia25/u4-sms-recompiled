@@ -185,9 +185,8 @@ static void camp(void) {
 	cpu.cycles += 19;
 	mem_write(SLOT + 0x16, 3);
 	for (;;) {                         // ". . ."
-		cpu.cycles += 7;
-		cpu.a = 0x46;
-		tcall(0x7F53, 0xAD70);
+		cpu.cycles += 10;                  // $3046 by its vector
+		task_wait_frames(0xAD70, 0x46);
 		cpu.cycles += 7;
 		cpu.a = '.';
 		tcall(0x7E33, 0xAD75);
@@ -426,9 +425,8 @@ static void shrine(void) {
 		cpu.cycles += 19;
 		mem_write(SLOT + 0x17, 0x10);
 		for (;;) {
-			cpu.cycles += 7;
-			cpu.a = 8;
-			tcall(0x7F53, 0xAF44);
+			cpu.cycles += 10;                  // $3046 by its vector
+			task_wait_frames(0xAF44, 8);
 			cpu.cycles += 7;
 			cpu.a = '.';
 			tcall(0x7E33, 0xAF49);

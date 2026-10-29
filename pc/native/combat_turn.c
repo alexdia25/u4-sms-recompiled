@@ -488,7 +488,7 @@ static void weapon_after(uint16_t site) {
 		do {
 			call(0x0BC9);              // slot_step_sub
 			call(0xA482);              // figure_flip
-			tcall(0x7F59, 0xA244);     // a frame
+			task_next_pass(0xA244);     // a frame
 			cpu.cycles += 23;
 			mem_write(SLOT + 0x16, op_dec8(mem_read(SLOT + 0x16)));
 			cpu.cycles += mem_read(SLOT + 0x16) ? 12 : 7;
@@ -582,7 +582,7 @@ static void combat_attack(void) {
 		mem_write(SLOT + 0x16, 5);
 		for (;;) {
 			tcall(0xA482, 0xA141);
-			tcall(0x7F59, 0xA144);
+			task_next_pass(0xA144);
 			cpu.cycles += 23 + 7;
 			uint8_t left = (uint8_t)(mem_read(SLOT + 0x16) - 1);
 			mem_write(SLOT + 0x16, left);
@@ -960,7 +960,7 @@ static void blow(uint16_t site) {
 	mem_write(SLOT + 0x19, 5);
 	for (;;) {
 		shot_flips();
-		tcall(0x7F59, 0xA7CF);
+		task_next_pass(0xA7CF);
 		cpu.cycles += 23 + 7;
 		uint8_t n = (uint8_t)(mem_read(SLOT + 0x19) - 1);
 		mem_write(SLOT + 0x19, n);
@@ -992,7 +992,7 @@ static void missile(uint16_t site) {
 	for (;;) {
 		shot_moves(0);
 		shot_flips();
-		tcall(0x7F59, 0xA8B0);
+		task_next_pass(0xA8B0);
 		shot_cell();
 		member_at();
 		cpu.cycles += 7;
