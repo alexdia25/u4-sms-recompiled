@@ -1016,3 +1016,11 @@ native   00:3F14 native_ground_effects
 name     00:3F2B ground_world
 name     00:3F84 ground_dungeon
 name     00:3FDC ground_combat
+name     01:4483 party_lost                 # everyone dead: the afterlife, then raised in Castle Britannia
+native   01:4483 native_party_lost
+name     00:3642 say_topic                  # topic A said back
+native   00:3642 native_say_topic
+name     00:3666 name_has_article           # Z: the name begins "a " or "the "
+native   00:3666 native_name_has_article
+name     00:368C starts_with
+name     00:34D4 upcase

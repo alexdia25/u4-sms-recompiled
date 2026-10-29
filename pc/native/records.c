@@ -20,7 +20,8 @@
 //   point, up to its class's most (the jump table at $47B3, from its
 //   intelligence: x2, x1, 0, x1.5 or x0.5), 99 at most.
 // - party_alive ($465D): when no member can act the party is lost
-//   ($4483); else C = the first who can act, then on to the first able
+//   (party_lost, $4483: the afterlife, then Lord British raises them);
+//   else C = the first who can act, then on to the first able
 //   one ($4466).
 // - member_row ($49B3): D, E, B, C = member C's line of the status
 //   window (row C * 2 + 1, column 18, 2 x 14); member_flash ($49A6): that
@@ -242,6 +243,93 @@ static void magic_regain(void) {       // $4776
 	SET_DE(pop16()); I(10);
 	SET_BC(pop16()); I(10);
 	I(10);
+}
+
+// $4483: the party is lost. Everyone dead (status 'D', hit points 0),
+// the screen dissolved and quiet, the six lines of the afterlife ("All is
+// Dark...", "But wait...", ..., "You hear: <Avatar's name>", "I feel
+// motion...") each followed by a wait of 120 frames; then Lord British's
+// words, everyone good ('G') with full hit points, the 16 counts at $C91F
+// (weapons owned) and the 8 at $C917 cleared, 200 food (and $63 of the
+// next), 200 gold, and the party in location 2 at (19, 8), the way out
+// to ($56, $6C) on the world
+static void lost_line(uint16_t text) { // ld hl,text / call $4574: the text, then $4577
+	I(10); I(17);
+	SET_HL(text); I(17); call_original(0x5519);
+	cpu.b = 0x14; I(7);
+	I(10); call_original(0x042D);      // jp wait_frames_6b: 120 frames
+}
+static void party_lost(void) {
+	cpu.a = mem_read(0xC9A0); I(13);
+	op_or(cpu.a); I(4);
+	if (cpu.f & FZ) { I(17); call_original(0x40E9); }   // on the world: people_save
+	else I(10);
+	cpu.iy = 0xC751; I(14);
+	SET_DE(0x001D); I(10);
+	cpu.a = mem_read(0xC957); I(13);
+	cpu.b = cpu.a; I(4);
+	do {
+		mem_write((uint16_t)(cpu.iy + 0x1C), 0x44); I(19);
+		mem_write(cpu.iy, 0); I(19);
+		mem_write((uint16_t)(cpu.iy + 1), 0); I(19);
+		cpu.iy += 0x1D; I(15);
+		I(--cpu.b ? 13 : 8);
+	} while (cpu.b);
+	static const uint16_t first[] = { 0x4324, 0x041C, 0x0605, 0x4EAC, 0x05E3, 0x041C, 0x54CB, 0x54CB };
+	for (unsigned i = 0; i < sizeof first / sizeof *first; i++) { I(17); call_original(first[i]); }
+	static const uint16_t lines[] = { 0x457C, 0x458C, 0x459A, 0x45AA, 0x45B9 };
+	for (unsigned i = 0; i < 5; i++) lost_line(lines[i]);
+	SET_HL(0x45C8); I(10);
+	I(17); call_original(0x5519);
+	I(17); call_original(0x5650);      // print_avatar_name
+	I(17); cpu.b = 0x14; I(7); I(10); call_original(0x042D);
+	lost_line(0x45D9);
+	SET_HL(0x8A1F); I(10); wr16(0xC959, HL); I(16);
+	SET_HL(0x0813); I(10); wr16(0xC953, HL); I(16); wr16(0xC985, HL); I(16);
+	SET_HL(0x6C56); I(10); wr16(0xC96D, HL); I(16);
+	op_xor(cpu.a); I(4);
+	mem_write(0xC976, 0); I(13);
+	mem_write(0xC977, 0); I(13);
+	mem_write(0xC9A4, 0); I(13);
+	mem_write(0xC982, 0); I(13);
+	cpu.a = 0xFF; I(7);
+	mem_write(0xC98F, 0xFF); I(13);
+	SET_HL(0x45EB); I(10);
+	I(17); call_original(0x5519);      // Lord British's words
+	I(17); call_original(0x54CE);
+	cpu.iy = 0xC751; I(14);
+	SET_DE(0x001D); I(10);
+	cpu.a = mem_read(0xC957); I(13);
+	cpu.b = cpu.a; I(4);
+	do {
+		mem_write((uint16_t)(cpu.iy + 0x1C), 0x47); I(19);
+		cpu.a = mem_read((uint16_t)(cpu.iy + 2)); I(19);
+		mem_write(cpu.iy, cpu.a); I(19);
+		cpu.a = mem_read((uint16_t)(cpu.iy + 3)); I(19);
+		mem_write((uint16_t)(cpu.iy + 1), cpu.a); I(19);
+		cpu.iy += 0x1D; I(15);
+		I(--cpu.b ? 13 : 8);
+	} while (cpu.b);
+	SET_HL(0xC91F); I(10);             // weapons_owned
+	SET_BC(0x1000); I(10);
+	I(17); call_original(0x333B);      // fill
+	SET_HL(0xC917); I(10);
+	SET_BC(0x0800); I(10);
+	I(17); call_original(0x333B);
+	cpu.a = 0x63; I(7);
+	mem_write(0xC906, 0x63); I(13);    // food_fraction
+	SET_HL(0x00C8); I(10);
+	wr16(0xC907, HL); I(16);           // food
+	wr16(0xC909, HL); I(16);           // gold
+	I(17); call_original(0x4324);
+	cpu.a = 0x02; I(7);
+	mem_write(0xC9A0, 0x02); I(13);    // location
+	cpu.a = 0x12; I(7);
+	mem_write(0xC600, 0x12); I(13);    // game_mode
+	cpu.a = 0xFF; I(7);
+	mem_write(0xC99F, 0xFF); I(13);    // map_mode
+	I(17); call_original(0x0E6C);      // load_location
+	I(10); native_continue_at(0x0CD2); // jp main_loop
 }
 
 static void party_alive(void) {        // $465D
@@ -494,6 +582,7 @@ static void undead(void) {
 
 #define RECORD(name, addr, out) Native native_##name = { #name, addr, 1, name, out, .long_calls = 1 };
 RECORD(member_record, 0x48B6, OUT_F | OUT_IY)
+Native native_party_lost = { "party_lost", 0x4483, 1, party_lost, 0, 0, 0, .blocking = 1 };
 RECORD(current_record, 0x48CB, OUT_F | OUT_IY)
 RECORD(member_object, 0x48D5, OUT_F | OUT_IY)
 RECORD(current_object, 0x48E1, OUT_F | OUT_IY)

@@ -14,6 +14,10 @@
 //   the two keywords ($0A, $0B) once known ($C595, $C596), eight at most
 //   from IX+$1C, each a name from $360D or (from $0A) a dialogue string;
 //   the cursor on row IX+$1D.
+// - say_topic ($3642): the topic chosen said back (5 and 6: the person's
+//   strings $0A, $0B; else its word at $360D).
+// - name_has_article ($3666): Z when the person's name begins "a " or
+//   "the " (in any case, $368C).
 // - say_welcome ($AE20, bank 2): "Welcome to" ($BCC6), the place's name
 //   at HL, "!", a new line, and the text at $BCCD.
 // Cycle counts are the original's, instruction by instruction (I).
@@ -261,10 +265,93 @@ static void say_welcome(void) {        // $AE20
 	native_continue_at(0x5519);        // jp print_text_hl
 }
 
+// $3642: topic A said back: for 5 and 6 the person's own strings $0A and
+// $0B, else the topic's word ($360D); then $54CB
+static void say_topic(void) {
+	if (!native_on_fiber()) { native_decline(); return; }   // shadow mode: printing may wait for frames
+	cpu.b = 0x0A; I(7);
+	op_sub8(0x05, 0, 0); I(7);
+	if (cpu.f & FZ) I(12);
+	else {
+		I(7);
+		cpu.b = op_inc8(cpu.b); I(4);
+		op_sub8(0x06, 0, 0); I(7);
+		if (!(cpu.f & FZ)) {           // $365C
+			I(12);
+			SET_HL(0x360D); I(10);
+			rst20();
+			call(0x5519);              // print_text_hl
+			I(10); native_continue_at(0x54CB);
+			return;
+		}
+		I(7);
+	}
+	I(17); dialogue_string();          // $364D
+	vram_bank_push(0x3650);
+	call(0x5519);
+	call(0x54CB);
+	vram_bank_pop();
+}
+
+static void upcase(void) {             // $34D4: A in upper case
+	I(17);
+	op_sub8(0x61, 0, 0); I(7);
+	if (cpu.f & FC) { I(11); return; }
+	I(5);
+	op_sub8(0x7B, 0, 0); I(7);
+	if (!(cpu.f & FC)) { I(11); return; }
+	I(5);
+	op_add8(0xE0, 0); I(7);
+	I(10);
+}
+
+static void starts_with(void) {        // $368C: Z if the B letters at HL are those at DE, any case
+	I(17);
+	push(BC); push(DE); push(HL);
+	for (;;) {
+		cpu.a = mem_read(HL); I(7);
+		SET_HL(HL + 1); I(6);
+		upcase();
+		cpu.c = cpu.a; I(4);
+		cpu.a = mem_read(DE); I(7);
+		SET_DE(DE + 1); I(6);
+		upcase();
+		op_sub8(cpu.c, 0, 0); I(4);
+		if (!(cpu.f & FZ)) { I(12); break; }
+		I(7);
+		if (--cpu.b) I(13); else { I(8); break; }
+	}
+	SET_HL(pop16()); I(10);
+	SET_DE(pop16()); I(10);
+	SET_BC(pop16()); I(10);
+	I(10);
+}
+
+// $3666: Z when the person's name (string 1) begins "a " or "the "
+static void name_has_article(void) {
+	cpu.a = mem_read(0xC0CA); I(13);   // message_bank
+	vram_bank_push(0x3669);
+	cpu.b = 0x01; I(7);
+	I(17); dialogue_string();
+	SET_DE(0x3686); I(10);
+	cpu.b = 0x02; I(7);
+	starts_with();
+	if (cpu.f & FZ) I(12);
+	else {
+		I(7);
+		SET_DE(0x3688); I(10);
+		cpu.b = 0x04; I(7);
+		starts_with();
+	}
+	vram_bank_pop();
+}
+
 #define DIALOGUE(name, addr, out) Native native_##name = { #name, addr, 0, name, out, .long_calls = 1 };
 DIALOGUE(talk_setup, 0x34DD, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL)
 DIALOGUE(dialogue_print, 0x354D, OUT_A | OUT_F | OUT_BC | OUT_DE)
 DIALOGUE(dialogue_print_hl, 0x3553, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL)
 DIALOGUE(dialogue_string, 0x355F, OUT_A | OUT_F | OUT_BC | OUT_HL)
 DIALOGUE(talk_topics, 0x3578, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL)
+DIALOGUE(say_topic, 0x3642, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL)
+DIALOGUE(name_has_article, 0x3666, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL)
 Native native_say_welcome = { "say_welcome", 0xAE20, 2, say_welcome, OUT_A | OUT_F | OUT_HL, .long_calls = 1 };
