@@ -38,6 +38,28 @@ static void tcall(uint16_t addr, uint16_t site) {
 	task_call(addr, (uint16_t)(site + 3));
 }
 
+// $5726, each frame of the dungeon's input: button 2 alone ($20) opens the
+// party's stats ($5777, a page at a time), button 1 alone ($10) lists the
+// karma of the eight virtues ($5730); both wait, so they run as the
+// original's, and return to $6A42
+static void stats_buttons(void) {
+	cpu.cycles += 17;
+	call(0x064C);                      // read_pads_both
+	cpu.cycles += 7;
+	if (cpu.a == 0x20) {
+		op_sub8(0x20, 0, 0);
+		cpu.cycles += 12;
+		task_call(0x5777, 0x6A42);
+		return;
+	}
+	op_sub8(0x20, 0, 0);
+	cpu.cycles += 7 + 7;
+	op_sub8(0x10, 0, 0);
+	if (cpu.a != 0x10) { cpu.cycles += 11; return; }
+	cpu.cycles += 5;
+	task_call(0x5730, 0x6A42);
+}
+
 // $6AEA: the dungeon's end of the turn: everyone dead is the end
 // ($465D), afflictions and food ($B4EE), magic points ($4776), the level's
 // creatures walk and appear ($6D1A, $6CB9), the light ($C95B) wanes, the
@@ -289,7 +311,7 @@ static void dungeon_loop(int stage) {
 			for (first = 1;; first = 0) {
 			input:
 				if (!first) task_frame_tick(0x6A3C);
-				tcall(0x5726, 0x6A3F); // both buttons: the party's stats
+				stats_buttons();
 				// $6B0A: one frame of input
 				cpu.cycles += 17 + 4 + 13 + 13 + 10 + 17;
 				mem_write(MOVED, 0);

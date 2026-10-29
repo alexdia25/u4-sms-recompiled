@@ -237,3 +237,28 @@ void task_wait_frames(uint16_t site, uint8_t n) {
 	cpu.cycles += 10 + 42;             // jp task_return_4
 	SET_HL(site + 3);
 }
+
+// "call wait_flag" at site ($0A82): yield every turn until $C0C7 is set
+// (by a task that ends at $0A9D); the return address is kept in the slot
+// (+$14) as the original's
+void task_wait_flag(uint16_t site) {
+	uint16_t back = site + 3;
+	cpu.cycles += 17 + 10 + 19 + 19 + 4 + 13;
+	mem_write(SLOT + 0x14, (uint8_t)back);
+	mem_write(SLOT + 0x15, back >> 8);
+	cpu.a = 0;
+	op_xor(0);
+	mem_write(0xC0C7, 0);
+	for (;;) {
+		cpu.cycles += 17 + 58;         // call yield
+		SET_HL(0x0A90);
+		task_wait_turn(0x0A90);
+		cpu.cycles += 13 + 4;
+		cpu.a = mem_read(0xC0C7);
+		op_or(cpu.a);
+		if (!(cpu.f & FZ)) break;
+		cpu.cycles += 12;
+	}
+	cpu.cycles += 7 + 19 + 19 + 4;     // ld hl from the slot / jp (hl)
+	SET_HL(back);
+}

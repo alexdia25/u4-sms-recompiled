@@ -44,7 +44,7 @@ static void opening(void) {
 	SET_HL(0x9C18);
 	SET_BC(0x0301);
 	tcall(0x0A22, 0x823A);             // fade in
-	tcall(0x0A82, 0x823D);
+	task_wait_flag(0x823D);
 	cpu.cycles += 19;
 	mem_write(SLOT + 0x16, 120);
 	for (;;) {
@@ -63,7 +63,7 @@ static void opening(void) {
 	cpu.cycles += 10;
 	SET_BC(0x8301);
 	tcall(0x0A22, 0x8256);             // fade out
-	tcall(0x0A82, 0x8259);
+	task_wait_flag(0x8259);
 	cpu.cycles += 7 + 13 + 10;
 	cpu.a = 3;
 	mem_write(GAME_MODE, 3);
@@ -586,7 +586,7 @@ static void title(void) {
 			cpu.cycles += 10;          // $84EF: the end of the demo
 			SET_BC(0x8301);
 			tcall(0x0A22, 0x84F2);
-			tcall(0x0A82, 0x84F5);
+			task_wait_flag(0x84F5);
 			cpu.cycles += 7 + 13 + 10;
 			cpu.a = 4;
 			mem_write(GAME_MODE, 4);
@@ -653,7 +653,7 @@ static void title(void) {
 	cpu.cycles += 10;
 	SET_BC(0x8201);
 	tcall(0x0A22, 0x8574);
-	tcall(0x0A82, 0x8577);
+	task_wait_flag(0x8577);
 	cpu.cycles += 10 + 10 + 10 + 10;
 	SET_HL(0xCA00); SET_DE(0xCA01); SET_BC(0x037F);
 	mem_write(0xCA00, 0);
@@ -806,7 +806,7 @@ static void interlude(void) {
 	cpu.cycles += 10;
 	SET_BC(0x8303);
 	tcall(0x0A22, 0x8998);             // fade out
-	tcall(0x0A82, 0x899B);
+	task_wait_flag(0x899B);
 	cpu.cycles += 7 + 13 + 10;
 	cpu.a = 1;
 	mem_write(GAME_MODE, 1);
@@ -1192,7 +1192,7 @@ static void new_game(void) {
 		cpu.cycles += 10;
 		SET_BC(0x8301);
 		tcall(0x0A22, 0x9066);
-		tcall(0x0A82, 0x9069);
+		task_wait_flag(0x9069);
 		cpu.cycles += 7 + 13 + 10;
 		cpu.a = 9;
 		mem_write(GAME_MODE, 9);
@@ -1260,7 +1260,7 @@ static void new_game(void) {
 	cpu.cycles += 10;
 	SET_BC(0x8301);
 	tcall(0x0A22, 0x90F8);
-	tcall(0x0A82, 0x90FB);
+	task_wait_flag(0x90FB);
 	cpu.cycles += 7 + 13 + 10;
 	cpu.a = 7;
 	mem_write(GAME_MODE, 7);
@@ -1444,7 +1444,7 @@ static void picture_out(uint16_t site) {   // call $93A7 at site: the picture fa
 	cpu.cycles += 10;
 	SET_BC(0x8101);
 	tcall(0x0A22, 0x93BA);
-	tcall(0x0A82, 0x93BD);
+	task_wait_flag(0x93BD);
 	kept_return_24();
 }
 
@@ -2072,7 +2072,7 @@ static void gypsy(void) {
 	cpu.cycles += 10;
 	SET_BC(0x8301);
 	tcall(0x0A22, 0x96A4);
-	tcall(0x0A82, 0x96A7);
+	task_wait_flag(0x96A7);
 	make_party();
 	cpu.cycles += 7 + 13 + 10;
 	cpu.a = 0x10;
@@ -2116,7 +2116,7 @@ static void sound_test(void) {
 	cpu.cycles += 10 + 10;
 	SET_HL(0x9C18); SET_BC(0x0301);
 	tcall(0x0A22, 0x9AA1);
-	tcall(0x0A82, 0x9AA4);
+	task_wait_flag(0x9AA4);
 	for (;;) {
 		cpu.cycles += 19 + 4 + 7 + 4 + 7 + 16;   // $9AA7: the hand at the row
 		cpu.a = (uint8_t)(mem_read(SLOT + 0x1A) * 2);
@@ -2213,7 +2213,7 @@ static void sound_test(void) {
 	cpu.cycles += 10;
 	SET_BC(0x8301);
 	tcall(0x0A22, 0x9B4D);
-	tcall(0x0A82, 0x9B50);
+	task_wait_flag(0x9B50);
 	cpu.cycles += 7 + 13 + 10;
 	cpu.a = 2;
 	mem_write(GAME_MODE, 2);
@@ -2383,7 +2383,7 @@ static void journey(void) {
 		cpu.cycles += 10;
 		SET_BC(0x8301);
 		tcall(0x0A22, 0x8DC7);         // faded out
-		tcall(0x0A82, 0x8DCA);
+		task_wait_flag(0x8DCA);
 		cpu.cycles += 7 + 13 + 10;
 		cpu.a = 0x10;
 		mem_write(GAME_MODE, 0x10);
@@ -2451,7 +2451,7 @@ static void logo(void) {               // $807B
 	cpu.cycles += 10 + 10;
 	SET_HL(0x8151); SET_BC(0x0101);
 	tcall(0x0A22, 0x80C9);
-	tcall(0x0A82, 0x80CC);
+	task_wait_flag(0x80CC);
 	cpu.cycles += 10 + 10;
 	SET_HL(0x813B); SET_BC(0x0601);
 	do {                               // six letters' colour tasks
@@ -2472,7 +2472,7 @@ static void logo(void) {               // $807B
 	cpu.cycles += 10;
 	SET_BC(0x8102);
 	tcall(0x0A22, 0x80F2);             // faded out
-	tcall(0x0A82, 0x80F5);
+	task_wait_flag(0x80F5);
 	cpu.cycles += 7 + 13 + 10;
 	cpu.a = 2;
 	mem_write(GAME_MODE, 2);

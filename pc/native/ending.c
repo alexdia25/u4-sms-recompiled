@@ -372,7 +372,7 @@ static void ending(void) {
 		mem_write(HL, 0x3F);
 		SET_HL(0xC043); SET_BC(0x0101);
 		tcall(0x0A22, 0xB231);
-		tcall(0x0A82, 0xB234);
+		task_wait_flag(0xB234);
 		cpu.cycles += 19 + 7 + 7;
 		cpu.a = mem_read(SLOT + 0x17);
 		op_sub8(7, 0, 0);

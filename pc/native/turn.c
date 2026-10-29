@@ -365,7 +365,7 @@ static void game_fade_in(void) {
 	cpu.cycles += 10 + 10;
 	SET_HL(0x7C83); SET_BC(0x0301);
 	tcall(0x0A22, 0xAC68);
-	tcall(0x0A82, 0xAC6B);
+	task_wait_flag(0xAC6B);
 	cpu.cycles += 7 + 13 + 10;
 	cpu.a = 0x11;
 	mem_write(0xC600, 0x11);
