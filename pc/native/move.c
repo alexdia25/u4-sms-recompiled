@@ -44,6 +44,45 @@ static void say_direction(int jumped) { // $B3C6: "North" etc. and a new line (c
 	text_newline();
 }
 
+// $AEA0, after a step south on the world: into the waters at ($E5-$E9,
+// $D4-$D8), unless $C976 = 1, one of the people (a random one of the first
+// eight) becomes a whirlpool ($F0) at ($E7, a row below the party)
+static void whirlpool(void) {
+	cpu.cycles += 13 + 7;
+	cpu.a = mem_read(MOVE_DIR);
+	op_sub8(0x03, 0, 0);
+	if (cpu.a != 0x03) { cpu.cycles += 11; return; }
+	cpu.cycles += 5 + 13 + 7;
+	cpu.a = mem_read(0xC953);
+	op_sub8(0xE5, 0, 0);
+	if (cpu.f & FC) { cpu.cycles += 11; return; }
+	cpu.cycles += 5 + 7;
+	op_sub8(0xEA, 0, 0);
+	if (!(cpu.f & FC)) { cpu.cycles += 11; return; }
+	cpu.cycles += 5 + 13 + 7;
+	cpu.a = mem_read(0xC954);
+	op_sub8(0xD4, 0, 0);
+	if (cpu.f & FC) { cpu.cycles += 11; return; }
+	cpu.cycles += 5 + 7;
+	op_sub8(0xD9, 0, 0);
+	if (!(cpu.f & FC)) { cpu.cycles += 11; return; }
+	cpu.cycles += 5 + 13 + 7;
+	cpu.a = mem_read(0xC976);
+	op_sub8(0x01, 0, 0);
+	if (cpu.a == 0x01) { cpu.cycles += 11; return; }
+	cpu.cycles += 5;
+	call(0x2BBF);                       // random
+	cpu.cycles += 7;
+	op_and(0x07);
+	call(0x48F7);                       // person_record
+	cpu.cycles += 19 + 19 + 19 + 13 + 4 + 19 + 10;
+	mem_write((uint16_t)(cpu.iy + 3), 0xF0);
+	mem_write((uint16_t)(cpu.iy + 0), 0xF0);
+	mem_write((uint16_t)(cpu.iy + 1), 0xE7);
+	cpu.a = op_inc8(mem_read(0xC954));
+	mem_write((uint16_t)(cpu.iy + 2), cpu.a);
+}
+
 // the step itself: the four step_* routines on the world map ($B3CF, then
 // $AEA0: a whirlpool may appear), the town ones ($B3D7) in towns
 static void step(uint8_t dir) {
@@ -53,7 +92,7 @@ static void step(uint8_t dir) {
 		cpu.a = dir;
 		call_original(rd16(0xB3CF + 2 * dir));
 		cpu.cycles += 10;
-		native_continue_at(0xAEA0);
+		whirlpool();
 	} else {
 		cpu.cycles += 12 + 10 + 10 + 10 + 52;
 		cpu.a = dir;
@@ -163,8 +202,132 @@ static void player_move(uint8_t dir) {
 static void nat_player_move(void) { player_move(cpu.a); }
 Native native_player_move = { "player_move", 0xB263, 2, nat_player_move, 0, 0, 0, .blocking = 1 };
 
+static int someone_here(void) {         // $B152: carry (0) if nobody stands here, else "pass" ($B15C)
+	cpu.cycles += 17 + 16 + 7;
+	SET_HL(rd16(0xC953));
+	cpu.b = 0x20;
+	call(0x42B7);                       // person_at
+	if (cpu.f & FC) { cpu.cycles += 11; return 0; }
+	cpu.cycles += 5 + 10;               // pop af: out of input_step too
+	return 1;
+}
+
+static void pass(void) {                // $B15C
+	call(0x46F1);
+	cpu.cycles += 4 + 10;
+	op_or(cpu.a);
+}
+
+// $B0A6, button 1: on foot, pass ($46B5); else "Exit" the vehicle: a ship
+// or the balloon ($C959 $10-$13, $18+) leaves it where it is, but not on
+// someone, and the balloon only when landed ($C990 = 4); a horse is left
+// as one of the people on the town map (a free slot, else the first one
+// not already a horse after a random one, else $4933's); the party on
+// foot ($C959 = $1F), the step's sound
+static void leave_or_pass(void) {
+	cpu.cycles += 10 + 16 + 13 + 7;
+	wr16(MOVE_TIME, 0x0100);
+	uint8_t t = mem_read(TRANSPORT);
+	cpu.a = t;
+	op_sub8(0x1F, 0, 0);
+	if (t == 0x1F) {
+		cpu.cycles += 7;
+		call(0x46B5);
+		cpu.cycles += 4 + 10;
+		op_or(cpu.a);
+		return;
+	}
+	cpu.cycles += 12 + 10;
+	SET_HL(0xB224); call(0x5519);       // print_text_hl
+	cpu.cycles += 13 + 7;
+	cpu.a = mem_read(TRANSPORT);
+	op_sub8(0x14, 0, 0);
+	if (t < 0x14) {                     // a ship
+		cpu.cycles += 12 + 10;
+		SET_HL(0xB232); call(0x5519);
+		cpu.cycles += 16 + 16;
+		SET_HL(rd16(0xC953));
+		wr16(0xC973, HL);
+		call(0x0E01);
+		cpu.cycles += 12;
+	} else if (t >= 0x16) {             // the balloon
+		cpu.cycles += 7 + 7 + 7 + 10;
+		op_sub8(0x16, 0, 0);
+		SET_HL(0xB23C); call(0x5519);
+		if (someone_here()) { pass(); return; }
+		cpu.cycles += 13 + 7;
+		cpu.a = mem_read(0xC990);
+		op_sub8(0x04, 0, 0);
+		if (cpu.a != 0x04) { cpu.cycles += 10; pass(); return; }
+		cpu.cycles += 10;
+		call(0x0DEB);
+		cpu.cycles += 12;
+	} else {                            // a horse
+		cpu.cycles += 7 + 7 + 12 + 10;
+		op_sub8(0x16, 0, 0);
+		SET_HL(0xB22A); call(0x5519);
+		if (someone_here()) { pass(); return; }
+		cpu.cycles += 13 + 7;
+		cpu.a = mem_read(MAP_KIND);
+		op_sub8(0x01, 0, 0);
+		if (cpu.a != 0x01) {
+			cpu.cycles += 7;
+			call(0x0DF6);
+			cpu.cycles += 12;
+		} else {
+			cpu.cycles += 12 + 4;
+			op_xor(cpu.a);
+			call(0x4906);               // person_with_graphic: a free slot
+			if (!(cpu.f & FC)) cpu.cycles += 12;
+			else {
+				cpu.cycles += 7;
+				call(0x2BBF);           // random
+				cpu.cycles += 7;
+				cpu.b = 0x20;
+				for (;;) {
+					cpu.a = op_inc8(cpu.a);
+					op_and(0x1F);
+					cpu.c = cpu.a;
+					cpu.cycles += 4 + 7 + 4;
+					call(0x48F7);       // person_record
+					cpu.cycles += 19 + 7;
+					cpu.a = mem_read((uint16_t)(cpu.iy + 3));
+					op_sub8(0x14, 0, 0);
+					if (cpu.a == 0x14) { cpu.cycles += 12; break; }
+					cpu.cycles += 7 + 7;
+					op_sub8(0x15, 0, 0);
+					if (cpu.a == 0x15) { cpu.cycles += 12; break; }
+					cpu.cycles += 7 + 4;
+					cpu.a = cpu.c;
+					if (--cpu.b) { cpu.cycles += 13; continue; }
+					cpu.cycles += 8;
+					call(0x4933);
+					break;
+				}
+			}
+			cpu.cycles += 13 + 19 + 19 + 16 + 19 + 19 + 19 + 19;
+			cpu.a = mem_read(TRANSPORT);
+			mem_write((uint16_t)(cpu.iy + 3), cpu.a);
+			mem_write((uint16_t)(cpu.iy + 0), cpu.a);
+			SET_HL(rd16(0xC953));
+			mem_write((uint16_t)(cpu.iy + 1), cpu.l);
+			mem_write((uint16_t)(cpu.iy + 2), cpu.h);
+			mem_write((uint16_t)(cpu.iy + 6), 0);
+			mem_write((uint16_t)(cpu.iy + 7), 0);
+		}
+	}
+	cpu.cycles += 10 + 16 + 7 + 13;     // $B142: on foot
+	SET_HL(0x8A1F);
+	wr16(TRANSPORT, HL);
+	cpu.a = 0xFF;
+	mem_write(0xC98F, 0xFF);
+	call(0x40D1);                       // sound_0d
+	cpu.cycles += 4 + 10;
+	op_or(cpu.a);
+}
+
 // input_step ($B08B): one frame of the player's turn. A direction moves;
-// button 1 passes or leaves the vehicle ($B0A6); button 2 opens the command
+// button 1 passes or leaves the vehicle ($B0A6, leave_or_pass); button 2 opens the command
 // menu ($8000, a C task; on foot, next to some people, their own: the
 // original's). Returns carry set while nothing happened.
 static void nat_input_step(void) {
@@ -192,7 +355,7 @@ static void nat_input_step(void) {
 	uint8_t pressed = mem_read(JOY_PRESSED);
 	cpu.a = pressed;
 	cpu.cycles += 13 + 7 + 7;
-	if (pressed == 0x10) { cpu.cycles += 5; native_continue_at(0xB0A6); return; }
+	if (pressed == 0x10) { cpu.cycles += 5; leave_or_pass(); return; }
 	cpu.cycles += 7 + 10;
 	op_sub8(0x20, 0, 0);
 	if (pressed != 0x20) { cpu.cycles += 4 + 10; cpu.f |= FC; return; }

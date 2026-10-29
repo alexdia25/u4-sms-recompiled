@@ -294,6 +294,22 @@ static void world_after_check(void) { turn_loop(&world, 1); }   // $ACC0
 static void town_after_check(void) { turn_loop(&town, 1); }     // $AF8E
 static void world_turn_end(void) { turn_loop(&world, 2); }      // $ACD4
 static void town_turn_end(void) { turn_loop(&town, 2); }        // $AFA2
+// $AF57: when nobody in the party can act ($465D) the turn is slept away:
+// "Zzzzz" ($BCBF), a move's time, carry
+static void party_asleep(void) {
+	if (!native_on_fiber()) { native_decline(); return; }   // shadow mode: a lost party ends the game ($4483), which waits
+	call(0x465D);                      // party_alive
+	if (!(cpu.f & FC)) { cpu.cycles += 11; return; }
+	cpu.cycles += 5 + 10;
+	SET_HL(0xBCBF);
+	call(0x5519);                      // print_text_hl
+	cpu.cycles += 10 + 16 + 4 + 10;
+	SET_HL(0x0100);
+	wr16(0xC99A, HL);
+	op_scf();
+}
+Native native_party_asleep = { "party_asleep", 0xAF57, 2, party_asleep, OUT_A | OUT_F, .long_calls = 1 };
+
 Native native_world_turn = { "world_turn", 0xACB1, 2, world_turn, 0, 0, 0, .task = 1 };
 Native native_town_turn = { "town_turn", 0xAF85, 2, town_turn, 0, 0, 0, .task = 1 };
 Native native_world_after_check = { "world_after_check", 0xACC0, 2, world_after_check, 0, 0, 0, .task = 1 };

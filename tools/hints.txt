@@ -1008,3 +1008,6 @@ native   02:AC74 native_mode_world
 native   02:AC80 native_mode_town
 native   01:69D8 native_mode_dungeon
 native   01:69E4 native_dungeon_start
+name     02:AEA0 whirlpool                  # after a step south into the waters at ($E5-$E9,$D4-$D8): a whirlpool appears
+name     02:AF57 party_asleep               # carry: nobody can act this turn ("Zzzzz")
+native   02:AF57 native_party_asleep

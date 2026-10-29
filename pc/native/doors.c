@@ -186,8 +186,9 @@ static void place_name(uint8_t base) {   // add a,base / call print_item_name / 
 // Dungeons ($AD89; $ADE9 for the Abyss: all eight runes' parts first,
 // $C951/$C952) on foot only (else $4703, and no way in); towns, castles
 // and the rest ($ADB2..: "Welcome to" the place, its start by size);
-// shrines ($ADFF). Then $AE39 (the original from $AE3D: the window wiped,
-// the people kept, the new game mode); no way in: location 0 ($AE5B).
+// shrines ($ADFF). Then $AE39: the sound stopped, the window wiped, the
+// people kept, the new game mode, and on (not back to the turn) into the
+// place's map ($0E6C) or the dungeon ($3D78); no way in: location 0 ($AE5B).
 static void enter_place(void) {
 	uint16_t to = switch_on(0xAD6C);
 	uint16_t welcome = 0;
@@ -256,10 +257,23 @@ static void enter_place(void) {
 		cpu.a = mode = 0x12; I(7);
 		I(12);
 	}
-	(void)mode;
 	SET_HL(pop16()); I(10);            // $AE39: no return to the turn
 	mem_write((uint16_t)(cpu.ix + 0x08), cpu.a); I(19);
-	native_continue_at(0xAE3D);
+	call(0x0605);                      // sound_silence
+	call(0x310B);                      // window_wipe
+	call(0x40E9);                      // people_save
+	op_xor(cpu.a); I(4);
+	mem_write(DOOR_OPEN, cpu.a); I(13);
+	cpu.a = mem_read((uint16_t)(cpu.ix + 0x08)); I(19);
+	mem_write(0xC600, cpu.a); I(13);   // game_mode
+	op_sub8(0x12, 0, 0); I(7);
+	if (cpu.f & FZ) { I(10); native_continue_at(0x0E6C); return; }   // load_location
+	I(10);
+	op_sub8(0x13, 0, 0); I(7);
+	if (cpu.f & FZ) { I(10); native_continue_at(0x3D78); return; }   // into the dungeon
+	I(10);
+	I(10);                             // ret: to the turn's caller
+	(void)mode;
 	return;
 no_way:                                // $AE5B
 	op_xor(cpu.a); I(4);

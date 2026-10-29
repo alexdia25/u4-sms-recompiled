@@ -27,7 +27,8 @@
 //   $18); not onto a hazard, nor (most of the time) where it stands, nor
 //   onto another foe or a member; then by its kind (graphic below $80:
 //   where people walk, $3EB7; below $8E: water; others by the table at
-//   $AA93, left to the original). Carry: it may not.
+//   $AA93: some also on water, some anywhere but water and $45). Carry:
+//   it may not.
 // - compact_records ($B868, bank 3): of the B 8-byte records at HL, the
 //   empty ones (first byte 0) taken out, the rest moved up, zeroes after.
 // - missile_start ($38FC): the missile's glyphs queued ($30DA), its place
@@ -332,6 +333,33 @@ static int someone_at(uint16_t records, uint16_t size, uint8_t n, uint8_t alive)
 	return 0;
 }
 
+// switch_on_a ($334A) by its vector ($7E18), called with `back` on the
+// stack, on the table at HL: the address it jumps to (its return popped
+// into AF), or 0 when A isn't in it (it returns to `back`)
+static uint16_t switch_on(uint16_t back) {
+	I(17 + 10);
+	for (;;) {
+		cpu.b = mem_read(HL); I(7);
+		cpu.b = op_inc8(cpu.b); I(4);
+		if (cpu.f & FZ) { I(11); return 0; }
+		I(5);
+		op_sub8(mem_read(HL), 0, 0); I(7);
+		SET_HL(HL + 1); I(6);
+		if (cpu.f & FZ) break;
+		I(7);
+		SET_HL(HL + 2); I(12);
+		I(10);
+	}
+	I(12);
+	cpu.a = back >> 8; cpu.f = (uint8_t)back; I(10);
+	cpu.a = mem_read(HL); I(7);
+	SET_HL(HL + 1); I(6);
+	cpu.h = mem_read(HL); I(7);
+	cpu.l = cpu.a; I(4);
+	I(4);
+	return HL;
+}
+
 static void foe_can_step(void) {       // $A9E2
 	push(BC); push(DE); push(HL);
 	push16(cpu.iy); I(15);
@@ -398,13 +426,29 @@ static void foe_can_step(void) {       // $A9E2
 						op_sub8(0x03, 0, 0); I(7);
 						op_ccf(); I(4);
 						I(12);
-					} else {           // $AA7E: by the table, in the original
+					} else {           // $AA7E: by the table
 						I(12);
 						SET_HL(0xAA93); I(10);
-						I(17);
-						push16(0xAA84);
-						native_continue_at(0x7E18);   // switch_on_a
-						return;
+						uint16_t to = switch_on(0xAA84);
+						cpu.a = mem_read((uint16_t)(cpu.ix + 0x23)); I(19);
+						if (to == 0xAAAC) {        // water, or where people walk
+							op_sub8(0x03, 0, 0); I(7);
+							op_ccf(); I(4);
+							if (!(cpu.f & FC)) I(12);
+							else { I(7); call(0x7E99); I(12); }
+						} else if (to == 0xAAB9) { // anywhere but water and $45
+							op_sub8(0x03, 0, 0); I(7);
+							if (cpu.f & FC) I(12);
+							else {
+								I(7);
+								op_sub8(0x45, 0, 0); I(7);
+								if (cpu.f & FZ) { I(12); blocked = 1; }
+								else { I(7); op_or(cpu.a); I(4); I(12); }
+							}
+						} else {                   // others: where people walk
+							call(0x7E99);
+							I(12);
+						}
 					}
 				}
 			}

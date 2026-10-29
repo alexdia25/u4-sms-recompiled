@@ -53,6 +53,83 @@ static int step_on_map(void) {
 	return (cpu.f & FC) != 0;
 }
 
+// $9652: the shopkeeper across the counter's row A: the shop type is the
+// row's place in this place's 8 rows at $96C1, else the stable (row $18,
+// location $0E) or the seer (row $19, location 1; once the location is read,
+// it is what is compared with $19), else "Funny, no response!"; the type's
+// handler ($9741) is
+// entered after the shop's number ($9755, 0-based), its messages (bank
+// $16) and its tune
+static void shop_open(void) {
+	cpu.cycles += 10 + 4;              // jp $9652 / ld c,a
+	cpu.c = cpu.a;
+	call(0x33EE);                      // place_index
+	cpu.cycles += 4 + 4 + 4 + 10 + 11;
+	cpu.a = (uint8_t)(cpu.a * 8);
+	SET_HL(0x96C1);
+	call_original(0x0030);             // rst $30: HL += A
+	cpu.cycles += 4 + 10;
+	cpu.a = cpu.c;
+	SET_BC(0x0800);
+	for (;;) {
+		cpu.cycles += 7;
+		op_sub8(mem_read(HL), 0, 0);
+		if (cpu.f & FZ) { cpu.cycles += 12; goto found; }
+		cpu.cycles += 7 + 6 + 4;
+		SET_HL(HL + 1);
+		cpu.c++;
+		if (--cpu.b) cpu.cycles += 13; else { cpu.cycles += 8; break; }
+	}
+	cpu.cycles += 7 + 7;
+	cpu.c = 8;
+	op_sub8(0x18, 0, 0);
+	if (cpu.f & FZ) {
+		cpu.cycles += 7 + 13 + 7;
+		cpu.a = mem_read(0xC9A0);
+		op_sub8(0x0E, 0, 0);
+		if (cpu.f & FZ) { cpu.cycles += 12; goto found; }
+		cpu.cycles += 7;
+	} else cpu.cycles += 12;
+	cpu.cycles += 7 + 7;
+	cpu.c = 9;
+	op_sub8(0x19, 0, 0);
+	if (cpu.f & FZ) {
+		cpu.cycles += 7 + 13 + 7;
+		cpu.a = mem_read(0xC9A0);
+		op_sub8(0x01, 0, 0);
+		if (cpu.f & FZ) { cpu.cycles += 12; goto found; }
+		cpu.cycles += 7;
+	} else cpu.cycles += 12;
+	go(0x810D);
+	return;
+found:
+	cpu.cycles += 4 + 10 + 11;
+	cpu.a = cpu.c;
+	SET_HL(0x9741);
+	call_original(0x0020);             // rst $20: HL = the handler
+	push16(HL);
+	cpu.cycles += 11 + 4 + 16 + 10 + 11;
+	cpu.a = (uint8_t)(cpu.c << 4);     // (rst $30 sets the flags)
+	SET_HL(0x9755);
+	call_original(0x0030);
+	call(0x33EE);                      // place_index
+	cpu.cycles += 11;
+	call_original(0x0028);             // rst $28: A = (HL + A)
+	cpu.cycles += 4 + 13 + 7 + 13 + 10;
+	cpu.a = op_dec8(cpu.a);
+	mem_write(0xC983, cpu.a);          // shop_number
+	cpu.a = 0x16;
+	mem_write(0xC0CA, 0x16);           // message_bank
+	SET_HL(0x8000);
+	call(0x0807);                      // far_word
+	cpu.cycles += 16 + 7;
+	wr16(0xC0CB, HL);                  // message_table
+	cpu.a = 0x04;
+	call(0x33AF);                      // play_music_later
+	go(0x54CE);                        // jp print_newline: it returns into the handler
+}
+
+
 // ---------------------------------------------------------------- talk --
 // talk_command ($8091): "Direction:", then whoever is there. Across a shop
 // counter (tiles $60-$7E) the shopkeeper's shop ($9652); a person with
@@ -94,7 +171,7 @@ static void talk_command(void) {
 		if (mem_read(cpu.iy + 3) != 0x52) { native_continue_at(0x810D); return; }   // not a shopkeeper
 		cpu.cycles += 4 + 4;
 		cpu.a = (uint8_t)(cpu.h - cpu.d);   // the counter's row picks the shop
-		go(0x9652);
+		shop_open();
 		return;
 	}
 	call(0x42E3);                      // $80E6
