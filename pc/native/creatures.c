@@ -579,6 +579,179 @@ along_y:                               // $B88A
 	(void)axis_y;
 }
 
+// $B9C3: one step of the shot: the sprites cleared, its place on by its
+// step ($0BA4), its cell kept at IX+$2C, its glyph turned unless the map
+// cell there is $7E ($3074), then a frame (jp wait_vblank: back to `back`)
+static void shot_step(uint16_t back) {
+	call(0x0950);                      // sprites_clear
+	call(0x0BA4);                      // slot_step_add
+	call(0x399C);                      // screen_cell
+	cpu.cycles += 19 + 19 + 4;
+	mem_write(cpu.ix + 0x2C, cpu.l);
+	mem_write(cpu.ix + 0x2D, cpu.h);
+	cpu.a = cpu.h;
+	call(0x36ED);                      // times_11
+	cpu.cycles += 4 + 4 + 4 + 7 + 7 + 7;
+	op_add8(cpu.l, 0);
+	op_add8(cpu.a, 0);
+	cpu.l = cpu.a;
+	cpu.h = 0xD9;
+	cpu.a = mem_read(HL);
+	op_sub8(0x7E, 0, 0);
+	if (!(cpu.f & FZ)) call(0x3074);   // missile_flip
+	else cpu.cycles += 10;
+	cpu.cycles += 10;
+	task_call(0x041C, back);           // jp wait_vblank
+}
+
+// $B8C7: a creature at IY shoots glyph A at the party from (E, D) on the
+// screen: the missile ($30DA) aimed with 8 steps ($2BFE, four times over),
+// placed on the creature (the party being at (5, 5) of the window); a
+// sound, 3 steps, then up to 12 more until it reaches the party or
+// someone ($42B7); a burst there (glyphs 4, 5, 6 for 3, 4, 5 frames);
+// the party is harmed ($4812), or the person hit is gone (a creature
+// among the first 8, one time in four)
+static void creature_shot(void) {
+	cpu.cycles += 11 + 11 + 11 + 15;
+	push16(BC); push16(DE); push16(HL); push16(cpu.iy);
+	call(0x30DA);                      // queue_glyphs
+	cpu.cycles += 19 + 4 + 4 + 4 + 10;
+	mem_write(cpu.ix + 0x09, 0x08);
+	{ uint16_t t = HL; SET_HL(DE); SET_DE(t); }
+	cpu.e++; cpu.d++;
+	SET_HL(0x0101);
+	call(0x2BFE);                      // aim
+	cpu.cycles += 11 + 11 + 19 + 19 + 4 + 11 + 11 + 19 + 19;
+	SET_HL((uint16_t)(HL << 2));
+	mem_write(cpu.ix + 0x0E, cpu.l);
+	mem_write(cpu.ix + 0x0F, cpu.h);
+	{ uint16_t t = HL; SET_HL(DE); SET_DE(t); }
+	SET_HL((uint16_t)(HL << 2));
+	mem_write(cpu.ix + 0x10, cpu.l);
+	mem_write(cpu.ix + 0x11, cpu.h);
+	for (int axis = 0; axis < 2; axis++) {   // the screen x, then y
+		cpu.cycles += 13 + 8 + 19 + 7;
+		cpu.a = mem_read(PARTY_XY + axis);
+		op_neg();
+		op_add8(mem_read(cpu.iy + 1 + axis), 0);
+		op_add8(0x05, 0);
+		call(0x36F7);                  // times_12
+		cpu.cycles += 19 + 19;
+		mem_write(cpu.ix + 0x0B + 2 * axis, cpu.a);
+		mem_write(cpu.ix + 0x0A + 2 * axis, 0);
+	}
+	cpu.cycles += 7;
+	cpu.a = 0x1C;
+	call(0x05F1);                      // play_sound
+	call(0x129D);                      // refresh
+	cpu.cycles += 7;
+	cpu.b = 3;
+	do {
+		cpu.cycles += 11 + 17;
+		push16(BC);
+		shot_step(0xB923);
+		cpu.cycles += 10;
+		SET_BC(pop16());
+		cpu.cycles += --cpu.b ? 13 : 8;
+	} while (cpu.b);
+	cpu.cycles += 7;
+	cpu.b = 0x0C;
+	int hit = 0;
+	for (;;) {
+		cpu.cycles += 11 + 17;
+		push16(BC);
+		shot_step(0xB92C);
+		cpu.cycles += 19 + 19 + 7 + 4;
+		cpu.l = mem_read(cpu.ix + 0x2C);
+		cpu.h = mem_read(cpu.ix + 0x2D);
+		cpu.a = 0x05;
+		op_sub8(cpu.l, 0, 0);
+		if (cpu.f & FZ) {
+			cpu.cycles += 7 + 4;
+			op_sub8(cpu.h, 0, 0);
+		}
+		if (cpu.f & FZ) {              // at the party
+			cpu.cycles += 7 + 7 + 12;
+			cpu.a = 0xFF;
+			hit = 1;
+			break;
+		}
+		cpu.cycles += 12 + 13 + 4 + 7 + 4 + 13 + 4 + 7 + 4 + 7;
+		cpu.a = (uint8_t)(mem_read(PARTY_XY) + cpu.l);
+		op_add8(0xFB, 0);
+		cpu.l = cpu.a;
+		cpu.a = (uint8_t)(mem_read(PARTY_XY + 1) + cpu.h);
+		op_add8(0xFB, 0);
+		cpu.h = cpu.a;
+		cpu.b = 0x20;
+		call(0x42B7);                  // person_at
+		if (!(cpu.f & FC)) { cpu.cycles += 12; hit = 1; break; }
+		cpu.cycles += 7 + 10;
+		SET_BC(pop16());
+		if (--cpu.b) { cpu.cycles += 13; continue; }
+		cpu.cycles += 8 + 12;
+		break;
+	}
+	if (hit) {                         // $B958
+		cpu.cycles += 10 + 11 + 19 + 19;
+		SET_BC(pop16());
+		push16((uint16_t)(cpu.a << 8 | cpu.f));
+		cpu.l = mem_read(cpu.ix + 0x2C);
+		cpu.h = mem_read(cpu.ix + 0x2D);
+		call(0x3991);                  // screen_place
+		cpu.cycles += 19 + 19 + 7;
+		mem_write(cpu.ix + 0x0B, cpu.l);
+		mem_write(cpu.ix + 0x0D, cpu.h);
+		cpu.a = 0x12;
+		call(0x05F1);
+		static const uint16_t waits[3] = { 0xB978, 0xB985, 0xB992 };
+		for (int i = 0; i < 3; i++) {  // the burst
+			call(0x0950);
+			cpu.cycles += 7;
+			cpu.a = (uint8_t)(4 + i);
+			call(0x307C);              // missile_draw
+			cpu.cycles += 7;
+			cpu.b = (uint8_t)(3 + i);
+			tcall(0x0437, waits[i]);   // wait_frames
+		}
+		call(0x0950);
+		tcall(0x041C, 0xB998);         // wait_vblank
+		cpu.cycles += 10 + 4 + 10;
+		{ uint16_t af = pop16(); cpu.a = af >> 8; cpu.f = (uint8_t)af; }
+		op_or(cpu.a);
+		if (cpu.f & FS) {              // the party
+			tcall(0x4812, 0xB9A0);
+			cpu.cycles += 12;
+		} else {                       // $B9A5: someone else
+			cpu.cycles += 11;
+			push16((uint16_t)(cpu.a << 8 | cpu.f));
+			call(0x48F7);              // person_record
+			cpu.cycles += 10 + 7;
+			{ uint16_t af = pop16(); cpu.a = af >> 8; cpu.f = (uint8_t)af; }
+			op_sub8(0x08, 0, 0);
+			int gone = 1;
+			if (cpu.f & FC) {
+				cpu.cycles += 7;
+				rnd();
+				cpu.cycles += 7;
+				op_and(0x03);
+				if (!(cpu.f & FZ)) { cpu.cycles += 12; gone = 0; }
+				else cpu.cycles += 7;
+			} else cpu.cycles += 12;
+			if (gone) {
+				cpu.cycles += 19 + 19;
+				mem_write(cpu.iy + 3, 0);
+				mem_write(cpu.iy + 0, 0);
+			}
+		}
+	}
+	cpu.cycles += 14 + 10 + 10 + 10 + 10;   // $B9BD
+	cpu.iy = pop16();
+	SET_HL(pop16());
+	SET_DE(pop16());
+	SET_BC(pop16());
+}
+
 // $B8A8: a ship near the party fires when broadside on, else moves
 static void ship_near(uint16_t site) {
 	cpu.cycles += 19 + 7 + 7;
@@ -593,9 +766,10 @@ static void ship_near(uint16_t site) {
 		cpu.cycles += 4 + 4 + 10;
 		if (cpu.h) { ship_moves(); return; }
 	}
-	cpu.cycles += 7 + 10 - 17;         // ld a,7 / jp $B8C7
+	cpu.cycles += 7 + 10;              // ld a,7 / jp $B8C7
 	cpu.a = 7;
-	tcall(0xB8C7, site);
+	(void)site;
+	creature_shot();
 }
 
 // $B9E4: the world's monsters (the first 8 of the table)
@@ -673,7 +847,8 @@ static int world_monsters(void) {
 					if (cpu.a & 1) {
 						cpu.cycles += 7;
 						cpu.a = 9;
-						tcall(0xB8C7, 0xBA9A);
+						cpu.cycles += 17;
+						creature_shot();
 						cpu.cycles += 12;
 						goto next;
 					}
