@@ -1135,6 +1135,45 @@ done:
 	cpu.cycles += 10;                  // jp task_return_3
 }
 
+// $AB6B: foe IX+$1B leaves the battlefield: "<name> Flees!"; one that is
+// not a creature to fight ($430A) gains the party a point each of
+// Compassion and Justice; a sound, and the foe is gone
+static void foe_flees(void) {
+	cpu.cycles += 17 + 11 + 11 + 11 + 15;
+	push16(BC); push16(DE); push16(HL); push16(cpu.iy);
+	tcall(0x7F6E, 0xAB70);             // print_newline
+	cpu.cycles += 19;
+	cpu.c = mem_read(cpu.ix + 0x1B);
+	call(0x7E8D);                      // foe_record
+	cpu.cycles += 19;
+	cpu.a = mem_read(cpu.iy + 5);
+	call(0x7EC0);                      // its name
+	tcall(0x7F62, 0xAB7F);             // print_text_hl
+	say_inline_v(0xAB85);              // " Flees!"
+	cpu.cycles += 19;
+	cpu.a = mem_read(cpu.iy + 5);
+	call(0x7E75);                      // is_foe
+	if (cpu.f & FC) cpu.cycles += 12;
+	else {
+		cpu.cycles += 7 + 7 + 7;
+		cpu.a = 1; cpu.c = 1;
+		call(0x7E00);                  // karma_gain
+		cpu.cycles += 7 + 7;
+		cpu.a = 1; cpu.c = 3;
+		call(0x7E00);
+	}
+	cpu.cycles += 7;
+	cpu.a = 0x19;
+	call(0x05F1);                      // play_sound
+	cpu.cycles += 19 + 19 + 14 + 10 + 10 + 10 + 10;
+	mem_write(cpu.iy + 5, 0);
+	mem_write(cpu.iy + 4, 0);
+	cpu.iy = pop16();
+	SET_HL(pop16());
+	SET_DE(pop16());
+	SET_BC(pop16());
+}
+
 // foe_acts ($A5BC): the foe goes for the member it picked: casts or breathes
 // at them from afar, puts the party to sleep, flees when hurt, steps
 // towards them (around what's in the way), or strikes when next to them.
@@ -1356,7 +1395,7 @@ static void foe_acts(void) {
 		}
 	}
 	cpu.cycles += 5;
-	tcall(0xAB6B, 0xA748);             // off the field: gone
+	foe_flees();                       // off the field: gone ($AB6B)
 	cpu.cycles += 10;
 }
 
