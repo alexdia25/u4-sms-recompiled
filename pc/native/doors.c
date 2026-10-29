@@ -149,6 +149,124 @@ static int world_event_here(void) {    // a moongate, or a place's entrance, und
 	return 0;
 }
 
+// call switch_on_a ($334A) from `back` - 3 on the table at HL: the
+// address it jumps to (its return popped into AF), or 0 (it returns, Z)
+static uint16_t switch_on(uint16_t back) {
+	I(17);
+	for (;;) {
+		cpu.b = mem_read(HL); I(7);
+		cpu.b = op_inc8(cpu.b); I(4);
+		if (cpu.f & FZ) { I(11); return 0; }
+		I(5);
+		op_sub8(mem_read(HL), 0, 0); I(7);
+		SET_HL(HL + 1); I(6);
+		if (cpu.f & FZ) break;
+		I(7);
+		SET_HL(HL + 1); I(6);
+		SET_HL(HL + 1); I(6);
+		I(10);
+	}
+	I(12);
+	cpu.a = back >> 8; cpu.f = (uint8_t)back; I(10);
+	cpu.a = mem_read(HL); I(7);
+	SET_HL(HL + 1); I(6);
+	cpu.h = mem_read(HL); I(7);
+	cpu.l = cpu.a; I(4);
+	I(4);
+	return HL;
+}
+
+static void place_name(uint8_t base) {   // add a,base / call print_item_name / call print_newline
+	op_add8(base, 0); I(7);
+	call(0x5516);
+	call(0x54CE);
+}
+
+// $AD6D, by the figure the party travels as ($C9BB): how it goes in.
+// Dungeons ($AD89; $ADE9 for the Abyss: all eight runes' parts first,
+// $C951/$C952) on foot only (else $4703, and no way in); towns, castles
+// and the rest ($ADB2..: "Welcome to" the place, its start by size);
+// shrines ($ADFF). Then $AE39 (the original from $AE3D: the window wiped,
+// the people kept, the new game mode); no way in: location 0 ($AE5B).
+static void enter_place(void) {
+	uint16_t to = switch_on(0xAD6C);
+	uint16_t welcome = 0;
+	uint8_t mode;
+	switch (to) {
+	case 0: I(10); return;             // ret at $AD6C
+	case 0xADE9:                       // the Abyss
+		cpu.a = mem_read(0xC951); I(13);
+		op_and(0x1C); I(7);
+		op_sub8(0x1C, 0, 0); I(7);
+		if (!(cpu.f & FZ)) { I(12); goto no_way; }
+		I(7);
+		cpu.a = mem_read(0xC952); I(13);
+		op_and(0x1C); I(7);
+		op_sub8(0x1C, 0, 0); I(7);
+		if (!(cpu.f & FZ)) { I(10); goto no_way; }
+		I(10); I(10);
+		/* fall through */
+	case 0xAD89:                       // a dungeon
+		SET_HL(0xBCD1); I(10);
+		call(0xAE20);                  // say_welcome
+		cpu.a = mem_read(0xC9A0); I(13);
+		place_name(0x7D);
+		cpu.a = mem_read(0xC959); I(13);
+		op_sub8(0x1F, 0, 0); I(7);
+		if (!(cpu.f & FZ)) {
+			I(7);
+			call(0x4703);
+			I(10);
+			goto no_way;
+		}
+		I(12);
+		SET_HL(0x0202); I(10);
+		wr16(PARTY_X, HL); I(16);
+		cpu.a = mode = 0x13; I(7);
+		I(10);
+		break;
+	case 0xADFF:                       // a shrine
+		SET_HL(0xBCC6); I(10); call(0x5519);
+		SET_HL(0xBCF3); I(10); call(0x5519);
+		SET_HL(0xBCCD); I(10); call(0x5519);
+		cpu.a = mem_read(0xC9A0); I(13);
+		place_name(0x7D);
+		cpu.a = mode = 0x17; I(7);
+		I(12);
+		break;
+	case 0xADB2: welcome = 0xBCD9; break;
+	case 0xADDA: welcome = 0xBCDF; break;
+	case 0xADDF: welcome = 0xBCE6; break;
+	case 0xADE4: welcome = 0xBCEE; break;
+	default: native_continue_at(to); return;
+	}
+	if (welcome) {                     // $ADB5: a town, castle, village
+		SET_HL(welcome); I(10);
+		if (to != 0xADB2) I(12);       // jr $ADB5
+		call(0xAE20);
+		call(0x33EE);                  // place_index
+		place_name(0x7F);
+		cpu.a = mem_read(0xC9A0); I(13);
+		op_sub8(0x06, 0, 0); I(7);
+		SET_HL(0x1E0F); I(10);
+		if (cpu.f & FC) I(12);
+		else { I(7); SET_HL(0x0F01); I(10); }
+		wr16(PARTY_X, HL); I(16);
+		wr16(0xC985, HL); I(16);
+		cpu.a = mode = 0x12; I(7);
+		I(12);
+	}
+	(void)mode;
+	SET_HL(pop16()); I(10);            // $AE39: no return to the turn
+	mem_write((uint16_t)(cpu.ix + 0x08), cpu.a); I(19);
+	native_continue_at(0xAE3D);
+	return;
+no_way:                                // $AE5B
+	op_xor(cpu.a); I(4);
+	mem_write(0xC9A0, cpu.a); I(13);
+	I(10);
+}
+
 static void world_step(void) {         // $ACDC
 	// shadow mode: what follows a moongate or an entrance waits for frames
 	if (!native_on_fiber() && world_event_here()) { native_decline(); return; }
@@ -250,9 +368,7 @@ static void world_step(void) {         // $ACDC
 	wr16(0xC96D, DE); I(20);
 	cpu.a = mem_read(0xC9BB); I(13);
 	SET_HL(0xAD6D); I(10);
-	I(17);
-	push16(0xAD6C);                    // call switch_on_a: by the figure, in the original
-	native_continue_at(0x334A);
+	enter_place();
 }
 
 static int town_event_here(void) {     // town_step would go on into the original
