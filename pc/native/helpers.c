@@ -81,6 +81,9 @@
 //   mode's bit 7 set (the main loop starts the next one).
 // - tile_effect ($3F67): what the tile under the party ($C990) does: $03
 //   and $44 ($4071), $4C and $46 ($4812), $47 ($404A).
+// - ground_effects ($3F14): the ground's effects at a turn's end, by the
+//   map's kind: the world ($3F2B), towns (tile_effect), dungeons ($3F84),
+//   combat ($3FDC).
 // - screen_place ($3991): (L, H) cells as pixels (12 a cell);
 //   screen_cell ($399C): back from the missile's pixels (IX+$0B, $0D,
 //   from a cell's middle) to its cell (L, H).
@@ -1090,6 +1093,99 @@ static void tile_effect(void) {        // $3F67
 	I(10);
 }
 
+// $3F2B, on the world: nothing in the balloon ($957C); on a bridge ($17)
+// one time in eight "Bridge Trolls!" ($3F3D on: a fight); else as in towns
+static void ground_world(void) {
+	I(17); call_original(0x957C);
+	if (cpu.f & FZ) { I(11); return; }
+	I(5);
+	cpu.a = mem_read(0xC990); I(13);
+	op_sub8(0x17, 0, 0); I(7);
+	if (!(cpu.f & FZ)) { I(12); tile_effect(); return; }
+	I(7);
+	I(17); call_original(0x2BBF);      // random
+	op_and(0x07); I(7);
+	if (!(cpu.f & FZ)) { I(12); tile_effect(); return; }
+	I(7);
+	native_continue_at(0x3F3D);
+}
+
+// $3F84, in a dungeon: under the party ($C990) $A0 poison, $A2 harm, $A3
+// sleep; $80 "Winds!" (the light out), $81-$87 "Falling Rocks!", $88 on
+// "Pit!" (both harm, $4812), from $3FA7 on
+static void ground_dungeon(void) {
+	cpu.a = mem_read(0xC990); I(13);
+	cpu.b = cpu.a; I(4);
+	op_and(0xF0); I(7);
+	op_sub8(0xA0, 0, 0); I(7);
+	if (cpu.f & FZ) {
+		I(7);
+		cpu.a = cpu.b; I(4);
+		op_and(0x0F); I(7);
+		I(10); if (cpu.f & FZ) { native_continue_at(0x4071); return; }
+		op_sub8(0x02, 0, 0); I(7);
+		I(10); if (cpu.f & FZ) { native_continue_at(0x4812); return; }
+		op_sub8(0x03, 0, 0); I(7);
+		I(10); if (cpu.f & FZ) { native_continue_at(0x404A); return; }
+		I(10);
+		return;
+	}
+	I(12);
+	op_sub8(0x80, 0, 0); I(7);
+	if (!(cpu.f & FZ)) { I(11); return; }
+	I(5);
+	cpu.a = cpu.b; I(4);
+	op_sub8(0x80, 0, 0); I(7);
+	if (cpu.f & FZ) { I(7); native_continue_at(0x3FA7); return; }
+	I(12);
+	op_sub8(0x88, 0, 0); I(7);
+	if (cpu.f & FC) { I(7); native_continue_at(0x3FBB); }
+	else { I(12); native_continue_at(0x3FD0); }
+}
+
+// $3FDC, in combat: the current member's cell, by the table at $3FF4
+// ($03 and $44 poison, $47 sleep, $46 harm)
+static void ground_combat(void) {
+	I(17); call_original(0x48E1);      // current_object
+	cpu.a = mem_read((uint16_t)(cpu.iy + 2)); I(19);
+	op_or(cpu.a); I(4);
+	if (cpu.f & FZ) { I(11); return; }
+	I(5);
+	cpu.l = mem_read(cpu.iy); I(19);
+	cpu.h = mem_read((uint16_t)(cpu.iy + 1)); I(19);
+	I(17); call_original(0x38EB);      // arena_cell_at
+	SET_HL(0x3FF4); I(10);
+	I(17);
+	push16(0x3FF3);
+	native_continue_at(0x334A);        // switch_on_a
+}
+
+// ground_effects ($3F14): what the ground under the party does at the end
+// of a turn, by the map's kind ($C99F, the table at $3F1D)
+static void ground_effects(void) {
+	cpu.a = mem_read(0xC99F); I(13);
+	uint8_t kind = cpu.a;
+	SET_HL(0x3F1D); I(10);
+	I(10 + 10);                        // jp $0018, its jp $0083
+	op_add8(cpu.a, 0); I(4);
+	op_add8(cpu.l, 0); I(4);           // HL += 2A
+	cpu.l = cpu.a; I(4);
+	op_add8(cpu.h, cpu.f & FC); I(4);
+	op_sub8(cpu.l, 0, 1); I(4);
+	cpu.h = cpu.a; I(4);
+	cpu.a = mem_read(HL); I(7);
+	SET_HL(HL + 1); I(6);
+	cpu.h = mem_read(HL); I(7);
+	cpu.l = cpu.a; I(4);
+	I(4);                              // jp (hl)
+	switch (kind) {
+	case 0: ground_world(); break;
+	case 1: tile_effect(); break;
+	case 2: ground_dungeon(); break;
+	default: if (kind <= 6) ground_combat(); else native_continue_at(HL); break;
+	}
+}
+
 #define HELPER(name, addr, out) Native native_##name = { #name, addr, 0, name, out, .long_calls = 1 };
 HELPER(wait_vdp, 0x0262, 0)
 HELPER(far_read, 0x0815, OUT_A)
@@ -1136,6 +1232,7 @@ HELPER(restart_input, 0x0DD7, OUT_A | OUT_F)
 HELPER(person_blocks, 0x3974, OUT_A | OUT_F)
 HELPER(window_redraw, 0x323D, OUT_A | OUT_F)
 HELPER(tile_effect, 0x3F67, OUT_A | OUT_F)
+HELPER(ground_effects, 0x3F14, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL)
 HELPER(slot_step_add, 0x0BA4, OUT_A | OUT_F)
 HELPER(slot_step_sub, 0x0BC9, OUT_A | OUT_F)
 HELPER(end_tasks_of, 0x0B6D, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL)

@@ -1011,3 +1011,8 @@ native   01:69E4 native_dungeon_start
 name     02:AEA0 whirlpool                  # after a step south into the waters at ($E5-$E9,$D4-$D8): a whirlpool appears
 name     02:AF57 party_asleep               # carry: nobody can act this turn ("Zzzzz")
 native   02:AF57 native_party_asleep
+name     00:3F14 ground_effects             # the ground's effects at a turn's end, by map kind (table $3F1D)
+native   00:3F14 native_ground_effects
+name     00:3F2B ground_world
+name     00:3F84 ground_dungeon
+name     00:3FDC ground_combat
