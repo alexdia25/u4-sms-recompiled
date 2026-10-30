@@ -849,9 +849,274 @@ lead:                                  // $9349: the Avatar must lead
 }
 
 // -------------------------------------------------------------- search --
+static void nothing_here(void) {       // $8B9F
+	call(0x40D1);                      // sound
+	cpu.cycles += 10;
+	SET_HL(0x8E61);                    // "Nothing Here!"
+	call(0x5519);
+	done();
+}
+
+// the checks before some finds, called: 1 when it is "Nothing Here!"
+// (their pop af: out of the find)
+static int too_soon(void) {            // $8BAB: $C967 against the moves ($33F6)
+	cpu.cycles += 17 + 16;
+	SET_HL(rd16(0xC967));
+	call(0x33F6);
+	cpu.cycles += 16;
+	wr16(0xC967, HL);
+	if (!(cpu.f & FZ)) { cpu.cycles += 11; return 0; }
+	cpu.cycles += 5 + 10 + 12;
+	return 1;
+}
+static int moons_not_new(void) {       // $8BB8: both moons new ($C95D, $C95F)
+	cpu.cycles += 17 + 13 + 10 + 7;
+	cpu.a = mem_read(0xC95D);
+	SET_HL(0xC95F);
+	op_or(mem_read(HL));
+	if (cpu.f & FZ) { cpu.cycles += 11; return 0; }
+	cpu.cycles += 5 + 10 + 12;
+	return 1;
+}
+static int some_karma(void) {          // $8BC3: every virtue's karma 0 (all eighths won)
+	cpu.cycles += 17 + 10 + 7 + 4;
+	SET_HL(0xC90B);
+	cpu.b = 8;
+	op_xor(cpu.a);
+	do {
+		op_or(mem_read(HL));
+		SET_HL(HL + 1);
+		cpu.cycles += 7 + 6;
+		cpu.cycles += --cpu.b ? 13 : 8;
+	} while (cpu.b);
+	if (cpu.f & FZ) { cpu.cycles += 11; return 0; }
+	cpu.cycles += 5 + 10 + 12;
+	return 1;
+}
+
+// $8BD1, called: "You find..." and the thing (HL), with a sound; 5 points
+// of Spirituality (karma_gain, by jp)
+static void you_find(void) {
+	cpu.cycles += 17 + 11;
+	push16(HL);
+	call(0x40E1);                      // sound_20
+	cpu.cycles += 10;
+	SET_HL(0x8E70);
+	call(0x5519);
+	cpu.cycles += 10;
+	SET_HL(pop16());
+	call(0x5519);
+	cpu.cycles += 7 + 7 + 10;
+	cpu.a = 5; cpu.c = 5;
+	call_original(0x4255);             // jp karma_gain
+}
+
+// $8BE6: reagent A gained, 2-9 more, 99 at most ("Dropped some!")
+static void reagent_found(void) {
+	cpu.cycles += 10 + 11;
+	SET_HL(0xC92F);
+	call_original(0x0030);             // rst $30
+	call(0x2BBF);                      // random
+	cpu.cycles += 7 + 7 + 7 + 7 + 7;
+	op_and(0x07);
+	op_add8(0x02, 0);
+	op_add8(mem_read(HL), 0);
+	mem_write(HL, cpu.a);
+	op_sub8(0x64, 0, 0);
+	if (cpu.f & FC) cpu.cycles += 12;
+	else {
+		cpu.cycles += 7 + 10 + 7;
+		mem_write(HL, 0x63);
+		cpu.a = 0x10;
+		call(0x05F1);                  // play_sound
+		cpu.cycles += 10;
+		SET_HL(0x8E7F);                // "Dropped some!"
+		call(0x5519);
+	}
+	done();
+}
+
+static void found_xp(uint16_t xp) {    // $8CAB / $8CFE: found (HL), and xp to the Avatar
+	you_find();
+	cpu.cycles += 7 + 10;
+	cpu.c = 0;
+	SET_HL(xp);
+	call(0x4205);                      // member_gain_xp
+	done();
+}
+
+// ld hl,flags / bit n,(hl) / jp nz,$8B9F / set n,(hl) / ld hl,text: 0 when
+// already found ("Nothing Here!" said)
+static int first_time(uint16_t flags, uint8_t bit, uint16_t text) {
+	cpu.cycles += 10 + 12 + 10;
+	SET_HL(flags);
+	if (mem_read(flags) & (1 << bit)) { nothing_here(); return 0; }
+	cpu.cycles += 15 + 10;
+	mem_write(flags, (uint8_t)(mem_read(flags) | 1 << bit));
+	SET_HL(text);
+	return 1;
+}
+
+// $8D3B: the telescope: a place's map (by the letter picked) shown in turn
+// ($3762, the gem map $4F8A), the view's own kept at $8800 meanwhile
+static void telescope(void) {
+	cpu.cycles += 10;
+	SET_HL(0x8F61);
+	call(0x5519);
+	cpu.cycles += 10 + 10 + 10;
+	SET_HL(0xD000); SET_DE(0x8800); SET_BC(0x0800);
+	call(0x0C49);                      // sram_copy
+	cpu.cycles += 10;
+	SET_HL(0x8E20);
+	tcall(0x2E7F, 0x8D50);             // menu_draw
+	cpu.cycles += 19 + 19;
+	mem_write(SLOT + 0x1A, 0);
+	mem_write(SLOT + 0x1B, 0);
+	for (;;) {
+		cpu.cycles += 10;              // $8D5B
+		SET_HL(0x8F8D);                // "You Select: "
+		call(0x5519);
+		int picked;
+		for (;;) {                     // $8D61
+			call(0x335C);              // cursor
+			cpu.cycles += 20;
+			if (!(mem_read(SLOT + 0x1B) & 1)) call(0x129D);
+			else cpu.cycles += 10;
+			yield_at(0x8D6B);
+			cpu.cycles += 7 + 10;
+			cpu.c = 0x10;
+			SET_DE(0x0001);
+			call(0x49F9);              // menu_step_wrap
+			if (cpu.f & FZ) { cpu.cycles += 12; continue; }
+			cpu.cycles += 7;
+			picked = !(cpu.f & FC);
+			cpu.cycles += picked ? 7 : 12;
+			break;
+		}
+		if (!picked) break;
+		cpu.cycles += 23 + 19 + 7;
+		mem_write(SLOT + 0x1B, (uint8_t)(mem_read(SLOT + 0x1B) | 1));
+		cpu.a = (uint8_t)(mem_read(SLOT + 0x1A) + 0x41);
+		call(0x548F);                  // print_char
+		newline();
+		cpu.cycles += 19;
+		cpu.a = mem_read(SLOT + 0x1A);
+		call(0x3762);                  // the place's map
+		tcall(0x4F8A, 0x8D8F);         // gem_map
+		cpu.cycles += 12;
+	}
+	cpu.cycles += 10 + 10 + 10;        // $8D94
+	SET_HL(0x8800); SET_DE(0xD000); SET_BC(0x0800);
+	call(0x0C49);
+	call(0x276D);                      // forget_screen
+	call(0x1A7C);                      // compose_screen
+	newline();
+	done();
+}
+
+// what search found, by its routine in the table at $8C07 ($8C76 in
+// dungeons): reagents (in two places each), the Bell, Horn, Wheel, Skull,
+// the Black and White Stones, the Book, the Candle (each once: bits of
+// $C951, $C952, $C955), the telescope, the Mystic Armour and Weapons (once
+// all eight eighths are won), the runes (by location, $8E10; bits of
+// $C956); some only when both moons are new or enough moves have passed
+static void found(uint16_t at) {
+	switch (at) {
+	case 0x8C7C: case 0x8C8D:          // Mandrake Root, Nightshade
+		if (moons_not_new() || too_soon()) { nothing_here(); return; }
+		cpu.cycles += 10;
+		SET_HL(at == 0x8C7C ? 0x8E8E : 0x8E9E);
+		you_find();
+		cpu.cycles += 7 + 10;
+		cpu.a = at == 0x8C7C ? 7 : 6;
+		reagent_found();
+		return;
+	case 0x8C9E: if (first_time(0xC951, 2, 0x8EAB)) found_xp(0x0190); return;   // the Bell
+	case 0x8CB9: if (first_time(0xC952, 0, 0x8EC1)) { cpu.cycles += 12; found_xp(0x0190); } return;   // the Horn
+	case 0x8CC8: if (first_time(0xC952, 1, 0x8ED1)) { cpu.cycles += 12; found_xp(0x0190); } return;   // the Wheel
+	case 0x8CD7:                       // the Skull: not once thrown away (bit 1)
+		if (moons_not_new()) { nothing_here(); return; }
+		cpu.cycles += 10 + 12 + 10;
+		SET_HL(0xC951);
+		if (mem_read(HL) & 1) { nothing_here(); return; }
+		cpu.cycles += 12 + 10;
+		if (mem_read(HL) & 2) { nothing_here(); return; }
+		cpu.cycles += 15 + 10 + 12;
+		mem_write(HL, (uint8_t)(mem_read(HL) | 1));
+		SET_HL(0x8EF2);
+		found_xp(0x0190);
+		return;
+	case 0x8CEE:                       // the Black Stone
+		if (moons_not_new()) { nothing_here(); return; }
+		if (first_time(0xC955, 7, 0x8F14)) found_xp(0x00C8);
+		return;
+	case 0x8D0C: if (first_time(0xC955, 6, 0x8F26)) { cpu.cycles += 12; found_xp(0x00C8); } return;   // the White Stone
+	case 0x8D1B: if (first_time(0xC951, 3, 0x8F38)) { cpu.cycles += 10; found_xp(0x0190); } return;   // the Book
+	case 0x8D2B: if (first_time(0xC951, 4, 0x8F4C)) { cpu.cycles += 10; found_xp(0x0190); } return;   // the Candle
+	case 0x8D3B: telescope(); return;
+	case 0x8DAC: case 0x8DC1: {        // Mystic Armour, Mystic Weapons
+		if (some_karma()) { nothing_here(); return; }
+		uint16_t count = at == 0x8DAC ? 0xC91E : 0xC92E;
+		cpu.cycles += 13 + 4 + 10;
+		cpu.a = mem_read(count);
+		op_or(cpu.a);
+		if (!(cpu.f & FZ)) { nothing_here(); return; }
+		cpu.cycles += 7 + 13 + 10 + 10;
+		cpu.a = 8;
+		mem_write(count, 8);
+		SET_HL(at == 0x8DAC ? 0x8F9A : 0x8FAA);
+		found_xp(0x0190);
+		return;
+	}
+	case 0x8DD6: {                     // a rune
+		cpu.cycles += 10 + 7 + 13;
+		SET_HL(0x8E10);
+		cpu.b = 0;
+		cpu.a = mem_read(0xC9A0);
+		for (;;) {
+			cpu.cycles += 7 + 6;
+			op_sub8(mem_read(HL), 0, 0);
+			SET_HL(HL + 1);
+			if (cpu.f & FZ) { cpu.cycles += 12; break; }
+			cpu.cycles += 7 + 6 + 4 + 12;
+			SET_HL(HL + 1);
+			cpu.b++;
+		}
+		cpu.cycles += 7 + 10 + 4 + 7 + 10;
+		uint8_t bit = mem_read(HL);
+		SET_HL(0xC956);
+		cpu.c = bit;
+		cpu.a = bit;
+		op_and(mem_read(HL));
+		if (!(cpu.f & FZ)) { nothing_here(); return; }
+		cpu.cycles += 4 + 7 + 7 + 11 + 10;
+		cpu.a = bit;
+		op_or(mem_read(HL));
+		mem_write(HL, cpu.a);
+		push16(BC);
+		SET_HL(0x8FBB);                // "The rune of "
+		you_find();
+		cpu.cycles += 10 + 7;
+		cpu.a = (uint8_t)(pop16() >> 8);
+		op_add8(0x97, 0);
+		call(0x5516);                  // print_item_name: the virtue
+		cpu.cycles += 10;
+		SET_HL(0x8FC8);                // "!"
+		call(0x5519);
+		cpu.cycles += 7 + 10;
+		cpu.c = 0;
+		SET_HL(0x0064);
+		call(0x4205);
+		done();
+		return;
+	}
+	}
+	native_continue_at(at);
+}
+
 // search ($8B61): look up the party's place (map, x, y) in the table of
 // things to find ($8C07; in dungeons $8C76; 5 bytes each, ending with $FF)
-// and go to its routine (original code); nothing there: "Nothing here!"
+// and go to its routine (found); nothing there: "Nothing Here!"
 static void search(void) {
 	call(0x4324);
 	call(0x54CE);
@@ -881,17 +1146,13 @@ static void search(void) {
 		if (k == 3) {
 			cpu.cycles += 19 + 19 + 4;
 			SET_HL(rd16(iy + 3));
-			native_continue_at(HL);
+			found(HL);
 			return;
 		}
 		cpu.cycles += 5 + 15 + 12;
 	}
 	cpu.cycles += 5;
-	call(0x40D1);
-	cpu.cycles += 10;
-	SET_HL(0x8E61);                    // "Nothing here!"
-	call(0x5519);
-	done();
+	nothing_here();
 }
 Native native_search = { "search", 0x8B61, 2, search, 0, 0, 0, .task = 1 };
 

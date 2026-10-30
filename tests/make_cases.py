@@ -288,9 +288,18 @@ def main():
     SEARCHES = {                       # Search where something is to be found (the table at $8C07)
         'search_town_1':  (False, ['C953:08', 'C985:08', 'C954:06', 'C986:06']),   # Moonglow is 6
         'search_town_2':  (False, ['C9A0:03', 'C953:06', 'C985:06', 'C954:06', 'C986:06']),
-        'search_world_1': (True, ['C953:B6', 'C954:36', 'C95D:00', 'C95F:00']),
+        'search_world_1': (True, ['C953:B6', 'C954:36', 'C95D:00', 'C95F:00', 'C967:FF', 'C968:FF']),
         'search_world_2': (True, ['C953:E0', 'C954:85']),
         'search_world_3': (True, ['C953:2D', 'C954:AD']),
+        'search_bell':    (True, ['C953:B0', 'C954:D0']),
+        'search_wheel':   (True, ['C953:60', 'C954:D7']),
+        'search_skull':   (True, ['C953:C5', 'C954:F5', 'C95D:00', 'C95F:00']),
+        'search_black_stone': (True, ['C953:E0', 'C954:85', 'C95D:00', 'C95F:00']),
+        'search_nightshade': (True, ['C953:2E', 'C954:95', 'C95D:00', 'C95F:00', 'C967:FF', 'C968:FF']),
+        'search_telescope': (False, ['C9A0:03', 'C953:16', 'C985:16', 'C954:03', 'C986:03']),
+        'search_candle':  (False, ['C9A0:11', 'C953:16', 'C985:16', 'C954:01', 'C986:01']),
+        'search_mystic_armour': (False, ['C9A0:04', 'C953:16', 'C985:16', 'C954:04', 'C986:04', 'C90B:00', 'C90C:00', 'C90D:00', 'C90E:00', 'C90F:00', 'C910:00', 'C911:00', 'C912:00']),
+        'search_mystic_weapons': (False, ['C9A0:05', 'C953:08', 'C985:08', 'C954:0F', 'C986:0F', 'C90B:00', 'C90C:00', 'C90D:00', 'C90E:00', 'C90F:00', 'C910:00', 'C911:00', 'C912:00']),
     }
     for name, (world, pokes) in SEARCHES.items():
         rnd = random.Random(name)
@@ -302,9 +311,15 @@ def main():
             s.poke(p)
         s.f += 10
         for _ in range(2):
+            if 'C95D:00' in pokes:     # the moons new again: they move with time
+                for p in ('C95D:00', 'C95E:00', 'C95F:00', 'C960:00'):
+                    s.poke(p)
             s.press('2', 40)           # the command menu, Search
             for _ in range(6):
                 s.press('D', 30)
+            if 'C967:FF' in pokes:
+                for p in ('C95D:00', 'C95E:00', 'C95F:00', 'C960:00'):
+                    s.poke(p)
             s.press('2', 60)
             random_presses(s, rnd, 8, menu=False)
         s.write(name)
