@@ -1200,3 +1200,15 @@ native   01:6F81 native_say_string_4
 native   01:6F85 native_say_string_5
 native   01:6F89 native_say_string_6
 native   01:6F8D native_say_quoted
+native   00:019D native_no_frame_routine
+name     00:332D people_clear
+native   00:332D native_people_clear
+native   1F:8000 native_vec_8000
+native   1F:8003 native_vec_8003
+native   1F:8006 native_vec_8006
+native   1F:8009 native_vec_8009
+native   1F:800C native_vec_800C
+native   1F:800F native_vec_800F
+native   1F:8012 native_vec_8012
+native   1F:8015 native_vec_8015
+native   03:B6BC native_the_end

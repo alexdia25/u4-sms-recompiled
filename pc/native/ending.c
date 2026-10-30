@@ -767,3 +767,11 @@ static void ankh(void) {
 	}
 }
 Native native_ankh = { "ankh", 0xB7CF, 3, ankh, 0, 0, 0, .task = 1 };
+
+// $B6BC: jp $B6BC, the game's last instruction: it stops here for good
+static void the_end(void) {
+	cpu.cycles += 10;
+	native_boundary();
+	native_continue_at(0xB6BC);
+}
+Native native_the_end = { "the_end", 0xB6BC, 3, the_end, 0, .long_calls = 1 };

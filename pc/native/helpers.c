@@ -1228,6 +1228,16 @@ static void moves_since(void) {        // $33F6: HL = the moves ($C8FD, 3 bytes)
 	I(10);
 }
 
+static void people_clear(void) {       // $332D: the place's 256 bytes of people ($C651) zeroed
+	SET_HL(0xC651); I(10);
+	SET_DE(0xC652); I(10);
+	SET_BC(0x00FF); I(10);
+	mem_write(HL, 0x00); I(10);
+	while (op_block(6, 0)) I(21);
+	I(16);
+	I(10);
+}
+
 #define HELPER(name, addr, out) Native native_##name = { #name, addr, 0, name, out, .long_calls = 1 };
 HELPER(wait_vdp, 0x0262, 0)
 HELPER(far_read, 0x0815, OUT_A)
@@ -1293,3 +1303,4 @@ HELPER(missile_draw, 0x307C, OUT_A | OUT_F | OUT_DE)
 HELPER(swap_bytes, 0x3340, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL)
 HELPER(place_tune, 0x33E5, OUT_A | OUT_F)
 HELPER(moves_since, 0x33F6, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL)
+HELPER(people_clear, 0x332D, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL)

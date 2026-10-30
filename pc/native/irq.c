@@ -299,3 +299,7 @@ static void interrupt(void) {          // $0038
 	if (cpu.irq_line && cpu.cycles < cpu.budget) cpu.budget = cpu.cycles;
 }
 Native native_interrupt = { "interrupt", 0x0038, 0, interrupt, 0, .long_calls = 1 };
+
+// $019D: the frame's routine when there is none: a ret
+static void no_frame_routine(void) { cpu.cycles += 10; sync(); }
+Native native_no_frame_routine = { "no_frame_routine", 0x019D, 0, no_frame_routine, 0, .long_calls = 1 };
