@@ -382,3 +382,42 @@ DIALOGUE(name_has_article, 0x3666, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL)
 Native native_say_welcome = { "say_welcome", 0xAE20, 2, say_welcome, OUT_A | OUT_F | OUT_HL, .long_calls = 1 };
 Native native_pronoun = { "pronoun", 0x71A4, 1, pronoun, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL, .long_calls = 1 };
 Native native_pronoun_says = { "pronoun_says", 0x71B1, 1, pronoun_says, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL, .long_calls = 1 };
+
+// The person's own lines (bank 1): $6F61 '<He> says, "I am <name>"'
+// (string 1); $6F72 "You see <string 2>"; $6F8D string B in quotes
+// ($6F7D-$6F89: B = 3-6)
+static void say_name(void) {
+	if (!native_on_fiber()) { native_decline(); return; }   // shadow mode: printing may wait for frames
+	I(17); call_original(0x71B1);      // pronoun_says
+	SET_HL(0x71ED); I(10);
+	call(0x5519);
+	cpu.b = 0x01; I(7);
+	call(0x354D);                      // dialogue_print
+	I(10); native_continue_at(0x548D); // jp print_quote
+}
+static void say_string_2(void) {
+	if (!native_on_fiber()) { native_decline(); return; }
+	SET_HL(0x7205); I(10);
+	call(0x5519);
+	cpu.b = 0x02; I(7);
+	I(10); native_continue_at(0x354D);
+}
+static void say_quoted(void) {         // $6F8D
+	if (!native_on_fiber()) { native_decline(); return; }
+	call(0x548D);
+	call(0x354D);
+	I(10); native_continue_at(0x548D);
+}
+static void say_quoted_n(uint8_t n) { cpu.b = n; I(7); I(12); say_quoted(); }
+static void say_string_3(void) { say_quoted_n(3); }
+static void say_string_4(void) { say_quoted_n(4); }
+static void say_string_5(void) { say_quoted_n(5); }
+static void say_string_6(void) { say_quoted_n(6); }
+#define SAY(name, addr) Native native_##name = { #name, addr, 1, name, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL, .long_calls = 1 };
+SAY(say_name, 0x6F61)
+SAY(say_string_2, 0x6F72)
+SAY(say_string_3, 0x6F7D)
+SAY(say_string_4, 0x6F81)
+SAY(say_string_5, 0x6F85)
+SAY(say_string_6, 0x6F89)
+SAY(say_quoted, 0x6F8D)

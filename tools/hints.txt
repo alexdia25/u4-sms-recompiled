@@ -1193,3 +1193,10 @@ name     01:4812 harm                       # fire or lava: the party hurt, or t
 native   01:4812 native_harm
 name     01:4887 party_unflash
 native   01:4887 native_party_unflash
+native   01:6F61 native_say_name
+native   01:6F72 native_say_string_2
+native   01:6F7D native_say_string_3
+native   01:6F81 native_say_string_4
+native   01:6F85 native_say_string_5
+native   01:6F89 native_say_string_6
+native   01:6F8D native_say_quoted
