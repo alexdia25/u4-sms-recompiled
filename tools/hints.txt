@@ -1189,3 +1189,7 @@ name     01:548D print_quote
 native   01:548D native_print_quote
 name     01:5DCE spell_after
 native   01:5DCE native_spell_after
+name     01:4812 harm                       # fire or lava: the party hurt, or the ship's hull
+native   01:4812 native_harm
+name     01:4887 party_unflash
+native   01:4887 native_party_unflash

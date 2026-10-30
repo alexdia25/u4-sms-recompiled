@@ -700,3 +700,94 @@ Native native_direction_prompt = { "direction_prompt", 0x4C28, 1, direction_prom
 Native native_direction_step = { "direction_step", 0x4C3C, 1, direction_step, OUT_A | OUT_F | OUT_HL, .long_calls = 1 };
 Native native_print_quote = { "print_quote", 0x548D, 1, print_quote, OUT_A, .long_calls = 1 };
 Native native_spell_after = { "spell_after", 0x5DCE, 1, spell_after, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL, .long_calls = 1 };
+
+// $4887: every member's line of the status window back to normal ($4999),
+// then a frame
+static void party_unflash(void) {
+	if (!native_on_fiber()) { native_decline(); return; }   // shadow mode: it waits for a frame
+	cpu.a = mem_read(0xC957); I(13);
+	cpu.b = cpu.a; I(4);
+	cpu.c = 0x00; I(7);
+	do {
+		I(17); call_original(0x4999);  // member_unflash
+		cpu.c = op_inc8(cpu.c); I(4);
+		I(--cpu.b ? 13 : 8);
+	} while (cpu.b);
+	I(10); native_continue_at(0x041C); // jp wait_vblank
+}
+
+// $4812: harm from fire or lava: the party flashes, a sound, the screen
+// shakes; on a ship ($C959 below $14) the hull loses 10 ($C961), and
+// below 0 "Thy Ship Sinks!": the party is lost ($4483); else each member
+// alive, one time in two, loses 10-24 hit points
+static void harm(void) {
+	if (!native_on_fiber()) { native_decline(); return; }
+	push(BC); push(DE); push(HL);
+	push16(cpu.iy); I(15);
+	I(17); call_original(0x4896);      // party_flash
+	cpu.a = 0x13; I(7);
+	I(17); call_original(0x05F1);      // play_sound
+	I(17); call_original(0x4117);      // shake
+	I(17); call_original(0x4887);      // party_unflash
+	cpu.a = mem_read(0xC959); I(13);
+	op_sub8(0x14, 0, 0); I(7);
+	if (!(cpu.f & FC)) {
+		I(7);
+		cpu.iy = 0xC751; I(14);
+		SET_DE(0x001D); I(10);
+		cpu.a = mem_read(0xC957); I(13);
+		cpu.b = cpu.a; I(4);
+		cpu.c = 0x00; I(7);
+		do {
+			cpu.a = mem_read((uint16_t)(cpu.iy + 0x1C)); I(19);
+			op_sub8(0x44, 0, 0); I(7);
+			if (cpu.f & FZ) I(12);
+			else {
+				I(7);
+				I(17); call_original(0x2BBF);   // random
+				op_and(0x01); I(7);
+				if (cpu.f & FZ) I(12);
+				else {
+					I(7);
+					cpu.a = 0x0F; I(7);
+					I(17); call_original(0x2BEB);   // random_below
+					op_add8(0x0A, 0); I(7);
+					cpu.l = cpu.a; I(4);
+					cpu.h = 0x00; I(7);
+					I(17); call_original(0x4679);   // member_hurt
+				}
+			}
+			cpu.iy = op_add16(cpu.iy, DE); I(15);
+			cpu.c = op_inc8(cpu.c); I(4);
+			I(--cpu.b ? 13 : 8);
+		} while (cpu.b);
+		I(12);
+	} else {
+		I(12);
+		SET_HL(rd16(0xC961)); I(16);
+		SET_DE(0x000A); I(10);
+		op_or(cpu.a); I(4);
+		op_sbc16(DE); I(15);
+		wr16(0xC961, HL); I(16);
+		if (cpu.f & FC) {
+			I(7);
+			SET_HL(0x0000); I(10);
+			wr16(0xC961, HL); I(16);
+			I(17); call_original(0x4896);
+			I(17); call_original(0x4324);
+			SET_HL(0x48A5); I(10);     // "Thy Ship Sinks!"
+			I(17); call_original(0x5519);
+			I(10); native_continue_at(0x4483);
+			return;
+		}
+		I(12);
+	}
+	I(17); call_original(0x4324);      // $487E: the status window
+	cpu.iy = pop16(); I(14);
+	SET_HL(pop16()); I(10);
+	SET_DE(pop16()); I(10);
+	SET_BC(pop16()); I(10);
+	I(10);
+}
+Native native_party_unflash = { "party_unflash", 0x4887, 1, party_unflash, OUT_A | OUT_F | OUT_BC, .long_calls = 1 };
+Native native_harm = { "harm", 0x4812, 1, harm, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL, .long_calls = 1 };
