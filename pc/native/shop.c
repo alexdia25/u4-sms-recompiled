@@ -75,7 +75,7 @@ static void leave_shop(void) {
 	call(0x33E5);                      // which music for this place
 	call(0x33AF);                      // play_music_later
 	cpu.cycles += 10;
-	native_continue_at(0x8084);
+	command_end_at(0x8084);
 }
 
 // ---------------------------------------------------- weapons, armour --
@@ -1311,7 +1311,7 @@ static void leave_shop_quietly(void) {    // $96B5: no last message
 	call(0x33E5);
 	call(0x33AF);
 	cpu.cycles += 10;
-	native_continue_at(0x8084);
+	command_end_at(0x8084);
 }
 
 static void inn(void) {

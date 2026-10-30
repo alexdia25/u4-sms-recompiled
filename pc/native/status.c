@@ -171,9 +171,7 @@ static void member(void) {             // $7633
 	uint16_t to = rd16((uint16_t)(0x47B3 + 2 * cls));
 	SET_HL(to);
 	cpu.a = (uint8_t)to;
-	push16(0x76C7);                    // rst $18 / jp (hl): it returns here
-	call_original(to);
-	pop16();
+	class_magic_most(cls);             // rst $18 / jp (hl)
 	cpu.cycles += 7 + 7;
 	op_sub8(0x64, 0, 0);
 	if (cpu.f & FC) cpu.cycles += 5;

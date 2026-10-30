@@ -71,7 +71,7 @@ static void wipe(uint16_t frame_at) {
 		cpu.cycles += 10;
 		SET_BC(0x0111);
 		tcall(0x0499, 0x3151);
-		tcall(0x305A, 0x3154);         // a frame
+		task_next_pass_direct(0x3154);  // a frame
 		cpu.cycles += 23;
 		uint8_t n = op_dec8(mem_read((uint16_t)(SLOT + 0x16)));
 		mem_write((uint16_t)(SLOT + 0x16), n);
@@ -133,7 +133,7 @@ static void grow(uint16_t frame_at) {
 			mem_write((uint16_t)(SLOT + 0x1D), op_inc8(mem_read((uint16_t)(SLOT + 0x1D))));
 			cpu.cycles += 23;
 		}
-		tcall(0x305A, 0x31A6);         // a frame
+		task_next_pass_direct(0x31A6);  // a frame
 		cpu.cycles += 23;
 		uint8_t n = op_dec8(mem_read((uint16_t)(SLOT + 0x16)));
 		mem_write((uint16_t)(SLOT + 0x16), n);
@@ -185,7 +185,7 @@ static void window_open(void) {        // $31B1
 		cpu.e = op_dec8(cpu.e);
 		cpu.cycles += 4 + 4;
 		ix_set_word(0x20, DE);
-		tcall(0x305A, 0x3232);         // a frame
+		task_next_pass_direct(0x3232);  // a frame
 		cpu.cycles += 23;
 		uint8_t n = op_dec8(mem_read((uint16_t)(SLOT + 0x16)));
 		mem_write((uint16_t)(SLOT + 0x16), n);

@@ -346,6 +346,31 @@ static void name_has_article(void) {
 	vram_bank_pop();
 }
 
+// $71A4: who the person is, by $C9AC ("He", "She", "It", ..., the table
+// at $71BD); $71B1: and ' says, "' ($71E4) after it (bank 1)
+static void pronoun_body(void) {
+	push(HL);
+	cpu.a = mem_read(0xC9AC); I(13);
+	SET_HL(0x71BD); I(10);
+	rst20();
+	call(0x5519);                      // print_text_hl
+	SET_HL(pop16()); I(10);
+	I(10);
+}
+static void pronoun(void) {
+	if (!native_on_fiber()) { native_decline(); return; }   // shadow mode: printing may wait for frames
+	pronoun_body();
+}
+static void pronoun_says(void) {
+	if (!native_on_fiber()) { native_decline(); return; }
+	push(HL);
+	I(17); pronoun_body();
+	SET_HL(0x71E4); I(10);
+	call(0x5519);
+	SET_HL(pop16()); I(10);
+	I(10);
+}
+
 #define DIALOGUE(name, addr, out) Native native_##name = { #name, addr, 0, name, out, .long_calls = 1 };
 DIALOGUE(talk_setup, 0x34DD, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL)
 DIALOGUE(dialogue_print, 0x354D, OUT_A | OUT_F | OUT_BC | OUT_DE)
@@ -355,3 +380,5 @@ DIALOGUE(talk_topics, 0x3578, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL)
 DIALOGUE(say_topic, 0x3642, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL)
 DIALOGUE(name_has_article, 0x3666, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL)
 Native native_say_welcome = { "say_welcome", 0xAE20, 2, say_welcome, OUT_A | OUT_F | OUT_HL, .long_calls = 1 };
+Native native_pronoun = { "pronoun", 0x71A4, 1, pronoun, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL, .long_calls = 1 };
+Native native_pronoun_says = { "pronoun_says", 0x71B1, 1, pronoun_says, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL, .long_calls = 1 };

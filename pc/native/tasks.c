@@ -263,11 +263,12 @@ void task_wait_flag(uint16_t site) {
 	SET_HL(back);
 }
 
-// "call $7F59" at site ($305A by the vector): the next turn at once, the
-// main loop not waiting for frames ($C00C = 0) for this one pass
-void task_next_pass(uint16_t site) {
+// "call $7F59" at site ($305A by the vector; task_next_pass_direct: "call
+// $305A"): the next turn at once, the main loop not waiting for frames
+// ($C00C = 0) for this one pass
+static void next_pass(uint16_t site, int vector) {
 	uint16_t back = site + 3;
-	cpu.cycles += 17 + 10 + 10 + 19 + 19 + 4 + 13;
+	cpu.cycles += 17 + (vector ? 10 : 0) + 10 + 19 + 19 + 4 + 13;
 	mem_write(SLOT + 0x14, (uint8_t)back);
 	mem_write(SLOT + 0x15, back >> 8);
 	cpu.a = 0;
@@ -281,3 +282,5 @@ void task_next_pass(uint16_t site) {
 	mem_write(0xC00C, 2);
 	SET_HL(back);
 }
+void task_next_pass(uint16_t site) { next_pass(site, 1); }
+void task_next_pass_direct(uint16_t site) { next_pass(site, 0); }   // "call $305A" at site

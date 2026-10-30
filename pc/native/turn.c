@@ -405,7 +405,7 @@ static void command_menu(void) {
 		cpu.cycles += 5;
 	}
 	cpu.cycles += 10;
-	if (cpu.f & FC) { native_continue_at(0x8081); return; }   // cancelled
+	if (cpu.f & FC) { command_end_at(0x8081); return; }   // cancelled
 	cpu.cycles += 10 + 17 + 19 + 91 + 10;   // ld hl / call $806B: the command's name
 	uint8_t cmd = mem_read(SLOT + 0x1A);
 	uint16_t name = rd16(0x9582 + 2 * cmd);

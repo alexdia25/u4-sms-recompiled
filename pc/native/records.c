@@ -193,8 +193,9 @@ static void eat(void) {                // $4753
 	I(10);
 }
 
-static void class_magic(uint8_t class_) {   // rst $18 on the table at $47B3: A from C
-	I(11 + 10 + 52);
+// the most magic points of class `class_` ($47B3's routines, after the
+// rst $18 that picks one): A from intelligence C
+void class_magic_most(uint8_t class_) {
 	switch (rd16((uint16_t)(0x47B3 + 2 * class_))) {
 	case 0x47D0: cpu.a = cpu.c; I(4); op_add8(cpu.a, 0); I(4); break;
 	case 0x47C9: cpu.a = cpu.c; I(4); break;
@@ -203,6 +204,10 @@ static void class_magic(uint8_t class_) {   // rst $18 on the table at $47B3: A 
 	default:     cpu.a = cpu.c; I(4); cpu.a = op_rot(7, cpu.a); I(8); break;   // $47C5
 	}
 	I(10);
+}
+static void class_magic(uint8_t class_) {   // rst $18 on the table at $47B3: A from C
+	I(11 + 10 + 52);
+	class_magic_most(class_);
 }
 
 static void magic_regain(void) {       // $4776
@@ -608,3 +613,4 @@ RECORD(people_load, 0x4100, OUT_F)
 RECORD(figure_name, 0x47D3, OUT_A | OUT_F | OUT_HL)
 RECORD(is_foe, 0x430A, OUT_A | OUT_F)
 RECORD(member_step_place, 0x4CA3, OUT_A | OUT_F | OUT_HL | OUT_IY)
+

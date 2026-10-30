@@ -63,7 +63,7 @@ static uint16_t rst20(uint16_t table, uint8_t i) {  // ld hl,table / rst $20: HL
 	return HL;
 }
 static void sound(uint16_t which) { call(which); }   // $40C9 select, $40D1 leave, $40D9 move
-static void exit_talk(void) { cpu.cycles += 10; native_continue_at(0x8084); }   // jp $8084
+static void exit_talk(void) { cpu.cycles += 10; command_end_at(0x8084); }   // jp $8084
 
 // $6E24: A = the cursor row's screen line (row * 2 + 1)
 static void row_line(void) {

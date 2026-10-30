@@ -1162,3 +1162,7 @@ native   01:7F74 native_vec_7F74
 native   01:7F77 native_vec_7F77
 native   00:0B19 native_yield
 native   00:0B16 native_sleep
+name     01:71A4 pronoun                    # "He", "She", "It", ... by $C9AC
+native   01:71A4 native_pronoun
+name     01:71B1 pronoun_says
+native   01:71B1 native_pronoun_says

@@ -16,8 +16,12 @@ static void call(uint16_t addr) { cpu.cycles += 17; call_original(addr); }
 static void newline(void) { cpu.cycles += 17; text_newline(); }
 static void tcall(uint16_t addr, uint16_t site);
 static void yield_at(uint16_t site);
-static void done(void) { cpu.cycles += 10; native_continue_at(0x8084); }       // jp $8084
-static void go(uint16_t addr) { cpu.cycles += 10; native_continue_at(addr); }  // jp addr
+static void done(void) { cpu.cycles += 10; command_end_at(0x8084); }       // jp $8084
+static void go(uint16_t addr) {      // jp addr
+	cpu.cycles += 10;
+	if ((addr >= 0x8077 && addr <= 0x8084) || addr == 0x810D) command_end_at(addr);
+	else native_continue_at(addr);
+}
 
 static void say_inline(uint16_t text) {   // call print_inline / the text follows
 	uint16_t hl = HL;
@@ -139,9 +143,9 @@ static void talk_command(void) {
 	call(0x4324);                      // the status window
 	newline();
 	call(0x4C28);                      // "Direction:"
-	if (prompt(0x809A, 0x4C3C)) { native_continue_at(0x8081); return; }
+	if (prompt(0x809A, 0x4C3C)) { command_end_at(0x8081); return; }
 	cpu.cycles += 13 + 7 + 10;
-	if (mem_read(MAP_KIND) != 1) { native_continue_at(0x810D); return; }   // only in towns
+	if (mem_read(MAP_KIND) != 1) { command_end_at(0x810D); return; }   // only in towns
 	cpu.cycles += 19 + 17 + 100;       // $40B9: HL = the step that way
 	cpu.a = mem_read(SLOT + 0x1A);
 	SET_HL(rd16(0x40BF + 2 * cpu.a));
@@ -149,7 +153,7 @@ static void talk_command(void) {
 	SET_DE(HL);
 	SET_HL(rd16(PARTY_XY));
 	cpu.cycles += 7;
-	if (!step_on_map()) { cpu.cycles += 5; native_continue_at(0x810D); return; }
+	if (!step_on_map()) { cpu.cycles += 5; command_end_at(0x810D); return; }
 	cpu.cycles += 11;
 	uint16_t at = HL;
 	call(0xB5A4);                      // the map cell
@@ -165,10 +169,10 @@ static void talk_command(void) {
 		cpu.cycles += 10;
 		call(0x42E3);                  // whoever stands there
 		cpu.cycles += 10;
-		if (cpu.f & FC) { native_continue_at(0x810D); return; }
+		if (cpu.f & FC) { command_end_at(0x810D); return; }
 		call(0x48F7);                  // IY = them
 		cpu.cycles += 19 + 7 + 10;
-		if (mem_read(cpu.iy + 3) != 0x52) { native_continue_at(0x810D); return; }   // not a shopkeeper
+		if (mem_read(cpu.iy + 3) != 0x52) { command_end_at(0x810D); return; }   // not a shopkeeper
 		cpu.cycles += 4 + 4;
 		cpu.a = (uint8_t)(cpu.h - cpu.d);   // the counter's row picks the shop
 		shop_open();
@@ -176,10 +180,10 @@ static void talk_command(void) {
 	}
 	call(0x42E3);                      // $80E6
 	cpu.cycles += 10;
-	if (cpu.f & FC) { native_continue_at(0x810D); return; }
+	if (cpu.f & FC) { command_end_at(0x810D); return; }
 	call(0x48F7);
 	cpu.cycles += 19 + 4 + 10;
-	if (mem_read(cpu.iy + 7) == 0) { native_continue_at(0x810D); return; }   // nothing to say
+	if (mem_read(cpu.iy + 7) == 0) { command_end_at(0x810D); return; }   // nothing to say
 	cpu.cycles += 19 + 7 + 10;
 	if (mem_read(cpu.iy + 3) == 0x5E) { native_continue_at(0x812B); return; }   // Lord British
 	go(0x6DCE);
@@ -193,15 +197,15 @@ static void get_chest(void) {
 	newline();
 	call(0x957C);
 	cpu.cycles += 10;
-	if (cpu.f & FZ) { native_continue_at(0x8077); return; }
+	if (cpu.f & FZ) { command_end_at(0x8077); return; }
 	say_inline(0x8919);                // "Who opens? "
 	call(0x4BCB);                      // member_pick_start
-	if (prompt(0x8928, 0x4BD2)) { native_continue_at(0x8081); return; }
+	if (prompt(0x8928, 0x4BD2)) { command_end_at(0x8081); return; }
 	cpu.cycles += 19;
 	cpu.c = mem_read(SLOT + 0x08);
 	call(0x4466);                      // can they?
 	cpu.cycles += 10;
-	if (cpu.f & FC) { native_continue_at(0x807C); return; }
+	if (cpu.f & FC) { command_end_at(0x807C); return; }
 	call(0x5B13);                      // open it
 	done();
 }
@@ -398,7 +402,7 @@ static void ready(void) {
 		cpu.cycles += 5;
 	}
 	cpu.cycles += 10;
-	if (cpu.f & FC) { native_continue_at(0x8081); return; }
+	if (cpu.f & FC) { command_end_at(0x8081); return; }
 	cpu.cycles += 10 + 17 + 19 + 91 + 10;   // ld hl,$960F / call $806B: its name
 	uint16_t name = rd16(0x960F + 2 * mem_read(SLOT + 0x1A));
 	SET_HL(name);
@@ -665,7 +669,7 @@ static void camp_save(void) {
 		SET_HL(rd16(0x93C6 + 3 * k));
 		cpu.a = cpu.l;
 		cpu.f = 0xC3;                  // (the switch pops its return address into AF)
-		if (k == 2) { native_continue_at(0x8081); return; }   // cancelled
+		if (k == 2) { command_end_at(0x8081); return; }   // cancelled
 		if (k == 3) break;
 		call(0x40D9);                  // up or down: the click
 		slot_highlight(0, k == 0 ? 0x93D5 : 0x93DF);
@@ -750,7 +754,7 @@ static void camp_menu(void) {
 		cpu.cycles += 5;
 	}
 	cpu.cycles += 10;
-	if (cpu.f & FC) { native_continue_at(0x8081); return; }
+	if (cpu.f & FC) { command_end_at(0x8081); return; }
 	cpu.cycles += 10 + 17 + 19 + 91 + 10;   // ld hl,$9626 / call $806B: its name
 	uint8_t choice = mem_read(SLOT + 0x1A);
 	uint16_t name = rd16(0x9626 + 2 * choice);
@@ -806,14 +810,14 @@ static void new_order(void) {
 	cpu.cycles += 5;
 	call(0x4BCB);
 	say_inline(0x92E8);                // "Exchange "
-	if (prompt(0x92F3, 0x4BD2)) { native_continue_at(0x8081); return; }
+	if (prompt(0x92F3, 0x4BD2)) { command_end_at(0x8081); return; }
 	cpu.cycles += 19 + 4 + 7;
 	uint8_t first = mem_read(SLOT + 0x08);
 	if (first == 0) goto lead;
 	cpu.cycles += 19;
 	mem_write(SLOT + 0x1B, first);
 	say_inline(0x930A);                // " with "
-	if (prompt(0x9315, 0x4BD2)) { native_continue_at(0x8081); return; }
+	if (prompt(0x9315, 0x4BD2)) { command_end_at(0x8081); return; }
 	cpu.cycles += 19 + 4 + 7;
 	uint8_t second = mem_read(SLOT + 0x08);
 	if (second == 0) goto lead;
@@ -919,7 +923,7 @@ static void use_command(void) {
 		cpu.cycles += 5;
 	}
 	cpu.cycles += 10;
-	if (cpu.f & FC) { native_continue_at(0x8081); return; }
+	if (cpu.f & FC) { command_end_at(0x8081); return; }
 	cpu.cycles += 10 + 17 + 19 + 91 + 10;   // ld hl,$95F6 / call $806B: its name
 	uint16_t name = rd16(0x95F6 + 2 * mem_read(SLOT + 0x1A));
 	SET_HL(name);
@@ -954,7 +958,7 @@ static void use_command(void) {
 		cpu.cycles += 5;
 	}
 	cpu.cycles += 10;
-	if (cpu.f & FC) { native_continue_at(0x8081); return; }
+	if (cpu.f & FC) { command_end_at(0x8081); return; }
 	call(0x4324);
 	cpu.cycles += 19 + 11;
 	uint8_t item = mem_read(SLOT + 0x1A);
@@ -1269,9 +1273,9 @@ static void attack(void) {
 	newline();
 	call(0x957C);
 	cpu.cycles += 10;
-	if (cpu.f & FZ) { native_continue_at(0x8077); return; }
+	if (cpu.f & FZ) { command_end_at(0x8077); return; }
 	call(0x4C28);                      // "Direction:"
-	if (prompt(0x8499, 0x4C3C)) { native_continue_at(0x8081); return; }
+	if (prompt(0x8499, 0x4C3C)) { command_end_at(0x8081); return; }
 	cpu.cycles += 19 + 17 + 100;       // $40B9: HL = the step that way
 	cpu.a = mem_read(SLOT + 0x1A);
 	SET_HL(rd16(0x40BF + 2 * cpu.a));
@@ -1368,7 +1372,7 @@ static void dungeon_attack(void) {
 	call(0x4324);
 	newline();
 	call(0x4C28);                      // "Direction:"
-	if (prompt(0x860C, 0x4C3C)) { native_continue_at(0x8081); return; }
+	if (prompt(0x860C, 0x4C3C)) { command_end_at(0x8081); return; }
 	cpu.cycles += 19 + 17 + 100;       // $40B9: HL = the step that way
 	cpu.a = mem_read(SLOT + 0x1A);
 	SET_HL(rd16(0x40BF + 2 * cpu.a));
@@ -1423,12 +1427,12 @@ static void search_hurt(uint8_t a) {
 // "Who ...?" and a member who can act; 0 when cancelled (or can't act)
 static int search_who(uint16_t site) {
 	call(0x4BCB);
-	if (prompt(site, 0x4BD2)) { native_continue_at(0x8081); return 0; }
+	if (prompt(site, 0x4BD2)) { command_end_at(0x8081); return 0; }
 	cpu.cycles += 19;
 	cpu.c = mem_read(SLOT + 0x08);
 	call(0x4466);                      // member_able
 	cpu.cycles += 10;
-	if (cpu.f & FC) { native_continue_at(0x807C); return 0; }
+	if (cpu.f & FC) { command_end_at(0x807C); return 0; }
 	call(0x48B6);                      // IY = their record
 	return 1;
 }
@@ -1645,7 +1649,7 @@ static void magic(void) {
 		cpu.cycles += 5;
 	}
 	cpu.cycles += 10;
-	if (cpu.f & FC) { native_continue_at(0x8081); return; }
+	if (cpu.f & FC) { command_end_at(0x8081); return; }
 	cpu.cycles += 10 + 17 + 19 + 91 + 10;   // ld hl,$95D5 / call $806B: its name
 	uint16_t name = rd16(0x95D5 + 2 * mem_read(SLOT + 0x1A));
 	SET_HL(name);
@@ -1697,7 +1701,7 @@ static void magic(void) {
 			k = switch_on(spell_keys, 6, a, 0x86CE);
 			if (k < 0) cpu.cycles += 12;
 		} while (k < 0);
-		if (k == 4) { native_continue_at(0x8081); return; }   // button 1
+		if (k == 4) { command_end_at(0x8081); return; }   // button 1
 		if (k == 5) break;             // button 2: this spell
 		if (k < 2) {                   // up / down, around the page of 13
 			cpu.cycles += 7 + (k == 0 ? 12 : 0);
@@ -1785,7 +1789,7 @@ static void mix_reagents(void) {
 				k = switch_on(reagent_keys, 4, a, 0x874E);
 				if (k < 0) cpu.cycles += 12;
 			} while (k < 0);
-			if (k == 2) { native_continue_at(0x8081); return; }   // button 1
+			if (k == 2) { command_end_at(0x8081); return; }   // button 1
 			if (k < 2) {               // up / down, around the 8 reagents and Done
 				cpu.cycles += 7 + (k == 0 ? 12 : 0);
 				cpu.b = k == 0 ? 0x08 : 0x0A;
@@ -1865,7 +1869,7 @@ chosen:                                // $87E8: Done
 	mem_write(SLOT + 0x20, want);
 	newline();
 	cpu.cycles += 4 + 4 + 10;
-	if (!want) { native_continue_at(0x8084); return; }
+	if (!want) { command_end_at(0x8084); return; }
 	say_inline(0x8833);                // "Mixing"
 	cpu.cycles += 19;
 	mem_write(SLOT + 0x1A, 3);
@@ -2638,7 +2642,7 @@ void missile_step_at(uint16_t site) {
 	SET_HL((uint16_t)(site + 3));
 	call(0x0BA4);                      // slot_step_add
 	call(0x3074);                      // the other frame, drawn
-	tcall(0x305A, 0x3938);             // a frame
+	task_next_pass_direct(0x3938);  // a frame
 	cpu.cycles += 19 + 19 + 11 + 10;   // ld l / ld h / push hl / jp $399C
 	SET_HL(rd16(SLOT + 0x2A));
 	call_original(0x399C);             // its ret is the caller's
@@ -2667,7 +2671,7 @@ static void ball_step_at(uint16_t site) {
 	op_sub8(0x7E, 0, 0);
 	if (!(cpu.f & FZ)) call(0x3074);   // the other frame, drawn
 	else cpu.cycles += 10;
-	tcall(0x305A, 0x3963);             // a frame
+	task_next_pass_direct(0x3963);  // a frame
 	cpu.cycles += 19 + 19 + 11 + 19 + 19 + 10;   // ... push hl / ld l / ld h / ret
 	SET_HL(rd16(SLOT + 0x2C));
 }
@@ -2696,7 +2700,7 @@ void burst_at(uint16_t site) {
 		if (cpu.f & FZ) { cpu.cycles += 12; break; }
 		cpu.cycles += 7;
 		call(0x307C);                  // drawn
-		tcall(0x305A, 0x3AB6);         // a frame
+		task_next_pass_direct(0x3AB6);  // a frame
 		cpu.cycles += 23 + 12;
 		mem_write(SLOT + 0x17, op_inc8(mem_read(SLOT + 0x17)));
 	}
@@ -3147,4 +3151,27 @@ static void run_spell(uint8_t spell) {
 	case 24: change_level(1); break;              // Y-up
 	default: change_level(0); break;              // Z-down
 	}
+}
+
+// the commands' ends ($8077 the balloon's ($473F), $807C pass ($46F1),
+// $8081 cancelled ($472D), $810D "Funny, no response!", $8084 done): the
+// status window drawn, a frame, the pads afresh ($06D4), back to the turn
+// (task_return_1)
+void command_end_at(uint16_t entry) {
+	switch (entry) {
+	case 0x8077: tcall(0x473F, 0x8077); cpu.cycles += 12; break;
+	case 0x807C: tcall(0x46F1, 0x807C); cpu.cycles += 12; break;
+	case 0x8081: tcall(0x472D, 0x8081); break;
+	case 0x810D:
+		call(0x40D1);                  // sound
+		say_inline(0x8113);            // "Funny, no response!"
+		cpu.cycles += 10;
+		break;
+	}
+	tcall(0x4324, 0x8084);             // the status window
+	tcall(0x041C, 0x8087);             // wait_vblank
+	call(0x06D4);                      // input_repeat_1
+	cpu.cycles += 4 + 10;
+	op_or(cpu.a);
+	native_continue_at(0x0AAE);        // jp task_return_1
 }

@@ -29,6 +29,7 @@ void task_wait_button(uint16_t site); // "call wait_button" at site: waits for b
 void task_wait_frames(uint16_t site, uint8_t n);   // "ld a,n / call $3046" at site: n turns
 void task_wait_flag(uint16_t site);   // "call wait_flag" at site ($0A82): until $C0C7 is set
 void task_next_pass(uint16_t site);   // "call $7F59" at site ($305A): the next turn, no frame wait
+void task_next_pass_direct(uint16_t site);   // "call $305A" at site
 
 // creatures.c: the creatures on the map, at the end of the party's turn
 int creatures_move(uint16_t back);   // $B5B3; back: where "call $B4CA" returns. 1: a fight began
@@ -38,5 +39,11 @@ void creatures_appear(void);          // $BB17
 void vram_bank_push(uint16_t site);   // "call bank_push" ($07CE) at site, bank A
 void vram_bank_pop(void);             // "jp bank_pop" ($07DE), with the ret
 void vram_set_write_address(void);    // rst $10: DE as the VDP's write address
+
+// records.c
+void class_magic_most(uint8_t class_);   // A = the most magic of the class, from intelligence C ($47B3)
+
+// commands.c
+void command_end_at(uint16_t entry);   // jp $8077/$807C/$8081/$8084/$810D: a command's end, from a C task
 
 #endif
