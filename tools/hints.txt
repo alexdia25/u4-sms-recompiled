@@ -408,9 +408,7 @@ name     01:40D1 sound_0d
 name     01:40D9 sound_1e
 name     01:40E1 sound_20
 native   01:4004 native_poison_member
-native   01:401B native_sleep_member
 native   01:4037 native_burn_member
-native   01:404A native_sleep_field
 native   01:4071 native_poison_field
 native   01:40A6 native_blocked
 native   01:40C9 native_sound_0c
@@ -547,8 +545,8 @@ name     00:11C5 mark_shorelines            # water cells: attribute bits for la
 native   00:116B native_decode_location_map
 native   00:11C5 native_mark_shorelines
 native   01:6DCE native_talk
-native   00:0B5A native_hook_end_task
-native   00:0B21 native_hook_clear_tasks
+native   00:0B5A native_end_task
+native   00:0B21 native_clear_tasks
 ram      C96B last_karma_time               # moves/16 when karma for giving/answering was last granted ($33F6)
 ram      C91F weapons_owned                 # count per weapon
 native   02:97D5 native_weapon_shop
@@ -1024,3 +1022,13 @@ name     00:3666 name_has_article           # Z: the name begins "a " or "the "
 native   00:3666 native_name_has_article
 name     00:368C starts_with
 name     00:34D4 upcase
+native   00:0B33 native_spawn_task
+native   00:0B35 native_spawn_task_c
+native   00:0AA5 native_task_enter_1
+native   00:0AAE native_task_return_1
+native   00:0AB5 native_task_enter_2
+native   00:0ABE native_task_return_2
+native   00:0AC5 native_task_enter_3
+native   00:0ACE native_task_return_3
+native   00:0AD5 native_task_enter_4
+native   00:0ADE native_task_return_4

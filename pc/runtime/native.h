@@ -65,6 +65,8 @@ int native_parked(void);
 // continue on the task's next one.
 void task_wait_turn(uint16_t resume);
 void task_call(uint16_t addr, uint16_t back);   // an original routine that may yield, called from back
+void native_drop_slot(uint16_t slot);   // a task slot cleared: its C task forgotten
+void native_drop_all_slots(void);
 
 // the dispatcher calls this at PARK_PC, or anywhere while a C task waits;
 // 1 = handled (the CPU has moved on)

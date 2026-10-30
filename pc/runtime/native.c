@@ -466,16 +466,15 @@ void task_call(uint16_t addr, uint16_t back) {
 	to_main();
 }
 
-// end_task ($0B5A) and clear_tasks ($0B21) clear slots: forget C tasks there
-static void hook_end_task(void) {
-	int off = cpu.ix - TASK_SLOTS;
+// end_task ($0B5A) and clear_tasks ($0B21, pc/native/loop.c) clear slots:
+// the C tasks there are forgotten
+void native_drop_slot(uint16_t slot) {
+	int off = slot - TASK_SLOTS;
 	if (off >= 0 && off % 0x30 == 0 && off / 0x30 < SLOTS) drop_task(&task_fiber[off / 0x30]);
 }
-static void hook_clear_tasks(void) {
+void native_drop_all_slots(void) {
 	for (int i = 0; i < SLOTS; i++) drop_task(&task_fiber[i]);
 }
-Native native_hook_end_task = { "hook_end_task", 0x0B5A, 0, hook_end_task, .hook = 1 };
-Native native_hook_clear_tasks = { "hook_clear_tasks", 0x0B21, 0, hook_clear_tasks, .hook = 1 };
 
 // the dispatcher reached PARK_PC, or a C task may be waiting for this turn
 int native_special(void) {
