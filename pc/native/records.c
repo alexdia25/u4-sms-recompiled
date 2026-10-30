@@ -791,3 +791,297 @@ static void harm(void) {
 }
 Native native_party_unflash = { "party_unflash", 0x4887, 1, party_unflash, OUT_A | OUT_F | OUT_BC, .long_calls = 1 };
 Native native_harm = { "harm", 0x4812, 1, harm, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL, .long_calls = 1 };
+
+// ------------------------------------------------------------- chests --
+// open_chest ($5B13, the map; $5978, in combat): the chest under the party
+// goes (a dungeon's cell $40; a town's cell $3C, which costs Honesty,
+// Justice and Honor, or else the chest among the people; in combat the
+// battlefield's) or "Not Here!"; then chest_opened
+#define C(addr) do { I(17); call_original(addr); } while (0)
+
+static void say_text(uint16_t text) {  // call print_inline / the text follows
+	uint16_t hl = HL;
+	I(17 + 19 + 17);
+	text_print(text);
+	I(19 + 10);
+	SET_HL(hl);
+}
+
+// $59CB: "The Chest Holds: <10-98> Gold."
+static void chest_gold(void) {
+	say_text(0x59CE);
+	cpu.a = 0x50; I(7);
+	C(0x2BEB);                         // random_below
+	cpu.b = cpu.a; I(4);
+	cpu.a = 0x0A; I(7);
+	C(0x2BEB);
+	op_add8(cpu.b, 0); I(4);
+	op_add8(0x0A, 0); I(7);
+	cpu.l = cpu.a; I(4);
+	cpu.h = 0x00; I(7);
+	push(HL);
+	C(0x5627);                         // print_number_auto
+	say_text(0x59F8);
+	SET_HL(pop16()); I(10);
+	I(10); native_continue_at(0x4412); // jp receive_gold
+}
+
+static void trap_acid(void) {          // $59AC: the member hurt, up to 29
+	cpu.a = 0x13; I(7);
+	C(0x05F1);
+	C(0x4324);
+	C(0x49A6);                         // member_flash
+	C(0x041C);
+	cpu.a = 0x1E; I(7);
+	C(0x2BEB);
+	cpu.l = cpu.a; I(4);
+	cpu.h = 0x00; I(7);
+	C(0x4679);                         // member_hurt
+	C(0x041C);
+	I(10); call_original(0x4324);      // jp
+}
+
+static void trap_status(uint8_t status) {   // $5A6B sleep, $5A8D poison
+	cpu.c = mem_read((uint16_t)(cpu.ix + 0x08)); I(19);
+	C(0x48B6);                         // member_record
+	mem_write((uint16_t)(cpu.iy + 0x1C), status); I(19);
+	C(0x4324);
+	if (status == 0x53) {
+		cpu.a = mem_read(0xC99F); I(13);
+		op_sub8(0x03, 0, 0); I(7);
+		if (cpu.f & FC) I(12);
+		else {                         // the figure lies down
+			I(7);
+			C(0x48D5);                 // member_object
+			mem_write((uint16_t)(cpu.iy + 2), 0x38); I(19);
+			mem_write((uint16_t)(cpu.iy + 3), 0x38); I(19);
+		}
+	}
+	I(10); call_original(0x4247);      // jp
+}
+
+// $5A9D: a bomb: on the map as fire ($4812); in combat everyone on the
+// field flashes, the screen shakes, and each who can act, one time in
+// two, loses 10-24
+static void trap_bomb(void) {
+	cpu.a = mem_read(0xC99F); I(13);
+	op_sub8(0x03, 0, 0); I(7);
+	I(10);
+	if (cpu.f & FC) { call_original(0x4812); return; }
+	cpu.a = mem_read(0xC957); I(13);
+	cpu.b = cpu.a; I(4);
+	cpu.c = 0x00; I(7);
+	do {
+		C(0x48D5);
+		cpu.a = mem_read((uint16_t)(cpu.iy + 2)); I(19);
+		op_or(cpu.a); I(4);
+		if (!(cpu.f & FZ)) C(0x49A6);
+		else I(10);
+		cpu.c = op_inc8(cpu.c); I(4);
+		I(--cpu.b ? 13 : 8);
+	} while (cpu.b);
+	C(0x041C);
+	cpu.a = 0x13; I(7);
+	C(0x05F1);
+	C(0x4117);                         // shake
+	C(0x4887);                         // party_unflash
+	cpu.a = mem_read(0xC957); I(13);
+	cpu.b = cpu.a; I(4);
+	cpu.c = 0x00; I(7);
+	do {
+		C(0x48D5);
+		cpu.a = mem_read((uint16_t)(cpu.iy + 2)); I(19);
+		op_or(cpu.a); I(4);
+		if (cpu.f & FZ) I(12);
+		else {
+			I(7);
+			C(0x4445);                 // member_can_act
+			if (cpu.f & FC) I(12);
+			else {
+				I(7);
+				C(0x2BBF);
+				op_and(0x01); I(7);
+				if (cpu.f & FZ) I(12);
+				else {
+					I(7);
+					cpu.a = 0x0F; I(7);
+					C(0x2BEB);
+					op_add8(0x0A, 0); I(7);
+					cpu.l = cpu.a; I(4);
+					cpu.h = 0x00; I(7);
+					C(0x4679);
+				}
+			}
+		}
+		cpu.c = op_inc8(cpu.c); I(4);
+		I(--cpu.b ? 13 : 8);
+	} while (cpu.b);
+	I(10); call_original(0x4324);      // jp
+}
+
+// $5A04: half the chests are trapped: "Acid Trap!" (rarely the others:
+// random 0-3 and random 0-3): evaded when no member is opening ($FF) or
+// by dexterity + 25 in 100 ("Evaded!"); then the gold
+static void chest_opened(void) {
+	C(0x2BBF);                         // random
+	op_and(0x01); I(7);
+	if (cpu.f & FZ) { I(12); chest_gold(); return; }
+	I(7);
+	C(0x2BBF);
+	op_and(0x03); I(7);
+	cpu.b = cpu.a; I(4);
+	C(0x2BBF);
+	op_and(cpu.b); I(4);
+	mem_write((uint16_t)(cpu.ix + 0x1A), cpu.a); I(19);
+	SET_HL(0x5AF4); I(10);
+	I(11); call_original(0x0020);      // rst $20: its name
+	C(0x5519);
+	say_text(0x5A22);                  // " Trap!"
+	cpu.a = mem_read((uint16_t)(cpu.ix + 0x08)); I(19);
+	op_sub8(0xFF, 0, 0); I(7);
+	int evaded = 1;
+	if (cpu.f & FZ) I(12);
+	else {
+		I(7);
+		cpu.c = cpu.a; I(4);
+		C(0x48B6);
+		cpu.a = mem_read((uint16_t)(cpu.iy + 7)); I(19);
+		op_add8(0x19, 0); I(7);
+		cpu.b = cpu.a; I(4);
+		cpu.a = 0x64; I(7);
+		C(0x2BEB);
+		op_sub8(cpu.b, 0, 0); I(4);
+		if (!(cpu.f & FC)) { I(12); evaded = 0; }
+		else I(7);
+	}
+	if (evaded) {
+		cpu.a = 0x19; I(7);
+		C(0x05F1);
+		say_text(0x5A4B);              // "Evaded!"
+		I(12);
+	} else {
+		uint8_t trap = mem_read((uint16_t)(cpu.ix + 0x1A));
+		cpu.a = trap; I(19);
+		SET_HL(0x5A60); I(10);
+		I(11 + 10 + 52);               // rst $18
+		switch (trap) {
+		case 0: I(10); trap_acid(); break;     // (jp $59AC)
+		case 1: trap_status(0x53); break;
+		case 2: trap_status(0x50); break;
+		default: trap_bomb(); break;
+		}
+	}
+	I(10);
+	chest_gold();
+}
+
+static void open_chest(void) {         // $5B13
+	if (!native_on_fiber()) { native_decline(); return; }   // shadow mode: printing may wait for frames
+	cpu.a = mem_read(0xC99F); I(13);
+	op_sub8(0x02, 0, 0); I(7);
+	if (cpu.f & FZ) {                  // a dungeon
+		I(7);
+		cpu.a = mem_read(0xC990); I(13);
+		op_sub8(0x40, 0, 0); I(7);
+		I(10);
+		if (!(cpu.f & FZ)) { native_continue_at(0x46DF); return; }
+		SET_HL(rd16(0xC953)); I(16);
+		C(0x6DC0);                     // cell_address
+		mem_write(HL, 0x00); I(10);
+		I(10);
+		chest_opened();
+		return;
+	}
+	I(12);
+	cpu.a = mem_read(0xC9A0); I(13);
+	op_sub8(0x00, 0, 0); I(7);
+	int on_ground = 0;
+	if (cpu.f & FZ) I(12);
+	else {
+		I(7);
+		SET_HL(rd16(0xC953)); I(16);
+		C(0xB5A4);                     // town_cell
+		cpu.a = mem_read(HL); I(7);
+		op_sub8(0x3C, 0, 0); I(7);
+		if (!(cpu.f & FZ)) I(12);
+		else {
+			I(7);
+			on_ground = 1;
+			mem_write(HL, 0x3E); I(10);
+			cpu.l = op_inc8(cpu.l); I(4);
+			mem_write(HL, 0x00); I(10);
+			static const uint8_t virtue[3] = { 0, 3, 5 };
+			for (int i = 0; i < 3; i++) {
+				cpu.a = 0x01; I(7);
+				cpu.c = virtue[i]; I(7);
+				C(0x426F);             // karma_lose
+			}
+			I(12);
+		}
+	}
+	if (!on_ground) {                  // $5B5B: among the people
+		SET_HL(rd16(0xC953)); I(16);
+		cpu.iy = 0xC651; I(14);
+		SET_DE(0x0008); I(10);
+		cpu.b = 0x20; I(7);
+		int found = 0;
+		do {
+			cpu.a = mem_read((uint16_t)(cpu.iy + 3)); I(19);
+			op_sub8(0x3C, 0, 0); I(7);
+			if (!(cpu.f & FZ)) I(12);
+			else {
+				I(7);
+				cpu.a = mem_read((uint16_t)(cpu.iy + 1)); I(19);
+				op_sub8(cpu.l, 0, 0); I(4);
+				if (!(cpu.f & FZ)) I(12);
+				else {
+					I(7);
+					cpu.a = mem_read((uint16_t)(cpu.iy + 2)); I(19);
+					op_sub8(cpu.h, 0, 0); I(4);
+					if (cpu.f & FZ) { I(12); found = 1; break; }
+					I(7);
+				}
+			}
+			cpu.iy = op_add16(cpu.iy, DE); I(15);
+			I(--cpu.b ? 13 : 8);
+		} while (cpu.b);
+		if (!found) { I(10); native_continue_at(0x46DF); return; }
+		mem_write((uint16_t)(cpu.iy + 3), 0); I(19);
+		mem_write((uint16_t)(cpu.iy + 0), 0); I(19);
+	}
+	I(10);
+	chest_opened();
+}
+
+static void open_chest_combat(void) {  // $5978
+	if (!native_on_fiber()) { native_decline(); return; }
+	C(0x48E1);                         // current_object
+	cpu.l = mem_read(cpu.iy); I(19);
+	cpu.h = mem_read((uint16_t)(cpu.iy + 1)); I(19);
+	C(0x38F2);                         // arena_cell
+	cpu.a = mem_read(HL); I(7);
+	op_sub8(0x3C, 0, 0); I(7);
+	I(10);
+	if (!(cpu.f & FZ)) { native_continue_at(0x46DF); return; }
+	mem_write(HL, 0x16); I(10);
+	cpu.l = op_inc8(cpu.l); I(4);
+	mem_write(HL, 0x00); I(10);
+	cpu.a = mem_read(0xC9A0); I(13);
+	op_sub8(0x12, 0, 0); I(7);
+	if (cpu.f & FC) I(12);
+	else {                             // in a dungeon's room: its chest cell too
+		I(7);
+		SET_HL(rd16(0xC953)); I(16);
+		C(0x6DC0);
+		cpu.a = mem_read(HL); I(7);
+		op_sub8(0x40, 0, 0); I(7);
+		if (!(cpu.f & FZ)) I(12);
+		else { I(7); mem_write(HL, 0x00); I(10); }
+	}
+	cpu.a = mem_read(0xC97F); I(13);
+	mem_write((uint16_t)(cpu.ix + 0x08), cpu.a); I(19);
+	I(10);
+	chest_opened();
+}
+Native native_open_chest = { "open_chest", 0x5B13, 1, open_chest, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL, .long_calls = 1 };
+Native native_open_chest_combat = { "open_chest_combat", 0x5978, 1, open_chest_combat, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL, .long_calls = 1 };

@@ -1245,3 +1245,7 @@ native   03:8039 native_vec3_8039
 native   03:803C native_vec3_803C
 native   03:803F native_vec3_803F
 native   02:B261 native_or_a_ret
+name     01:5B13 open_chest                 # the chest under the party, on a map
+native   01:5B13 native_open_chest
+name     01:5978 open_chest_combat
+native   01:5978 native_open_chest_combat

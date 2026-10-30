@@ -711,6 +711,29 @@ def main():
             k = rnd.choice('UDLR') if r < 0.7 else '2' if r < 0.9 else '1'
             s.press(k, rnd.choice((20, 30, 40, 60)))
         s.write(name)
+    # a chest under the party (at (1, 15) in Moonglow): one of the people
+    # (the last record), or the town's own cell ($D3C2: it costs karma); the
+    # random numbers steered, for the traps; dexterity 0 so that few are evaded
+    for k in range(16):
+        name = 'chest_%X' % k
+        rnd = random.Random(name)
+        s = Script()
+        s.poke('C758:00')
+        if k & 8:
+            s.poke('D3C2:3C')
+        else:
+            for p in ('C749:3C', 'C74A:01', 'C74B:0F', 'C74C:3C'):
+                s.poke(p)
+        s.press('2', 40)               # the command menu, Get Chest
+        for _ in range(3):
+            s.press('D', 30)
+        s.press('2', 60)
+        s.poke('C0B5:%02X' % (k * 41 & 0xFF))
+        s.press('2', 400)              # the first member
+        for _ in range(12):
+            r = rnd.random()
+            s.press('2' if r < 0.6 else rnd.choice('UDLR'), rnd.choice((20, 30, 60)))
+        s.write(name)
     # the shrine of honesty (location $1A at $E9, $42): stepped in from the
     # south; the virtue, the cycles, the mantra (AHM) for each cycle
     AHM = ['2', 'R', 'R', 'D', '2', 'D', '2', 'R', 'D', 'D', 'D', '2']   # on the letter grid, then End
