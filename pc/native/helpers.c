@@ -1238,6 +1238,51 @@ static void people_clear(void) {       // $332D: the place's 256 bytes of people
 	I(10);
 }
 
+static void flag_and_end(void) {       // $0A9D: wait_flag's flag set, and the task ends
+	cpu.a = 0xFF; I(7);
+	mem_write(0xC0C7, 0xFF); I(13);
+	I(10);
+	native_continue_at(0x0B5A);
+}
+
+static void step_of(void) {            // $40B9: HL = direction A's step, from the table at $40BF
+	SET_HL(0x40BF); I(10);
+	I(10);
+	native_continue_at(0x0020);
+}
+
+// $3762: map A's (place A, its letter's order) cells unpacked at $D000
+// (bank 15, the table at $8079, past each map's header)
+static void place_map(void) {
+	op_ex_af(); I(4);
+	cpu.a = 0x0F; I(7);
+	vram_bank_push(0x3765);
+	op_ex_af(); I(4);
+	op_or(cpu.a); I(4);
+	if (cpu.f & FZ) I(12);
+	else { I(7); cpu.a = op_inc8(cpu.a); I(4); }
+	SET_HL(0x8079); I(10);
+	I(11); call_original(0x0020);      // rst $20
+	SET_DE(0x0100); I(10);
+	SET_HL(op_add16(HL, DE)); I(11);
+	SET_DE(0xD000); I(10);
+	I(17); call_original(0x116B);             // decode_location_map
+	vram_bank_pop();
+}
+
+// $0DEB $0DF6 $0E01 $0E0C $0E17: call a routine of bank 3 by its vector
+static void far_b3(uint16_t site, uint16_t vector) {
+	cpu.a = 0x03; I(7);
+	vram_bank_push(site);
+	I(17); call_original(vector);
+	vram_bank_pop();
+}
+static void far_8036(void) { far_b3(0x0DED, 0x8036); }
+static void far_8039(void) { far_b3(0x0DF8, 0x8039); }
+static void far_803c(void) { far_b3(0x0E03, 0x803C); }
+static void far_802d(void) { far_b3(0x0E0E, 0x802D); }
+static void far_803f(void) { far_b3(0x0E19, 0x803F); }
+
 #define HELPER(name, addr, out) Native native_##name = { #name, addr, 0, name, out, .long_calls = 1 };
 HELPER(wait_vdp, 0x0262, 0)
 HELPER(far_read, 0x0815, OUT_A)
@@ -1304,3 +1349,11 @@ HELPER(swap_bytes, 0x3340, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL)
 HELPER(place_tune, 0x33E5, OUT_A | OUT_F)
 HELPER(moves_since, 0x33F6, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL)
 HELPER(people_clear, 0x332D, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL)
+HELPER(flag_and_end, 0x0A9D, OUT_A)
+HELPER(place_map, 0x3762, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL)
+HELPER(far_8036, 0x0DEB, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL)
+HELPER(far_8039, 0x0DF6, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL)
+HELPER(far_803c, 0x0E01, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL)
+HELPER(far_802d, 0x0E0C, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL)
+HELPER(far_803f, 0x0E17, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL)
+Native native_step_of = { "step_of", 0x40B9, 1, step_of, OUT_HL, .long_calls = 1 };

@@ -1,6 +1,6 @@
 // Bank 1's far-call vectors ($7E00-$7F77): 126 "jp routine" that the
-// other banks call (bank 3 especially), and the sound driver's 8 at
-// $8000 of bank 31. Each is its jp: 10 cycles, then on to the routine
+// other banks call (bank 3 especially), bank 3's 22 at $8000 and the
+// sound driver's 8 at $8000 of bank 31. Each is its jp: 10 cycles, then on to the routine
 // (read from the vector, so the table stays the ROM's).
 #include "../runtime/native.h"
 #include "../runtime/sms.h"
@@ -154,3 +154,29 @@ SOUND_VEC(800C)
 SOUND_VEC(800F)
 SOUND_VEC(8012)
 SOUND_VEC(8015)
+
+#define B3_VEC(a) static void vec3_##a(void) { jump(0x##a); } \
+	Native native_vec3_##a = { "vec3_" #a, 0x##a, 3, vec3_##a, 0, .long_calls = 1 };
+
+B3_VEC(8000)
+B3_VEC(8003)
+B3_VEC(8006)
+B3_VEC(8009)
+B3_VEC(800C)
+B3_VEC(800F)
+B3_VEC(8012)
+B3_VEC(8015)
+B3_VEC(8018)
+B3_VEC(801B)
+B3_VEC(801E)
+B3_VEC(8021)
+B3_VEC(8024)
+B3_VEC(8027)
+B3_VEC(802A)
+B3_VEC(802D)
+B3_VEC(8030)
+B3_VEC(8033)
+B3_VEC(8036)
+B3_VEC(8039)
+B3_VEC(803C)
+B3_VEC(803F)

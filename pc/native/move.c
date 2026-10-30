@@ -533,3 +533,7 @@ static void nat_input_step(void) {
 	native_continue_at(0x8000);
 }
 Native native_input_step = { "input_step", 0xB08B, 2, nat_input_step, OUT_A | OUT_F, 0, 0, .blocking = 1 };
+
+// $B261: where a move ends, back from $B263 by original or C routes: or a / ret
+static void or_a_ret(void) { cpu.cycles += 4 + 10; op_or(cpu.a); }
+Native native_or_a_ret = { "or_a_ret", 0xB261, 2, or_a_ret, OUT_A | OUT_F, .long_calls = 1 };
