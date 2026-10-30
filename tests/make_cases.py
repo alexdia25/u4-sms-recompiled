@@ -676,6 +676,26 @@ def main():
             k = rnd.choice('UDLR') if r < 0.6 else '2' if r < 0.9 else '1'
             s.press(k, rnd.choice((20, 30, 40, 60)))
         s.write(name)
+    # Castle Britannia's ladders, tried in Moonglow (the party starts at (1, 15)):
+    # the cell to the east ($D3C4) made a ladder, then a step onto it; the
+    # way down from row 2 goes into the dungeon below
+    LADDERS = {
+        'ladder_up':     ['D3C4:1B'],
+        'ladder_down':   ['D3C4:1C'],
+        'ladder_depths': ['C954:02', 'C986:02', 'D084:1C'],
+    }
+    for name, pokes in LADDERS.items():
+        rnd = random.Random(name)
+        s = Script()
+        for p in pokes:
+            s.poke(p)
+            s.f += 120
+        s.press('R', 600)
+        for _ in range(30):
+            r = rnd.random()
+            k = rnd.choice('UDLR') if r < 0.7 else '2' if r < 0.9 else '1'
+            s.press(k, rnd.choice((20, 30, 40, 60)))
+        s.write(name)
     # the shrine of honesty (location $1A at $E9, $42): stepped in from the
     # south; the virtue, the cycles, the mantra (AHM) for each cycle
     AHM = ['2', 'R', 'R', 'D', '2', 'D', '2', 'R', 'D', 'D', 'D', '2']   # on the letter grid, then End

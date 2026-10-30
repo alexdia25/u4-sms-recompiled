@@ -13,12 +13,12 @@
 //   location $20 (the rest in the original, $ADFF); else a place among
 //   the 32 at $AE60 is entered: location = its number + 2 (with the
 //   carry), the way back kept, and what happens by the figure the party
-//   travels as ($C9BB, the table at $AD6D, in the original).
+//   travels as ($C9BB, the table at $AD6D, enter_place).
 // - town_step ($AFAA): after a step in a town (unless travel is off,
-//   $C9A1): off the 32x32 map the party leaves for the world ($AFC9); in
-//   the Abyss ($C959 = $1F) a ladder down ($1B) or up ($1C) under it
-//   ($C990) takes it on ($AFEF, $B02A): those, which print and wait, are
-//   the original's.
+//   $C9A1): off the 32x32 map the party leaves for the world ($AFC9,
+//   leave_town); on foot ($C959 = $1F) a ladder up ($1B) or down ($1C)
+//   under it ($C990) takes it to the castle's other floor or below
+//   ($AFEF, $B02A).
 // - tile_at ($BACF): A = the tile at (E, D): in a town ($BAF3) the cell
 //   of the 32x32 map at $D000 (DE its address); on the world ($BAD5)
 //   (E, D) made relative to the loaded 32x32 chunks ($C987, $C988), carry
@@ -385,6 +385,84 @@ static void world_step(void) {         // $ACDC
 	enter_place();
 }
 
+static void say_inline(uint16_t text) {   // call print_inline / the text follows
+	uint16_t hl = HL;
+	I(17 + 19 + 17);
+	text_print(text);
+	I(19 + 10);
+	SET_HL(hl);
+}
+
+// $AFC9: off the town's map: "Leaving...", the sound off, the window
+// wiped, the world's mode ($11), the party where it went in ($C96D), and
+// on (not back to the turn) to the place's people saved ($4100)
+static void leave_town(void) {
+	pop16(); I(10);
+	SET_HL(0xBD02); I(10);
+	call(0x5519);                      // print_text_hl
+	call(0x0605);                      // sound_silence
+	call(0x310B);                      // window_wipe
+	cpu.a = 0x11; I(7);
+	mem_write(0xC600, 0x11); I(13);    // game_mode
+	SET_HL(rd16(0xC96D)); I(16);
+	wr16(PARTY_X, HL); I(16);
+	cpu.a = 0xFF; I(7);
+	mem_write(0xC98F, 0xFF); I(13);
+	I(10); native_continue_at(0x4100);
+}
+
+// $B00D: to floor A of the castle: the window opened ($31B1), the map
+// loaded, drawn, and the town's turns begun again ($AF7B)
+static void to_floor(uint8_t floor) {
+	mem_write(0xC9A0, floor); I(13);   // location
+	call(0x31B1);                      // window_open
+	call(0x0E6C);                      // load_location
+	cpu.a = 0xFF; I(7);
+	mem_write(MAP_MODE, 0xFF); I(13);
+	call(0x129D);                      // refresh
+	call(0x3164);
+	I(10); native_continue_at(0xAF7B);
+}
+
+// the ladders of Castle Britannia, on foot: up ($1B, $AFEF) "Climb to
+// second floor!"; down ($1C, $B02A) "Descend to first floor!", or from
+// row 2 "Descend Into the depths!": the dungeon below (location $18, at
+// (10, 10); out at ($EF, $F0))
+static void ladder_up(void) {
+	pop16(); I(10);
+	say_inline(0xAFF3);
+	cpu.a = 0x02; I(7);
+	to_floor(0x02);
+}
+static void ladder_down(void) {
+	say_inline(0xB02D);                // "Descend "
+	cpu.a = mem_read(PARTY_Y); I(13);
+	op_sub8(0x02, 0, 0); I(7);
+	if (!(cpu.f & FZ)) {
+		I(7);
+		pop16(); I(10);
+		say_inline(0xB041);
+		cpu.a = 0x01; I(7);
+		I(12);
+		to_floor(0x01);
+		return;
+	}
+	I(12);
+	pop16(); I(10);
+	say_inline(0xB05A);
+	call(0x31B1);
+	SET_HL(0xF0EF); I(10);
+	wr16(0xC96D, HL); I(16);           // world_return_x
+	SET_HL(0x0A0A); I(10);
+	wr16(PARTY_X, HL); I(16);
+	cpu.a = 0x18; I(7);
+	mem_write(0xC9A0, 0x18); I(13);
+	cpu.a = 0x13; I(7);
+	mem_write(0xC600, 0x13); I(13);
+	call(0x3D78);                      // into the dungeon
+	I(10); native_continue_at(0x0CD2); // jp main_loop
+}
+
 static int town_event_here(void) {     // town_step would go on into the original
 	if (mem_read(PARTY_X) >= 0x20 || mem_read(PARTY_Y) >= 0x20) return 1;
 	uint8_t t = mem_read(0xC990);
@@ -405,22 +483,22 @@ static void town_step(void) {          // $AFAA
 		op_sub8(0x20, 0, 0); I(7);
 		off = !(cpu.f & FC);
 	}
-	if (off) { I(12); native_continue_at(0xAFC9); return; }   // off the map: to the world
+	if (off) { I(12); leave_town(); return; }   // off the map: to the world
 	I(7);
 	cpu.a = mem_read(0xC990); I(13);
 	op_sub8(0x1B, 0, 0); I(7);
-	uint16_t on = 0;
-	if (cpu.f & FZ) { I(12); on = 0xAFEF; }
+	int up = 0;
+	if (cpu.f & FZ) { I(12); up = 1; }
 	else {
 		I(7);
 		op_sub8(0x1C, 0, 0); I(7);
-		if (cpu.f & FZ) { I(12); on = 0xB02A; }
+		if (cpu.f & FZ) I(12);
 		else { I(7); I(10); return; }
 	}
 	cpu.a = mem_read(0xC959); I(13);   // a ladder: in the Abyss only
 	op_sub8(0x1F, 0, 0); I(7);
 	if (ret_if(!(cpu.f & FZ))) return;
-	native_continue_at(on);
+	if (up) ladder_up(); else ladder_down();
 }
 
 static void map_cell_de(void) {        // $BAF3

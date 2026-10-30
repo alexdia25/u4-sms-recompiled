@@ -462,29 +462,20 @@ static int no_foes(void) {
 	return 1;
 }
 
-static void miss(uint16_t then, uint16_t site) {   // "Miss", then $A219 or $A21C
-	cpu.cycles += 10;
-	SET_HL(0xACA8);
-	call(0x7F62);
-	tcall(then, site);
-	cpu.cycles += 10;                  // jp $A0C9
-	command_end(END_NEWLINE);
-}
-
 // $A221 (called at site): after a blow, by the weapon: flaming oil
 // ($09) sets the foe's cell on fire ($46 $82) unless it is one of the
 // first three tiles; the magic axe ($0B) flies back to the member, a
 // frame a step (IX+$16 steps; its return kept by task_enter_2)
-static void weapon_after(uint16_t site) {
-	cpu.cycles += 17 + 19 + 7;
+static void weapon_after_body(uint16_t back) {
+	cpu.cycles += 19 + 7;
 	cpu.a = mem_read(WEAPON);
 	op_sub8(0x0B, 0, 0);
 	if (cpu.f & FZ) {                  // $A23B: the axe comes back
 		cpu.cycles += 12 + 17 + 10 + 19 + 19 + 19 + 10;
 		wr16((uint16_t)(cpu.sp - 2), 0xA23E);   // what ex (sp),hl leaves on the stack
 		wr16((uint16_t)(cpu.sp - 4), 0xA23E);
-		wr16(SLOT + 0x26, (uint16_t)(site + 3));
-		SET_HL((uint16_t)(site + 3));
+		wr16(SLOT + 0x26, back);
+		SET_HL(back);
 		do {
 			call(0x0BC9);              // slot_step_sub
 			call(0xA482);              // figure_flip
@@ -511,6 +502,23 @@ static void weapon_after(uint16_t site) {
 	mem_write(HL, 0x46);
 	cpu.l = op_inc8(cpu.l);
 	mem_write(HL, 0x82);
+}
+static void weapon_after(uint16_t site) { cpu.cycles += 17; weapon_after_body((uint16_t)(site + 3)); }
+
+// "Miss", then (called at site) $A219: the missile's last step back
+// ($0BC9), or $A21C: sound $19, then weapon_after
+static void miss(uint16_t then, uint16_t site) {
+	cpu.cycles += 10;
+	SET_HL(0xACA8);
+	call(0x7F62);
+	cpu.cycles += 17;
+	if (then == 0xA219) call(0x0BC9); // slot_step_sub
+	cpu.cycles += 7;
+	cpu.a = 0x19;
+	call(0x05F1);                      // play_sound
+	weapon_after_body((uint16_t)(site + 3));
+	cpu.cycles += 10;                  // jp $A0C9
+	command_end(END_NEWLINE);
 }
 
 // combat_attack ($A0D8): aim at a foe; hand weapons strike next to the
