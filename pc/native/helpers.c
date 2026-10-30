@@ -1283,6 +1283,56 @@ static void far_803c(void) { far_b3(0x0E03, 0x803C); }
 static void far_802d(void) { far_b3(0x0E0E, 0x802D); }
 static void far_803f(void) { far_b3(0x0E19, 0x803F); }
 
+// load_dungeon ($2A5C): the location's 8 levels of 16 x 16 unpacked at $D000
+static void load_dungeon(void) {
+	I(17); call_original(0x2A6E);      // dungeon_header_address
+	vram_bank_push(0x2A5F);
+	I(17); call_original(0x0097);      // HL = (HL)
+	SET_DE(0xD000); I(10);
+	I(17); call_original(0x06FF);      // decode_rle
+	vram_bank_pop();
+}
+
+// $3D78: into a dungeon: level 0, its map, no people
+static void enter_dungeon(void) {
+	op_xor(cpu.a); I(4);
+	mem_write(0xC970, cpu.a); I(13);
+	I(17); call_original(0x2A5C);
+	I(10); native_continue_at(0x332D);
+}
+
+static void menu_cleared_texts(void) { // $2E79: the menu window cleared, then its texts
+	I(17); call_original(0x2E1B);      // menu_window_clear
+	I(10); native_continue_at(0x2D5D); // menu_texts
+}
+
+// $2E02 (by $7F05): the attribute bit 4 set on C cells across B rows of the
+// text area from DE; then the rows queued for the screen
+static void attribute_rows(void) {
+	push(BC);
+	cpu.l = cpu.e; I(4);
+	cpu.h = cpu.d; I(4);
+	cpu.l = op_inc8(cpu.l); I(4);
+	do {
+		push(BC);
+		push(HL);
+		cpu.b = cpu.c; I(4);
+		do {
+			mem_write(HL, (uint8_t)(mem_read(HL) | 0x10)); I(15);
+			cpu.l = op_inc8(cpu.l); I(4);
+			cpu.l = op_inc8(cpu.l); I(4);
+			I(--cpu.b ? 13 : 8);
+		} while (cpu.b);
+		SET_HL(pop16()); I(10);
+		SET_BC(0x0040); I(10);
+		SET_HL(op_add16(HL, BC)); I(11);
+		SET_BC(pop16()); I(10);
+		I(--cpu.b ? 13 : 8);
+	} while (cpu.b);
+	SET_BC(pop16()); I(10);
+	I(10); native_continue_at(0x0499); // jp queue_text_copy
+}
+
 #define HELPER(name, addr, out) Native native_##name = { #name, addr, 0, name, out, .long_calls = 1 };
 HELPER(wait_vdp, 0x0262, 0)
 HELPER(far_read, 0x0815, OUT_A)
@@ -1357,3 +1407,7 @@ HELPER(far_803c, 0x0E01, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL)
 HELPER(far_802d, 0x0E0C, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL)
 HELPER(far_803f, 0x0E17, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL)
 Native native_step_of = { "step_of", 0x40B9, 1, step_of, OUT_HL, .long_calls = 1 };
+HELPER(load_dungeon, 0x2A5C, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL)
+HELPER(enter_dungeon, 0x3D78, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL)
+HELPER(menu_cleared_texts, 0x2E79, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL)
+HELPER(attribute_rows, 0x2E02, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL)

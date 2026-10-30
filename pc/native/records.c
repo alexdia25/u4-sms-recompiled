@@ -1085,3 +1085,49 @@ static void open_chest_combat(void) {  // $5978
 }
 Native native_open_chest = { "open_chest", 0x5B13, 1, open_chest, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL, .long_calls = 1 };
 Native native_open_chest_combat = { "open_chest_combat", 0x5978, 1, open_chest_combat, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL, .long_calls = 1 };
+
+static void member_pick_start(void) {  // $4BCB: the pick starts on the first, and the status window
+	if (!native_on_fiber()) { native_decline(); return; }
+	mem_write((uint16_t)(cpu.ix + 0x08), 0x00); I(19);
+	I(10); native_continue_at(0x4324);
+}
+
+// $4247: member C's line flashes with a sound, and back
+static void member_flash_sound(void) {
+	if (!native_on_fiber()) { native_decline(); return; }   // shadow mode: it waits for a frame
+	C(0x49A6);
+	cpu.a = 0x13; I(7);
+	C(0x05F1);
+	C(0x041C);
+	I(10); native_continue_at(0x4999);
+}
+
+// $ABD2 (bank 2): HL more food, up to 9999 ($63 of the next at the top)
+static void food_add(void) {
+	if (!native_on_fiber()) { native_decline(); return; }
+	SET_DE(rd16(0xC907)); I(20);
+	SET_HL(op_add16(HL, DE)); I(11);
+	C(0x36DA);                         // cap_9999
+	wr16(0xC907, HL); I(16);
+	if (!(cpu.f & FC)) I(12);
+	else {
+		I(7);
+		cpu.a = 0x63; I(7);
+		mem_write(0xC906, 0x63); I(13);
+	}
+	I(10); native_continue_at(0x43F6);
+}
+
+// $9DE3 (bank 3): the status window, the current member's line again, a frame
+static void member_shown(void) {
+	if (!native_on_fiber()) { native_decline(); return; }
+	C(0x7F29);
+	SET_BC(rd16(0xC97F)); I(20);
+	C(0x7E66);
+	I(10); native_continue_at(0x041C);
+}
+
+Native native_member_pick_start = { "member_pick_start", 0x4BCB, 1, member_pick_start, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL, .long_calls = 1 };
+Native native_member_flash_sound = { "member_flash_sound", 0x4247, 1, member_flash_sound, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL, .long_calls = 1 };
+Native native_food_add = { "food_add", 0xABD2, 2, food_add, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL, .long_calls = 1 };
+Native native_member_shown = { "member_shown", 0x9DE3, 3, member_shown, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL, .long_calls = 1 };
