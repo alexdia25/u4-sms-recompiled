@@ -392,6 +392,76 @@ static void leave_or_pass(void) {
 	op_or(cpu.a);
 }
 
+// $B19F-$B1FE (the table at $B189, by the person's graphic): button 2 next
+// to a ship ($10-$13: the way it faces), a horse ($14, $15) or the balloon
+// ($18): "Board frigate!", "Mount horse!", "Board balloon!"; the party
+// travels as it ($C959) and it leaves the map (IY); a ship not the one
+// last left ($C973) has its hull mended to 50 ($C961); the balloon lands
+// ($C98F = 0); a sound ($40C9)
+static void board(uint16_t at) {
+	uint16_t as;
+	switch (at) {
+	case 0xB19F: case 0xB1A4: case 0xB1A9: case 0xB1AE:   // a ship
+		as = (uint16_t)(0x10 + (at - 0xB19F) / 5);
+		cpu.cycles += 10 + (at != 0xB1AE ? 12 : 0) + 16 + 10;
+		SET_HL(as);
+		wr16(TRANSPORT, as);
+		SET_HL(0xB21D); call(0x5519);   // "Board "
+		cpu.cycles += 10;
+		SET_HL(0xB232); call(0x5519);   // "frigate!"
+		cpu.cycles += 13 + 10 + 7;
+		cpu.a = mem_read(0xC953);
+		SET_HL(0xC973);
+		op_sub8(mem_read(HL), 0, 0);
+		int same = 0;
+		if (!(cpu.f & FZ)) cpu.cycles += 12;
+		else {
+			cpu.cycles += 7 + 13 + 10 + 7;
+			cpu.a = mem_read(0xC954);
+			SET_HL(0xC974);
+			op_sub8(mem_read(HL), 0, 0);
+			same = (cpu.f & FZ) != 0;
+			cpu.cycles += same ? 12 : 7;
+		}
+		if (!same) {
+			cpu.cycles += 10 + 16;
+			SET_HL(0x0032);
+			wr16(0xC961, HL);
+		}
+		break;
+	case 0xB1E5: case 0xB1EA:          // a horse
+		as = at == 0xB1E5 ? 0x8614 : 0x8715;
+		cpu.cycles += 10 + (at == 0xB1E5 ? 12 : 0) + 16 + 10;
+		SET_HL(as);
+		wr16(TRANSPORT, as);
+		SET_HL(0xB216); call(0x5519);   // "Mount "
+		cpu.cycles += 10;
+		SET_HL(0xB22A); call(0x5519);   // "horse!"
+		cpu.cycles += 12;
+		break;
+	case 0xB1FE:                       // the balloon
+		cpu.cycles += 10 + 16 + 10;
+		SET_HL(0x0018);
+		wr16(TRANSPORT, 0x0018);
+		SET_HL(0xB21D); call(0x5519);   // "Board "
+		cpu.cycles += 10;
+		SET_HL(0xB23C); call(0x5519);   // "balloon!"
+		cpu.cycles += 4 + 13 + 12;
+		op_xor(cpu.a);
+		mem_write(0xC98F, 0);
+		break;
+	default:
+		native_continue_at(at);
+		return;
+	}
+	cpu.cycles += 19 + 19;             // $B1D8: it leaves the map
+	mem_write((uint16_t)(cpu.iy + 3), 0);
+	mem_write((uint16_t)(cpu.iy + 0), 0);
+	call(0x40C9);                      // sound
+	cpu.cycles += 4 + 10;
+	op_or(cpu.a);
+}
+
 // input_step ($B08B): one frame of the player's turn. A direction moves;
 // button 1 passes or leaves the vehicle ($B0A6, leave_or_pass); button 2 opens the command
 // menu ($8000, a C task; on foot, next to some people, their own: the
@@ -453,7 +523,7 @@ static void nat_input_step(void) {
 			SET_HL(rd16(HL));
 			cpu.a = cpu.l;
 			cpu.f = 0x86;              // (its return, $B186, popped into AF)
-			native_continue_at(HL);
+			board(HL);
 			return;
 		}
 		cpu.cycles += 58;
