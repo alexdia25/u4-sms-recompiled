@@ -1173,3 +1173,19 @@ native   01:4703 native_msg_only_on_foot
 native   01:4719 native_msg_slow_progress
 native   01:472D native_msg_aborted
 native   01:473F native_msg_drift_only
+name     00:3340 swap_bytes                 # B bytes swapped between HL and DE
+native   00:3340 native_swap_bytes
+name     00:33E5 place_tune
+native   00:33E5 native_place_tune
+name     00:33F6 moves_since                # HL = moves / 16
+native   00:33F6 native_moves_since
+name     01:55A0 say_word                   # word A of the table at $55AA
+native   01:55A0 native_say_word
+name     01:4C28 direction_prompt           # "Direction: "
+native   01:4C28 native_direction_prompt
+name     01:4C3C direction_step
+native   01:4C3C native_direction_step
+name     01:548D print_quote
+native   01:548D native_print_quote
+name     01:5DCE spell_after
+native   01:5DCE native_spell_after

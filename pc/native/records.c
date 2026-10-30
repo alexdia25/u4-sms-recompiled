@@ -644,3 +644,59 @@ MESSAGE(msg_only_on_foot, 0x4703)
 MESSAGE(msg_slow_progress, 0x4719)
 MESSAGE(msg_aborted, 0x472D)
 MESSAGE(msg_drift_only, 0x473F)
+
+// $55A0: word A of the table at $55AA printed (the directions, ...)
+static void say_word(void) {
+	if (!native_on_fiber()) { native_decline(); return; }   // shadow mode: printing may wait for frames
+	push(HL);
+	SET_HL(0x55AA); I(10);
+	I(11); call_original(0x0020);      // rst $20
+	I(17); call_original(0x5519);      // print_text_hl
+	SET_HL(pop16()); I(10);
+	I(10);
+}
+
+// $4C28: "Direction: ", and the picker's cursor on 4 (none yet)
+static void direction_prompt(void) {
+	if (!native_on_fiber()) { native_decline(); return; }
+	uint16_t hl = HL;
+	I(17 + 19 + 17);                   // call print_inline
+	text_print(0x4C2B);
+	I(19 + 10);
+	SET_HL(hl);
+	mem_write((uint16_t)(cpu.ix + 0x1A), 0x04); I(19);
+	I(10);
+}
+
+// $4C3C: the direction picker's step, on the keys newly pressed ($4C42)
+static void direction_step(void) {
+	cpu.a = mem_read(0xC0B0); I(13);
+	SET_HL(0x4C51); I(10);
+	native_continue_at(0x4C42);
+}
+
+// $548D: a quotation mark printed (print_char)
+static void print_quote(void) {
+	cpu.a = 0x22; I(7);
+	native_continue_at(0x548F);
+}
+
+// $5DCE: after a spell: the status window, and in combat the caster's line
+// highlighted again ($49A6) and a frame
+static void spell_after(void) {
+	if (!native_on_fiber()) { native_decline(); return; }
+	I(17); call_original(0x4324);
+	cpu.a = mem_read(0xC99F); I(13);
+	op_sub8(0x03, 0, 0); I(7);
+	if (cpu.f & FC) { I(11); return; }
+	I(5);
+	SET_BC(rd16(0xC97F)); I(20);
+	I(17); call_original(0x49A6);      // member_flash
+	I(10); native_continue_at(0x041C); // jp wait_vblank
+}
+
+Native native_say_word = { "say_word", 0x55A0, 1, say_word, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL, .long_calls = 1 };
+Native native_direction_prompt = { "direction_prompt", 0x4C28, 1, direction_prompt, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL, .long_calls = 1 };
+Native native_direction_step = { "direction_step", 0x4C3C, 1, direction_step, OUT_A | OUT_F | OUT_HL, .long_calls = 1 };
+Native native_print_quote = { "print_quote", 0x548D, 1, print_quote, OUT_A, .long_calls = 1 };
+Native native_spell_after = { "spell_after", 0x5DCE, 1, spell_after, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL, .long_calls = 1 };

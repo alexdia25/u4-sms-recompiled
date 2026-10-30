@@ -1186,6 +1186,48 @@ static void ground_effects(void) {
 	}
 }
 
+static void swap_bytes(void) {         // $3340: B bytes swapped between HL and DE
+	do {
+		cpu.a = mem_read(DE); I(7);
+		cpu.c = mem_read(HL); I(7);
+		mem_write(HL, cpu.a); I(7);
+		cpu.a = cpu.c; I(4);
+		mem_write(DE, cpu.a); I(7);
+		SET_HL(HL + 1); I(6);
+		SET_DE(DE + 1); I(6);
+		I(--cpu.b ? 13 : 8);
+	} while (cpu.b);
+	I(10);
+}
+
+static void place_tune(void) {         // $33E5: A = 6 in Castle Britannia (place 0), else 1
+	I(17); call_original(0x33EE);      // place_index
+	cpu.a = 0x06; I(7);
+	if (cpu.f & FZ) { I(11); return; }
+	I(5);
+	cpu.a = 0x01; I(7);
+	I(10);
+}
+
+static void moves_since(void) {        // $33F6: HL = the moves ($C8FD, 3 bytes) / 16, Z if (HL) was that
+	push(BC); push(DE);
+	SET_DE(rd16(0xC8FD)); I(20);
+	cpu.a = mem_read(0xC8FF); I(13);
+	cpu.b = 0x04; I(7);
+	do {
+		op_rra(); I(4);
+		cpu.d = op_rot(3, cpu.d); I(8);
+		cpu.e = op_rot(3, cpu.e); I(8);
+		I(--cpu.b ? 13 : 8);
+	} while (cpu.b);
+	op_or(cpu.a); I(4);
+	op_sbc16(DE); I(15);
+	{ uint16_t t = HL; SET_HL(DE); SET_DE(t); } I(4);
+	SET_DE(pop16()); I(10);
+	SET_BC(pop16()); I(10);
+	I(10);
+}
+
 #define HELPER(name, addr, out) Native native_##name = { #name, addr, 0, name, out, .long_calls = 1 };
 HELPER(wait_vdp, 0x0262, 0)
 HELPER(far_read, 0x0815, OUT_A)
@@ -1248,3 +1290,6 @@ static const uint16_t bank_scratch[] = { 0xC0C2, 0xC0C3 };
 Native native_picture_cells = { "picture_cells", 0x326D, 0, picture_cells, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL, bank_scratch, 2, .long_calls = 1 };
 HELPER(missile_flip, 0x3074, OUT_A | OUT_F | OUT_DE)
 HELPER(missile_draw, 0x307C, OUT_A | OUT_F | OUT_DE)
+HELPER(swap_bytes, 0x3340, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL)
+HELPER(place_tune, 0x33E5, OUT_A | OUT_F)
+HELPER(moves_since, 0x33F6, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL)
