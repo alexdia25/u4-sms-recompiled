@@ -329,6 +329,21 @@ static void clear_tasks(void) {
 	I(10);
 }
 
+// yield ($0B19): the task's turn ends: where it called from is where it
+// goes on next turn (slot +2); back to the scheduler. sleep ($0B16): and
+// its next turn in A passes (slot +1)
+static void yield(void) {
+	uint16_t at = pop16(); I(10);
+	mem_write((uint16_t)(cpu.ix + 2), (uint8_t)at); I(19);
+	mem_write((uint16_t)(cpu.ix + 3), at >> 8); I(19);
+	SET_HL(at);
+	I(10);
+}
+static void sleep_turns(void) {
+	mem_write((uint16_t)(cpu.ix + 1), cpu.a); I(19);
+	yield();
+}
+
 // task_enter_N ($0AA5, $0AB5, $0AC5, $0AD5): called first thing by a
 // routine that will yield: its own return is kept in the slot (+$24,
 // +$26, +$28, +$2A) instead of on the shared stack, and HL = it;
@@ -371,3 +386,5 @@ Native native_task_enter_3 = { "task_enter_3", 0x0AC5, 0, task_enter_3, OUT_HL, 
 Native native_task_return_3 = { "task_return_3", 0x0ACE, 0, task_return_3, OUT_HL, .long_calls = 1 };
 Native native_task_enter_4 = { "task_enter_4", 0x0AD5, 0, task_enter_4, OUT_HL, .long_calls = 1 };
 Native native_task_return_4 = { "task_return_4", 0x0ADE, 0, task_return_4, OUT_HL, .long_calls = 1 };
+Native native_yield = { "yield", 0x0B19, 0, yield, OUT_HL, .long_calls = 1 };
+Native native_sleep = { "sleep", 0x0B16, 0, sleep_turns, OUT_HL, .long_calls = 1 };
