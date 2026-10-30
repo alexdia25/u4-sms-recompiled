@@ -83,16 +83,48 @@ static void dungeon_turn_end(void) {
 	task_call(0x4324, 0x6A50);
 }
 
-// $6A52: the party has left the dungeon (level $FF): original code takes it
-// back to the world. 1 when it did (the C task ends).
+// $6A52: the party has left the dungeon (level $FF): "Exit dungeon", the
+// sound off, the window opened on the world (location 0, mode $11) where
+// the party went in ($C96D), the place's people back ($4100); at ($EF,
+// $F0) $0E0C too. Then the ret of the turn's caller. 1 when it did (the C
+// task ends).
 static int left(uint16_t back) {
 	cpu.cycles += 17 + 13 + 4;
 	cpu.a = mem_read(LEVEL);
 	op_or(cpu.a);
 	if (!(cpu.a & 0x80)) { cpu.cycles += 11; return 0; }
-	cpu.cycles += 5;
-	push16(back);
-	native_continue_at(0x6A57);
+	cpu.cycles += 5 + 10;              // ret p / pop af: not back to the turn
+	(void)back;
+	say_inline(0x6A5B);                // "Exit dungeon"
+	tcall(0x0605, 0x6A69);             // sound_silence
+	tcall(0x31B1, 0x6A6C);             // window_open
+	cpu.cycles += 4 + 13 + 7 + 13 + 16 + 16 + 7 + 13;
+	op_xor(cpu.a);
+	mem_write(0xC9A0, 0);              // location
+	mem_write(0xC600, 0x11);           // game_mode
+	SET_HL(rd16(0xC96D));
+	wr16(0xC953, HL);
+	cpu.a = 0xFF;
+	mem_write(0xC98F, 0xFF);
+	call(0x4100);                      // people_load
+	cpu.cycles += 7 + 13 + 13 + 7;
+	mem_write(LEVEL, 0xFF);
+	cpu.a = mem_read(0xC953);
+	op_sub8(0xEF, 0, 0);
+	if (cpu.f & FZ) {
+		cpu.cycles += 5 + 13 + 7;
+		cpu.a = mem_read(0xC954);
+		op_sub8(0xF0, 0, 0);
+		if (cpu.f & FZ) {
+			cpu.cycles += 5;
+			tcall(0x0E0C, 0x6A97);
+			cpu.cycles += 10;
+			native_continue_at(pop16());
+			return 1;
+		}
+	}
+	cpu.cycles += 11;                  // ret nz
+	native_continue_at(pop16());
 	return 1;
 }
 
