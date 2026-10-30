@@ -408,7 +408,9 @@ name     01:40D1 sound_0d
 name     01:40D9 sound_1e
 name     01:40E1 sound_20
 native   01:4004 native_poison_member
+native   01:401B native_sleep_member
 native   01:4037 native_burn_member
+native   01:404A native_sleep_field
 native   01:4071 native_poison_field
 native   01:40A6 native_blocked
 native   01:40C9 native_sound_0c
