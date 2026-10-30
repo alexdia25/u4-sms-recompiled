@@ -1166,3 +1166,10 @@ name     01:71A4 pronoun                    # "He", "She", "It", ... by $C9AC
 native   01:71A4 native_pronoun
 name     01:71B1 pronoun_says
 native   01:71B1 native_pronoun_says
+native   01:46B5 native_msg_pass
+native   01:46DF native_msg_not_here
+native   01:46F1 native_msg_disabled
+native   01:4703 native_msg_only_on_foot
+native   01:4719 native_msg_slow_progress
+native   01:472D native_msg_aborted
+native   01:473F native_msg_drift_only

@@ -614,3 +614,33 @@ RECORD(figure_name, 0x47D3, OUT_A | OUT_F | OUT_HL)
 RECORD(is_foe, 0x430A, OUT_A | OUT_F)
 RECORD(member_step_place, 0x4CA3, OUT_A | OUT_F | OUT_HL | OUT_IY)
 
+// The short messages of bank 1: sound $0D ($40D1, except $4719), then the
+// text after the call to print_inline: "Pass" ($46B5), "Not Here!"
+// ($46DF), "Disabled!" ($46F1), "Only on foot!" ($4703), "Slow progress!"
+// ($4719), "Aborted!" ($472D), "Drift only!" ($473F, whose text runs
+// over the code at $474E to the ret at $4752)
+static void message(int sound, uint16_t text) {
+	if (!native_on_fiber()) { native_decline(); return; }   // shadow mode: printing may wait for frames
+	if (sound) { I(17); call_original(0x40D1); }
+	uint16_t hl = HL;
+	I(17 + 19 + 17);                   // call print_inline
+	text_print(text);
+	I(19 + 10);
+	SET_HL(hl);
+	I(10);                             // ret
+}
+static void msg_pass(void) { message(1, 0x46BB); }
+static void msg_not_here(void) { message(1, 0x46E5); }
+static void msg_disabled(void) { message(1, 0x46F7); }
+static void msg_only_on_foot(void) { message(1, 0x4709); }
+static void msg_slow_progress(void) { message(0, 0x471C); }
+static void msg_aborted(void) { message(1, 0x4733); }
+static void msg_drift_only(void) { message(1, 0x4745); }
+#define MESSAGE(name, addr) Native native_##name = { #name, addr, 1, name, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL, .long_calls = 1 };
+MESSAGE(msg_pass, 0x46B5)
+MESSAGE(msg_not_here, 0x46DF)
+MESSAGE(msg_disabled, 0x46F1)
+MESSAGE(msg_only_on_foot, 0x4703)
+MESSAGE(msg_slow_progress, 0x4719)
+MESSAGE(msg_aborted, 0x472D)
+MESSAGE(msg_drift_only, 0x473F)
