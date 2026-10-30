@@ -1264,3 +1264,11 @@ name     02:ABD2 food_add
 native   02:ABD2 native_food_add
 name     03:9DE3 member_shown
 native   03:9DE3 native_member_shown
+native   03:A0CD native_combat_command_ended
+native   03:A2D4 native_combat_cast
+native   03:A2D7 native_combat_cast_ended
+native   02:808E native_command_ended
+native   03:8DD3 native_save_line
+native   03:B0AE native_virtue_list
+name     00:0DA3 mode_fresh
+native   00:0DA3 native_mode_fresh

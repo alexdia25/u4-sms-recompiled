@@ -1333,6 +1333,19 @@ static void attribute_rows(void) {
 	I(10); native_continue_at(0x0499); // jp queue_text_copy
 }
 
+// $0DA3: a mode's first start: the machine's flags and counts cleared
+// ($2BF7 too), then mode_reset
+static void mode_fresh(void) {
+	static const uint16_t flags[7] = { 0xC003, 0xC006, 0xC008, 0xC009, 0xC007, 0xC0A8, 0xC0A9 };
+	op_xor(cpu.a); I(4);
+	for (int i = 0; i < 7; i++) { mem_write(flags[i], 0); I(13); }
+	SET_HL(0x0000); I(10);
+	wr16(0xC0C8, 0); I(16);            // main_loop_count
+	wr16(0xC0AC, 0); I(16);
+	I(17); call_original(0x2BF7);
+	native_continue_at(0x0DC5);
+}
+
 #define HELPER(name, addr, out) Native native_##name = { #name, addr, 0, name, out, .long_calls = 1 };
 HELPER(wait_vdp, 0x0262, 0)
 HELPER(far_read, 0x0815, OUT_A)
@@ -1411,3 +1424,4 @@ HELPER(load_dungeon, 0x2A5C, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL)
 HELPER(enter_dungeon, 0x3D78, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL)
 HELPER(menu_cleared_texts, 0x2E79, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL)
 HELPER(attribute_rows, 0x2E02, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL)
+HELPER(mode_fresh, 0x0DA3, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL)

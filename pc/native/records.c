@@ -1131,3 +1131,113 @@ Native native_member_pick_start = { "member_pick_start", 0x4BCB, 1, member_pick_
 Native native_member_flash_sound = { "member_flash_sound", 0x4247, 1, member_flash_sound, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL, .long_calls = 1 };
 Native native_food_add = { "food_add", 0xABD2, 2, food_add, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL, .long_calls = 1 };
 Native native_member_shown = { "member_shown", 0x9DE3, 3, member_shown, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL, .long_calls = 1 };
+
+// $A0CD (bank 3): a combat command's end, carry kept: the pads afresh, the
+// member shown, back by the slot's return (task_return_1)
+static void combat_command_ended(void) {
+	if (!native_on_fiber()) { native_decline(); return; }   // shadow mode: it waits for a frame
+	push16((uint16_t)(cpu.a << 8 | cpu.f)); I(11);
+	C(0x06D4);
+	C(0x9DE3);                         // member_shown
+	{ uint16_t af = pop16(); cpu.a = af >> 8; cpu.f = (uint8_t)af; } I(10);
+	I(10); native_continue_at(0x0AAE);
+}
+// $A2D4: Cast in combat: cast_spell by its vector (a task of its own), then $A0CD
+static void combat_cast(void) {
+	push16(0xA2D7); I(17);
+	native_continue_at(0x7E1B);
+}
+static void combat_cast_ended(void) { I(10); native_continue_at(0xA0CD); }   // $A2D7
+static void command_ended(void) { I(10); native_continue_at(0x0AAE); }       // $808E
+
+// $8DD3 (bank 3): a save's line on the Journey menu, from DE on screen: the
+// 64 bytes of the save at HL read to $C1C0; if it isn't empty: the name
+// ($C1C1), "Male" or "Female" ($C1CE), "level " and the level, the class
+// ($4D + $C1D0, by item_name), the glyph $C1D6, and the moves ($C1D1, as
+// digits at $C065) and " moves". $7F08 draws a string, $7EFC a glyph
+static void save_line(void) {
+	push(DE);
+	SET_DE(0xC1C0); I(10);
+	SET_BC(0x0040); I(10);
+	C(0x0C49);                         // sram_copy
+	SET_DE(pop16()); I(10);
+	cpu.a = mem_read(0xC1C0); I(13);
+	op_or(cpu.a); I(4);
+	if (cpu.f & FZ) { I(11); return; }
+	I(5);
+	push(DE);
+	SET_HL(0xC1C1); I(10);
+	C(0x7F08);
+	SET_DE(pop16()); I(10);
+	SET_HL(0x001C); I(10);
+	SET_HL(op_add16(HL, DE)); I(11);
+	{ uint16_t t = HL; SET_HL(DE); SET_DE(t); } I(4);
+	push(DE);
+	cpu.a = mem_read(0xC1CE); I(13);
+	op_sub8(0x1E, 0, 0); I(7);
+	SET_HL(0x91E3); I(10);
+	if (cpu.f & FZ) I(12);
+	else { I(7); SET_HL(0x91E8); I(10); }
+	C(0x7F08);
+	SET_DE(pop16()); I(10);
+	SET_HL(0x0024); I(10);
+	SET_HL(op_add16(HL, DE)); I(11);
+	{ uint16_t t = HL; SET_HL(DE); SET_DE(t); } I(4);
+	SET_HL(0x8E5B); I(10);
+	C(0x7F08);
+	cpu.a = mem_read(0xC1CF); I(13);
+	op_add8(0x30, 0); I(7);
+	C(0x7EFC);
+	SET_HL(0x000A); I(10);
+	SET_HL(op_add16(HL, DE)); I(11);
+	{ uint16_t t = HL; SET_HL(DE); SET_DE(t); } I(4);
+	push(DE);
+	cpu.a = mem_read(0xC1D0); I(13);
+	op_add8(0x4D, 0); I(7);
+	C(0x7F02);                         // item_name
+	C(0x7F08);
+	SET_DE(pop16()); I(10);
+	SET_HL(0x0028); I(10);
+	SET_HL(op_add16(HL, DE)); I(11);
+	{ uint16_t t = HL; SET_HL(DE); SET_DE(t); } I(4);
+	cpu.a = mem_read(0xC1D6); I(13);
+	C(0x7EFC);
+	SET_HL(0x000A); I(10);
+	SET_HL(op_add16(HL, DE)); I(11);
+	{ uint16_t t = HL; SET_HL(DE); SET_DE(t); } I(4);
+	SET_HL(0xC1D1); I(10);
+	C(0x7E09);
+	SET_HL(0xC065); I(10);
+	C(0x7F08);
+	SET_HL(0x8E62); I(10);
+	I(10); native_continue_at(0x7F08);
+}
+
+// $B0AE (bank 3): the shrine's eight virtues on the menu: $7E21, then their
+// names (items $97-$9E) down two rows each from $0213, by $7F0E; then $7F41
+static void virtue_list(void) {
+	C(0x7E21);
+	SET_DE(0x0213); I(10);
+	SET_BC(0x0897); I(10);
+	do {
+		push(BC);
+		push(DE);
+		cpu.a = cpu.c; I(4);
+		C(0x7F02);
+		C(0x7F0E);
+		SET_DE(pop16()); I(10);
+		SET_BC(pop16()); I(10);
+		cpu.d = op_inc8(cpu.d); I(4);
+		cpu.d = op_inc8(cpu.d); I(4);
+		cpu.c = op_inc8(cpu.c); I(4);
+		I(--cpu.b ? 13 : 8);
+	} while (cpu.b);
+	I(10); native_continue_at(0x7F41);
+}
+
+Native native_combat_command_ended = { "combat_command_ended", 0xA0CD, 3, combat_command_ended, 0, .long_calls = 1 };
+Native native_combat_cast = { "combat_cast", 0xA2D4, 3, combat_cast, 0, .long_calls = 1 };
+Native native_combat_cast_ended = { "combat_cast_ended", 0xA2D7, 3, combat_cast_ended, 0, .long_calls = 1 };
+Native native_command_ended = { "command_ended", 0x808E, 2, command_ended, 0, .long_calls = 1 };
+Native native_save_line = { "save_line", 0x8DD3, 3, save_line, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL, .long_calls = 1 };
+Native native_virtue_list = { "virtue_list", 0xB0AE, 3, virtue_list, OUT_A | OUT_F | OUT_BC | OUT_DE | OUT_HL, .long_calls = 1 };
