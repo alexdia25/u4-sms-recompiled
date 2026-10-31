@@ -880,6 +880,51 @@ def main():
         for _ in range(3):
             s.press('2', 200)
         s.write(name)
+    # a person's question: the JOB topic made the one that leads to it ($C9A9),
+    # the answer either way, karma or none ($C9AA); kinds of person ($C309, the
+    # task's IX+9) that then offer eight words, the right one or a wrong one;
+    # the keyword topic 5 of kind $AC
+    ASKS = {
+        'ask_yes':       ('', [], '2', ''),
+        'ask_no':        ('', [], 'D2', ''),
+        'ask_yes_karma': ('', ['C9AA:01', 'C96B:FF', 'C96C:FF'], '2', ''),
+        'ask_no_karma':  ('', ['C9AA:01'], 'D2', ''),
+        'ask_again':     ('', ['C9AA:01', 'C96B:00', 'C96C:00'], '2', ''),
+        'ask_yes_r':     ('', [], 'R2', ''),
+        'ask_yes_r_karma': ('', ['C9AA:01', 'C96B:FF', 'C96C:FF'], 'R2', ''),
+        'ask_yes_r_again': ('', ['C9AA:01', 'C96B:00', 'C96C:00'], 'R2', ''),
+    }
+    for i, kind in enumerate((0x18, 0x8D, 0x99, 0xA3, 0xCE, 0xD7)):
+        for pick in (0, 3):
+            ASKS['ask_word_%X_%d' % (i, pick)] = ('', ['C309:%02X' % kind], '2', 'D' * pick + '2')
+            ASKS['ask_word_no_%X_%d' % (i, pick)] = ('', ['C309:%02X' % kind], 'D2', 'D' * pick + '2')
+    for name, (_, pokes, answer, word) in ASKS.items():
+        s = Script()
+        for p in ['C9A0:07', 'C749:24', 'C74A:02', 'C74B:0F', 'C74C:24', 'C750:03']:
+            s.poke(p)
+            s.f += 1
+        s.f += 40
+        for k in '22R2':
+            s.press(k, 60)
+        s.f += 300
+        for p in ['C9A9:03', 'C9AB:00'] + pokes:
+            s.poke(p)
+            s.f += 1
+        s.press('2', 120)              # past the greeting
+        for _ in range(3):             # JOB is the fourth word
+            s.press('D', 40)
+        s.press('2', 500)              # its answer
+        s.press('2', 300)              # the question
+        for k in answer:
+            s.press(k, 40)
+        s.f += 300
+        s.press('2', 400)              # what they say to that
+        for k in word:
+            s.press(k, 40)
+        s.f += 300
+        for _ in range(4):
+            s.press('2', 200)
+        s.write(name)
     # the shrine of honesty (location $1A at $E9, $42): stepped in from the
     # south; the virtue, the cycles, the mantra (AHM) for each cycle
     AHM = ['2', 'R', 'R', 'D', '2', 'D', '2', 'R', 'D', 'D', 'D', '2']   # on the letter grid, then End
