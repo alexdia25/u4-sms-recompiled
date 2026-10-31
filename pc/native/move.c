@@ -18,6 +18,7 @@
 #define MAP_KIND      0xC99F          // 0 on the world map
 
 static void call(uint16_t addr) { cpu.cycles += 17; call_original(addr); }
+static void I(int cycles) { cpu.cycles += cycles; native_boundary(); }
 
 static void say_inline(uint16_t text) {   // call print_inline / the text follows
 	uint16_t hl = HL;
@@ -403,63 +404,62 @@ static void board(uint16_t at) {
 	switch (at) {
 	case 0xB19F: case 0xB1A4: case 0xB1A9: case 0xB1AE:   // a ship
 		as = (uint16_t)(0x10 + (at - 0xB19F) / 5);
-		cpu.cycles += 10 + (at != 0xB1AE ? 12 : 0) + 16 + 10;
-		SET_HL(as);
-		wr16(TRANSPORT, as);
-		SET_HL(0xB21D); call(0x5519);   // "Board "
-		cpu.cycles += 10;
-		SET_HL(0xB232); call(0x5519);   // "frigate!"
-		cpu.cycles += 13 + 10 + 7;
-		cpu.a = mem_read(0xC953);
-		SET_HL(0xC973);
-		op_sub8(mem_read(HL), 0, 0);
+		SET_HL(as); I(10);
+		if (at != 0xB1AE) I(12);
+		wr16(TRANSPORT, as); I(16);
+		SET_HL(0xB21D); I(10);
+		call(0x5519);                  // "Board "
+		SET_HL(0xB232); I(10);
+		call(0x5519);                  // "frigate!"
+		cpu.a = mem_read(0xC953); I(13);
+		SET_HL(0xC973); I(10);
+		op_sub8(mem_read(HL), 0, 0); I(7);
 		int same = 0;
-		if (!(cpu.f & FZ)) cpu.cycles += 12;
+		if (!(cpu.f & FZ)) I(12);
 		else {
-			cpu.cycles += 7 + 13 + 10 + 7;
-			cpu.a = mem_read(0xC954);
-			SET_HL(0xC974);
-			op_sub8(mem_read(HL), 0, 0);
+			I(7);
+			cpu.a = mem_read(0xC954); I(13);
+			SET_HL(0xC974); I(10);
+			op_sub8(mem_read(HL), 0, 0); I(7);
 			same = (cpu.f & FZ) != 0;
-			cpu.cycles += same ? 12 : 7;
+			I(same ? 12 : 7);
 		}
 		if (!same) {
-			cpu.cycles += 10 + 16;
-			SET_HL(0x0032);
-			wr16(0xC961, HL);
+			SET_HL(0x0032); I(10);
+			wr16(0xC961, HL); I(16);
 		}
 		break;
 	case 0xB1E5: case 0xB1EA:          // a horse
 		as = at == 0xB1E5 ? 0x8614 : 0x8715;
-		cpu.cycles += 10 + (at == 0xB1E5 ? 12 : 0) + 16 + 10;
-		SET_HL(as);
-		wr16(TRANSPORT, as);
-		SET_HL(0xB216); call(0x5519);   // "Mount "
-		cpu.cycles += 10;
-		SET_HL(0xB22A); call(0x5519);   // "horse!"
-		cpu.cycles += 12;
+		SET_HL(as); I(10);
+		if (at == 0xB1E5) I(12);
+		wr16(TRANSPORT, as); I(16);
+		SET_HL(0xB216); I(10);
+		call(0x5519);                  // "Mount "
+		SET_HL(0xB22A); I(10);
+		call(0x5519);                  // "horse!"
+		I(12);
 		break;
 	case 0xB1FE:                       // the balloon
-		cpu.cycles += 10 + 16 + 10;
-		SET_HL(0x0018);
-		wr16(TRANSPORT, 0x0018);
-		SET_HL(0xB21D); call(0x5519);   // "Board "
-		cpu.cycles += 10;
-		SET_HL(0xB23C); call(0x5519);   // "balloon!"
-		cpu.cycles += 4 + 13 + 12;
-		op_xor(cpu.a);
-		mem_write(0xC98F, 0);
+		SET_HL(0x0018); I(10);
+		wr16(TRANSPORT, 0x0018); I(16);
+		SET_HL(0xB21D); I(10);
+		call(0x5519);                  // "Board "
+		SET_HL(0xB23C); I(10);
+		call(0x5519);                  // "balloon!"
+		op_xor(cpu.a); I(4);
+		mem_write(0xC98F, 0); I(13);
+		I(12);
 		break;
 	default:
 		native_continue_at(at);
 		return;
 	}
-	cpu.cycles += 19 + 19;             // $B1D8: it leaves the map
-	mem_write((uint16_t)(cpu.iy + 3), 0);
-	mem_write((uint16_t)(cpu.iy + 0), 0);
+	mem_write((uint16_t)(cpu.iy + 3), 0); I(19);   // $B1D8: it leaves the map
+	mem_write((uint16_t)(cpu.iy + 0), 0); I(19);
 	call(0x40C9);                      // sound
-	cpu.cycles += 4 + 10;
-	op_or(cpu.a);
+	op_or(cpu.a); I(4);
+	I(10);
 }
 
 // input_step ($B08B): one frame of the player's turn. A direction moves;
@@ -497,39 +497,45 @@ static void nat_input_step(void) {
 	if (pressed != 0x20) { cpu.cycles += 4 + 10; cpu.f |= FC; return; }
 	// $B161: button 2, the command menu ($8000); on foot, next to someone
 	// who stands out (the table at $B189, by their graphic), theirs instead
-	cpu.cycles += 10 + 16 + 13 + 7 + 10;
-	wr16(MOVE_TIME, 0x0100);
-	cpu.a = mem_read(TRANSPORT);
-	op_sub8(0x1F, 0, 0);
-	if (cpu.a != 0x1F) { SET_HL(0x0100); native_continue_at(0x8000); return; }
-	cpu.cycles += 16 + 7 + 17;
-	SET_HL(rd16(0xC953));
-	cpu.b = 0x20;
-	call_original(0x42B7);             // person_at
-	cpu.cycles += 10;
+	SET_HL(0x0100); I(10);
+	wr16(MOVE_TIME, 0x0100); I(16);
+	cpu.a = mem_read(TRANSPORT); I(13);
+	op_sub8(0x1F, 0, 0); I(7);
+	I(10);
+	if (cpu.a != 0x1F) { native_continue_at(0x8000); return; }
+	SET_HL(rd16(0xC953)); I(16);
+	cpu.b = 0x20; I(7);
+	call(0x42B7);                      // person_at
+	I(10);
 	if (cpu.f & FC) { native_continue_at(0x8000); return; }
-	cpu.cycles += 17;
-	call_original(0x48F7);             // person_record
-	cpu.cycles += 19 + 10 + 17;
-	cpu.a = mem_read(cpu.iy);
-	SET_HL(0xB189);
+	call(0x48F7);                      // person_record
+	cpu.a = mem_read((uint16_t)(cpu.iy + 0)); I(19);
+	SET_HL(0xB189); I(10);
+	I(17);
 	for (;;) {                         // switch_on_a
-		cpu.b = op_inc8(mem_read(HL));
-		if (cpu.f & FZ) break;
-		op_sub8(mem_read(HL), 0, 0);
-		SET_HL(HL + 1);
+		cpu.b = mem_read(HL); I(7);
+		cpu.b = op_inc8(cpu.b); I(4);
+		if (cpu.f & FZ) { I(11); break; }
+		I(5);
+		op_sub8(mem_read(HL), 0, 0); I(7);
+		SET_HL(HL + 1); I(6);
 		if (cpu.f & FZ) {
-			cpu.cycles += 41 + 38;
-			SET_HL(rd16(HL));
-			cpu.a = cpu.l;
-			cpu.f = 0x86;              // (its return, $B186, popped into AF)
+			I(12);
+			cpu.a = 0xB1; cpu.f = 0x86; I(10);   // its return, $B186, popped into AF
+			cpu.a = mem_read(HL); I(7);
+			SET_HL(HL + 1); I(6);
+			cpu.h = mem_read(HL); I(7);
+			cpu.l = cpu.a; I(4);
+			I(4);
 			board(HL);
 			return;
 		}
-		cpu.cycles += 58;
-		SET_HL(HL + 2);
+		I(7);
+		SET_HL(HL + 1); I(6);
+		SET_HL(HL + 1); I(6);
+		I(10);
 	}
-	cpu.cycles += 22 + 10;             // none: jp command_menu
+	I(10);                             // none: jp command_menu
 	native_continue_at(0x8000);
 }
 Native native_input_step = { "input_step", 0xB08B, 2, nat_input_step, OUT_A | OUT_F, 0, 0, .blocking = 1 };

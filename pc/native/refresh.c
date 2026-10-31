@@ -41,6 +41,7 @@ static void balloon_drift(void) {
 	uint8_t w = mem_read(WIND);
 	cpu.a = w;
 	SET_HL(rd16(0x1499 + 2 * w));
+	if (w == 4) { cpu.cycles += 10; return; }   // calm: $14A3 is a ret
 	call_original(HL);                 // step_east etc., or nothing when calm
 }
 

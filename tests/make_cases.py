@@ -1062,6 +1062,71 @@ def main():
         for _ in range(6):
             s.press('1', 60)
         s.write(name)
+    # every place of the world ($AE60), walked into from the west; the Abyss's
+    # kind with and without the parts of the key it wants ($C951, $C952)
+    PLACES = open(os.path.join(HERE, '..', 'build', 'u4.sms'), 'rb').read()[0xAE60:0xAEA0]
+    def enter_place_case(name, i, pokes):
+        x, y = PLACES[2 * i], PLACES[2 * i + 1]
+        s = Script()
+        s.poke('C96D:%02X' % ((x - 1) & 0xFF))
+        s.poke('C96E:%02X' % y)
+        s.press('L', 40)
+        s.press('L', 70)
+        s.f += 200
+        for p in pokes:
+            s.poke(p)
+        s.f += 10
+        s.press('R', 500)
+        s.f += 600
+        s.write(name)
+    for i in range(32):
+        enter_place_case('place_%02d' % i, i, [])
+        enter_place_case('place_%02d_horse' % i, i, ['C959:14', 'C95A:00'])
+    for i in (22, 23, 24):
+        enter_place_case('place_%02d_key' % i, i, ['C951:1C', 'C952:1C'])
+    # what stands under the party, boarded: ships, horses, the balloon
+    for figure in (0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x18):
+        for last in (0, 1):
+            s = Script()
+            s.poke('C96D:9F')
+            s.poke('C96E:16')
+            s.press('L', 40)
+            s.press('L', 70)
+            s.f += 200
+            s.press('1', 3)            # (during a turn: not while the frame reads the lists)
+            for a, v in ((0xC699, figure), (0xC69A, 0x9F), (0xC69B, 0x16), (0xC69C, figure)):
+                s.poke('%04X:%02X' % (a, v))
+            if last:
+                s.poke('C973:9F')
+                s.poke('C974:16')
+            s.f += 100
+            s.press('2', 200)
+            s.f += 100
+            for k in 'RRUU':
+                s.press(k, 60)
+            s.write('board_%02X_%d' % (figure, last))
+    # the balloon: the wind ($C98A) carries it, one step in fifteen tries ($C99E)
+    for wind in range(5):
+        for high in (0, 1):
+            s = Script()
+            s.poke('C96D:9F')
+            s.poke('C96E:16')
+            s.press('L', 40)
+            s.press('L', 70)
+            s.f += 200
+            for p in ['C959:18', 'C95A:00', 'C98A:%02X' % wind, 'C98F:%02X' % high, 'C990:%02X' % (4 - 4 * high)]:
+                s.poke(p)
+            for _ in range(30):
+                s.press('U', 60)
+            s.f += 1200
+            s.write('balloon_wind_%d_%d' % (wind, high))
+    # the special things all owned, on the status pages
+    s = Script()
+    for p in ['C955:FF', 'C956:FF', 'C951:FF', 'C952:FF']:
+        s.poke(p)
+    for k in '2' + 'D' * 7 + '2DD2' + 'D' * 7 + 'UU':
+        s.press(k, 60)
+    s.write('camp_status_items')
     # the opening words cut short by a button, then the title
     with open(os.path.join(HERE, 'cases', 'opening_skip.keys'), 'w', newline=chr(10)) as f:
         f.write(chr(10).join(('60 1', '66 -', '900 -')) + chr(10))
