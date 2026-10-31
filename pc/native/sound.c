@@ -1689,8 +1689,7 @@ static void fm_out(void) {
 	op_exx();
 	SET_DE(0xDD41); SET_HL(0xDD4A);
 	cpu.c = 0; cpu.b = 6;
-	cpu.a = mem_read(0xDD58);
-	if (!(cpu.a & 0x40)) { cpu.cycles += 7; cpu.b = 9; } else cpu.cycles += 5;
+	if (cpu.a & 0x40) { cpu.cycles += 7; cpu.b = 9; } else cpu.cycles += 5;   // A: $DD58, or the last instrument byte
 	for (;;) {                         // $8192: a channel
 		cpu.cycles += 4 + 7 + 4;
 		cpu.a = (uint8_t)(cpu.c | 0x30);

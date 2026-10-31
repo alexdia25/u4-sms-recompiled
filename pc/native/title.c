@@ -2493,7 +2493,7 @@ static void logo(void) {               // $807B
 	mem_write(SLOT + 0x1B, 0xF7);
 	mem_write(SLOT + 0x16, 0x0B);
 	do {                               // 11 steps: the scroll table filled with the next offsets
-		cpu.cycles += 19 + 19 + 16 + 10 + 10 + 10 + 10;
+		cpu.cycles += 19 + 19 + 16 + 10 + 10 + 10;
 		SET_HL(rd16(SLOT + 0x1A));
 		wr16(0xD000, HL);
 		SET_HL(0xD000); SET_DE(0xD002); SET_BC(0x00BE);

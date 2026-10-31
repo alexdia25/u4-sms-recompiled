@@ -835,6 +835,24 @@ def main():
         for _ in range(16):
             s.press(rnd.choice('UDLR12'), rnd.choice((30, 60, 120)))
         s.write(name)
+    # other hardware: a Japanese console ($C005 = 0: the logo first, a press or
+    # none), the FM sound unit ($C002, the sound driver's other paths)
+    for name, pokes, press in (('logo_jp', ['C005:00'], 300), ('logo_jp_wait', ['C005:00'], None),
+                               ('fm_sound', ['C002:01'], None), ('fm_rhythm', ['C002:04'], None), ('fm_detected', ['C002:FF'], None)):
+        lines = ['%d =%s' % (f, p) for f in range(1, 9) for p in pokes]
+        if press:
+            lines += ['%d 2' % press, '%d -' % (press + 6)]
+        lines += START if name.startswith('fm') else []
+        last = 1500 if name.startswith('logo') else T0 + 3000
+        rnd = random.Random(name)
+        if name.startswith('fm'):
+            f = T0
+            for _ in range(60):
+                lines += ['%d %s' % (f, rnd.choice('UDLR2221')), '%d -' % (f + 6)]
+                f += 40
+        lines.append('%d -' % last)
+        with open(os.path.join(HERE, 'cases', name + '.keys'), 'w', newline=chr(10)) as out:
+            out.write(chr(10).join(lines) + chr(10))
     # the shrine of honesty (location $1A at $E9, $42): stepped in from the
     # south; the virtue, the cycles, the mantra (AHM) for each cycle
     AHM = ['2', 'R', 'R', 'D', '2', 'D', '2', 'R', 'D', 'D', 'D', '2']   # on the letter grid, then End
