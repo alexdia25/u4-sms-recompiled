@@ -393,6 +393,7 @@ def main():
         'things_wheel_whole': (['C952:02', 'C959:10', 'C961:63'], True, ['2']),
         'things_abyss':      (['C951:1D'] + ABYSS, True, ['2', 'D2', 'DD2', 'DDD2']),
         'things_book_first': (['C951:08'] + ABYSS, True, ['2']),
+        'things_skull_abyss': (['C951:01'] + ABYSS, True, ['2']),
     }
     for name, (pokes, world, uses) in THINGS.items():
         rnd = random.Random(name)
@@ -511,6 +512,11 @@ def main():
         'spell_gate':      ([], True, 4, '2DDD2'),
         'spell_winds':     ([], True, 9, '2R2'),
         'spell_negated':   (['C976:4E', 'C76D:50'], False, 2, '22'),
+        'spell_dispel':    ([], False, 3, '2R2'),
+        'spell_dispel_44': (['D3C4:44'], False, 3, '2R2'),
+        'spell_dispel_47': (['D3C4:47'], False, 3, '2R2'),
+        'spell_dispel_48': (['D3C4:48'], False, 3, '2R2'),
+        'spell_dispel_world': ([], True, 3, '2U2'),
     }
     for name, (pokes, world, downs, keys) in SPELLS.items():
         rnd = random.Random(name)
@@ -574,6 +580,21 @@ def main():
         FIGHTS[name] = ('p15', ['C957:03', 'C758:00'], 20 + k, 6)
         AFTER[name] = ['C8B9:05', 'C8BA:05', 'D878:3C', 'D879:00', 'C0B6:%02X' % (k * 41 & 0xFF), 'C0B7:%02X' % (k * 113 & 0xFF)]
         STEER[name] = '2DD2'
+    # Awaken on a member asleep on the field; each spell when the foes have
+    # just gone; each with other luck, against foes too strong for some ($17)
+    FIGHTS['cspell_awaken'] = ('p15', MAGIC + ['C957:02'], 70, 10)
+    AFTER['cspell_awaken'] = ['C78A:53']
+    STEER['cspell_awaken'] = '2D2' + '2' + 'D2'
+    STRONG = ['%04X:40' % (0xC842 + 8 * i) for i in range(16)]
+    for i, sp in enumerate(COMBAT_SPELLS):
+        name = 'cspell_%s_gone' % sp.lower()
+        FIGHTS[name] = ('p15', MAGIC + ['C957:02'], 71, 10)
+        STEER[name] = ['2', 'D', '2'] + ['=' + p for p in NOFOES] + ['D'] * i + ['2', '2', 'U', '2', '2']
+        for k in range(4):
+            name = 'cspell_%s_%d' % (sp.lower(), k)
+            FIGHTS[name] = ('p15', MAGIC + ['C957:02'], 72 + k, 20)
+            AFTER[name] = STRONG + ['C0B6:%02X' % (k * 41 + i & 0xFF), 'C0B7:%02X' % (k * 113 + i & 0xFF)]
+            STEER[name] = '2D2' + 'D' * i + '2' + '2' + 'U2' + '2'
     for name, (who, pokes, seed, n) in FIGHTS.items():
         rnd = random.Random(name)
         x, y, d, moves, rec = PEOPLE[who]
@@ -594,7 +615,10 @@ def main():
         for p in AFTER.get(name, []):
             s.poke(p)
         for k in STEER.get(name, ''):
-            s.press(k, 40)
+            if k[0] == '=':
+                s.poke(k[1:])
+            else:
+                s.press(k, 40)
         for _ in range(n):
             r = rnd.random()
             k = rnd.choice('UDLR') if r < 0.45 else '2' if r < 0.9 else '1'
@@ -614,6 +638,10 @@ def main():
     for sp in 'DELXYZ':
         DUNGEONS['dspell_' + sp.lower()] = ('despise', MAGIC, '2DD222' + 'D' * DUNGEON_SPELLS.index(sp) + '2U2', 20)
     DUNGEONS['dungeon_climb'] = ('despise', ['C95B:FF'], 'L', 20)          # the ladder up, next to the way in
+    DUNGEONS['dungeon_climb_abyss'] = ('despise', ['C95B:FF', 'C96D:EF', 'C96E:F0'], 'L', 20)   # out where the Abyss is
+    DUNGEONS['dspell_y_deep'] = ('despise', MAGIC + ['C970:03'], '2DD222' + 'D' * DUNGEON_SPELLS.index('Y') + '2U2', 20)
+    DUNGEONS['dspell_z_deep'] = ('despise', MAGIC + ['C970:03'], '2DD222' + 'D' * DUNGEON_SPELLS.index('Z') + '2U2', 20)
+    DUNGEONS['dspell_z_bottom'] = ('despise', MAGIC + ['C970:07'], '2DD222' + 'D' * DUNGEON_SPELLS.index('Z') + '2U2', 20)
     DUNGEONS['dungeon_room'] = ('despise', ['C95B:FF'], 'RRDRR', 60)       # through a door into a room
     DUNGEONS['dungeon_attack'] = ('despise', ['C95B:FF'], '2D2D2' + '2D2R2', 30)   # at nothing, twice
     DUNGEONS['dungeon_fight'] = ('despise', ['C95B:FF', 'C652:04', 'C653:02', 'C654:90'], '2D2R2', 80)   # an orc east of the party
