@@ -734,6 +734,44 @@ def main():
             r = rnd.random()
             s.press('2' if r < 0.6 else rnd.choice('UDLR'), rnd.choice((20, 30, 60)))
         s.write(name)
+    # the shops Moonglow hasn't, tried there: the party put below an open cell
+    # made a counter ($60) on the shop's row, a person (the last record, tile
+    # $52) behind it, and the location poked for the table at $96C1
+    OTHER_SHOPS = {                    # location, the counter's row
+        'weapons': (0x07, 0x03), 'weapons2': (0x08, 0x09),
+        'armour': (0x07, 0x07), 'armour2': (0x0F, 0x11),
+        'pub': (0x07, 0x02), 'pub2': (0x0F, 0x19),
+        'guild': (0x10, 0x1A), 'guild2': (0x0F, 0x07),
+        'stable': (0x0E, 0x18), 'seer': (0x01, 0x19),
+    }
+    X = 0x08
+    for shop, (loc, row) in OTHER_SHOPS.items():
+        for seed in range(3):
+            name = 'shop_%s_%d' % (shop, seed)
+            rnd = random.Random(name)
+            s = Script()
+            cell = 0xD000 + row * 64 + 2 * X
+            for p in ['C9A0:%02X' % loc, 'C953:%02X' % X, 'C985:%02X' % X,
+                      'C954:%02X' % (row + 1), 'C986:%02X' % (row + 1),
+                      '%04X:60' % cell, 'C749:52', 'C74A:%02X' % X,
+                      'C74B:%02X' % (row - 1), 'C74C:52'] + RICH:
+                s.poke(p)
+                s.f += 2
+            if seed:                   # things to sell
+                for a in range(0xC91F, 0xC92F):
+                    s.poke('%04X:05' % a)
+                for a in range(0xC917, 0xC91F):
+                    s.poke('%04X:05' % a)
+                s.f += 2
+            s.f += 60
+            for k in '22U2':
+                s.press(k, 60)
+            s.f += 300
+            for _ in range(70):
+                r = rnd.random()
+                k = 'D' if r < 0.3 else 'U' if r < 0.45 else '2' if r < 0.95 else '1'
+                s.press(k, rnd.choice((30, 60, 120)))
+            s.write(name)
     # the shrine of honesty (location $1A at $E9, $42): stepped in from the
     # south; the virtue, the cycles, the mantra (AHM) for each cycle
     AHM = ['2', 'R', 'R', 'D', '2', 'D', '2', 'R', 'D', 'D', 'D', '2']   # on the letter grid, then End

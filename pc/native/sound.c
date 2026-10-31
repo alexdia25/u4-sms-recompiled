@@ -2080,26 +2080,26 @@ Native native_snd_sequencer = { "snd_sequencer", 0x8329, 0x1F, sequencer_entry, 
 
 // $8ABE (vector $8003): every channel off, the fade over, the chips quiet
 static void stop_all(void) {
-	cpu.cycles += 15 + 14 + 10 + 7 + 4;
-	push16(cpu.ix);
-	cpu.ix = 0xDD5D;
-	SET_DE(0x0028);
-	cpu.b = 8;
+	push16(cpu.ix); cpu.cycles += 15; native_boundary();
+	cpu.ix = 0xDD5D; cpu.cycles += 14; native_boundary();
+	SET_DE(0x0028); cpu.cycles += 10; native_boundary();
+	cpu.b = 8; cpu.cycles += 7; native_boundary();
 	cpu.a = 0;
-	op_sub8(0, 0, 1);
+	op_sub8(0, 0, 1); cpu.cycles += 4; native_boundary();
 	do {
-		cpu.cycles += 19 + 15;
-		IXW(0, 0);
-		cpu.ix += 0x28;
-		if (--cpu.b) cpu.cycles += 13; else { cpu.cycles += 8; break; }
+		IXW(0, 0); cpu.cycles += 19; native_boundary();
+		cpu.ix += 0x28; cpu.cycles += 15; native_boundary();
+		if (--cpu.b) cpu.cycles += 13; else { cpu.cycles += 8; native_boundary(); break; }
+		native_boundary();
 	} while (1);
-	cpu.cycles += 14 + 13 + 8 + 13 + 7 + 13 + 4 + 17;
-	cpu.ix = pop16();
-	cpu.a = mem_read(0xDD02) & ~0x20;
-	mem_write(0xDD02, cpu.a);
-	cpu.a = 0x0F;
-	mem_write(0xDD11, 0x0F);
-	cpu.iff1 = cpu.iff2 = 0;
+	cpu.ix = pop16(); cpu.cycles += 14; native_boundary();
+	cpu.a = mem_read(0xDD02); cpu.cycles += 13; native_boundary();
+	cpu.a &= ~0x20; cpu.cycles += 8; native_boundary();
+	mem_write(0xDD02, cpu.a); cpu.cycles += 13; native_boundary();
+	cpu.a = 0x0F; cpu.cycles += 7; native_boundary();
+	mem_write(0xDD11, 0x0F); cpu.cycles += 13; native_boundary();
+	cpu.iff1 = cpu.iff2 = 0; cpu.cycles += 4;
+	cpu.cycles += 17;
 	silence();
 	cpu.cycles += 17;
 	sound_out();
@@ -2107,9 +2107,10 @@ static void stop_all(void) {
 	cpu.a = mem_read(0xDD58);
 	op_and(cpu.a);
 	if (cpu.a & 0x80) { cpu.cycles += 17; psg_out(); } else cpu.cycles += 10;
-	cpu.cycles += 4 + 13 + 10;
-	cpu.iff1 = cpu.iff2 = 1;
-	cpu.a = mem_read(0xDD58);
+	cpu.iff1 = cpu.iff2 = 1; cpu.cycles += 4;
+	native_irq_point();
+	cpu.a = mem_read(0xDD58); cpu.cycles += 13;
+	cpu.cycles += 10;
 }
 Native native_snd_stop_all = { "snd_stop_all", 0x8ABE, 0x1F, stop_all, 0, .long_calls = 1 };
 
