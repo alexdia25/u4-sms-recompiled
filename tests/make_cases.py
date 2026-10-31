@@ -611,6 +611,10 @@ def main():
         FIGHTS[name] = ('p15', ['C957:02'], 90, 30)
         AFTER[name] = ['C8B9:05', 'C8BA:05', 'C8BE:06', 'C8BF:05', 'D878:%02X' % tile, 'D87A:%02X' % tile, 'D87C:%02X' % tile]
         STEER[name] = 'RRLR'
+    # every kind of foe, with two sets of luck
+    for g in range(0x90, 0x100, 4):
+        for k in (0, 1):
+            FIGHTS['foe_all_%02x_%d' % (g, k)] = (('p15', 'p28')[k], ['C957:03', 'person+3:%02X' % g], 100 + k, 200)
     FIGHTS['cspell_awaken'] = ('p15', MAGIC + ['C957:02'], 70, 10)
     AFTER['cspell_awaken'] = ['C78A:53']
     STEER['cspell_awaken'] = '2D2' + '2' + 'D2'
@@ -674,6 +678,7 @@ def main():
     DUNGEONS['dungeon_room'] = ('despise', ['C95B:FF'], 'RRDRR', 60)       # through a door into a room
     DUNGEONS['dungeon_attack'] = ('despise', ['C95B:FF'], '2D2D2' + '2D2R2', 30)   # at nothing, twice
     DUNGEONS['dungeon_fight'] = ('despise', ['C95B:FF', 'C652:04', 'C653:02', 'C654:90'], '2D2R2', 80)   # an orc east of the party
+    DUNGEONS['dungeon_fight_next'] = ('despise', ['C95B:FF', 'C652:03', 'C653:02', 'C654:90', 'C651:90'], '2D2R2', 80)
     DUNGEONS['dungeon_karma'] = ('despise', ['C95B:FF'], 'a', 20)          # controller 2's button 1
     DUNGEONS['dungeon_help'] = ('despise', ['C95B:FF'], 'bDDDUUUUD2', 20)  # its button 2: the pages
     DUNGEONS['dungeon_help_all'] = ('despise', ['C95B:FF'], 'b' + 'D' * 11 + 'U' * 11 + '1', 10)
@@ -807,16 +812,21 @@ def main():
         s.write(name)
     # Moonglow's moongate ($E0, $85), stepped onto from the west while open
     for name, moons in (('moongate', []),
-                        ('moongate_new', ['C95D:04', 'C95E:80', 'C95F:04', 'C960:80', 'C98D:A6', 'C98E:13'])):
+                        ('moongate_new', ['C95D:04', 'C95E:80', 'C95F:04', 'C960:80', 'C98D:E0', 'C98E:85'])):
         rnd = random.Random(name)
         s = Script()
-        s.poke('C96D:%s' % ('A5' if moons else 'DF'))   # west of the gate of the moon's phase
-        s.poke('C96E:%s' % ('13' if moons else '85'))
+        s.poke('C96D:DF')   # west of the gate of the moon's phase
+        s.poke('C96E:85')
         s.press('L', 40)
         s.press('L', 70)
         s.f += 300
         for p in ['C98C:43'] + moons:
             s.poke(p)
+        if moons:                      # kept so until the step: the moons move
+            for _ in range(12):
+                s.f += 1
+                for p in moons:
+                    s.poke(p)
         s.press('R', 300)
         for _ in range(40):
             r = rnd.random()
@@ -944,6 +954,8 @@ def main():
         'pub_grog_2':    (RICH, '2' + 'D2' + 'UU' + '2'),
         'pub_grog_3':    (RICH, '2' + 'D2' + 'UUU' + '2' + '2222'),
         'pub_grog_9':    (RICH, '2' + 'D2' + 'U' * 9 + '2' + '2222'),
+        'pub_tip_more':  (['C909:05', 'C90A:00'] + WORDS, '2' + 'D2' + 'UUU' + '2' + '2' + 'UUUU' + '2' + '22'),
+        'pub_tips':      (RICH, '2' + ('D2' + 'U' + '2' + '2') * 6 + '22'),
     }
     for word in range(6):
         PUBS['pub_words_%d' % word] = (RICH + WORDS, '2' + 'D2' + 'UUU' + '2' + '2' + 'D' * word + '2' + '2222')
@@ -1475,6 +1487,12 @@ def main():
             s.press(k, 80)
         s.f += 200
         s.write(name)
+    # the seer on a virtue already won ($C90B on), each row
+    for row in (0, 3, 7):
+        s = at_counter('seer', ['%04X:00' % (0xC90B + i) for i in range(8)])
+        for k in ['2', '2'] + ['D'] * row + ['2', '2', '2', '2', '2']:
+            s.press(k, 120)
+        s.write('seer_won_%d' % row)
     # the seer's kind with the Avatar not able
     s = at_counter('seer', ['C76D:53'])
     for k in '2222':
