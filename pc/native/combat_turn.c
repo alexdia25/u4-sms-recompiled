@@ -1959,7 +1959,7 @@ static void combat_end(void) {
 	uint8_t mode = (uint8_t)(mem_read(0xC975) + 0x11);
 	cpu.a = mode;
 	op_cp(0x15);
-	if (mode == 0x15) { cpu.cycles += 7 + 13 + 7; cpu.a = mem_read(0xC9B7); op_and(0x7F); }
+	if (mode == 0x15) { cpu.cycles += 13 + 7; cpu.a = mem_read(0xC9B7); op_and(0x7F); }
 	else cpu.cycles += 5;
 	cpu.cycles += 13 + 10;
 	mem_write(0xC600, cpu.a);

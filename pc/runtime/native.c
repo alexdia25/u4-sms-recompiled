@@ -564,18 +564,4 @@ void call_original(uint16_t addr) {
 // timing: the original spins on "cp (hl) / jr z" (19 cycles a turn) until
 // the interrupt clears $C008, and the machine only looks at the time (and
 // takes the interrupt) after a whole turn.
-void wait_vblank(void) {
-	cpu.cycles += 11 + 11 + 17;             // push af, push hl, call
-	uint8_t a = cpu.a; uint16_t hl = HL;    // the original keeps AF and HL
-	call_original(0x01CB);                  // its first step (VDP setup)
-	mem_write(0xC008, 0xFF);                // the interrupt clears this
-	cpu.cycles += 7 + 10 + 7;
-	while (mem_read(0xC008) == 0xFF) {
-		int64_t turns = (cpu.budget - cpu.cycles + 18) / 19;
-		cpu.cycles += 19 * (turns < 1 ? 1 : turns);
-		cpu.pc = PARK_PC;
-		park();
-	}
-	cpu.a = a; SET_HL(hl);
-	cpu.cycles += 7 + 7 + 10 + 10 + 10;     // the last check, pops and ret
-}
+void wait_vblank(void) { call_original(0x041C); }   // the rewrite in pc/native/vdp.c
