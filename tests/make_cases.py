@@ -417,6 +417,7 @@ def main():
         'attack_person':  ('p15', [], None),
         'attack_guard':   ('p28', [], None),
         'attack_nobody':  (None, [], 'U'),
+        'attack_no_karma': ('p15', ['%04X:00' % (0xC90B + i) for i in range(8)], None),
         'ship_fire':      ('world', ['C959:10', 'C95A:00'], 'U'),
         'ship_no_fire':   ('world', ['C959:10', 'C95A:00'], 'L'),
         'ship_fire_odd':  ('world', ['C959:11', 'C95A:00'], 'L'),
@@ -677,6 +678,9 @@ def main():
     DUNGEONS['dungeon_help'] = ('despise', ['C95B:FF'], 'bDDDUUUUD2', 20)  # its button 2: the pages
     DUNGEONS['dungeon_help_all'] = ('despise', ['C95B:FF'], 'b' + 'D' * 11 + 'U' * 11 + '1', 10)
     DUNGEONS['dungeon_door'] = ('despise', ['C95B:FF', 'D023:C0'], 'RR', 20)        # a door east, nothing behind it
+    DUNGEONS['dungeon_chest'] = ('despise', ['C95B:FF', 'D023:40'], 'R' + '2DDD2' + '2', 20)
+    DUNGEONS['dungeon_chest_none'] = ('despise', ['C95B:FF'], '2DDD2' + '2', 20)
+    DUNGEONS['dungeon_chest_deep'] = ('despise', ['C95B:FF', 'D023:40', 'C9A0:14'], 'R' + '2DDD2' + '2', 20)
     DUNGEONS['dungeon_fight_abyss'] = ('despise', ['C95B:FF', 'C652:04', 'C653:02', 'C654:90', 'C9A0:19'], '2D2R2', 80)
     # the last room of a level: told where it stands, by the party's column
     DUNGEONS['dungeon_room_f_0'] = ('despise', ['C95B:FF', 'C953:00', 'D021:DF'], 'R', 40)
@@ -1459,6 +1463,23 @@ def main():
         for k in 'UDLR':
             s.press(k, 60)
         s.write(name)
+    # doors walked into: locked; one open while another still is
+    for name, pokes, keys in (('door_locked', ['D3C4:3A'], 'RR'),
+                              ('door_two', ['D3C4:3B', 'D3C6:3B'], 'RRRR')):
+        s = Script()
+        s.press('1', 8)
+        for p in pokes:
+            s.poke(p)
+        s.f += 100
+        for k in keys:
+            s.press(k, 80)
+        s.f += 200
+        s.write(name)
+    # the seer's kind with the Avatar not able
+    s = at_counter('seer', ['C76D:53'])
+    for k in '2222':
+        s.press(k, 120)
+    s.write('seer_asleep')
     # the opening words cut short by a button, then the title
     with open(os.path.join(HERE, 'cases', 'opening_skip.keys'), 'w', newline=chr(10)) as f:
         f.write(chr(10).join(('60 1', '66 -', '900 -')) + chr(10))
