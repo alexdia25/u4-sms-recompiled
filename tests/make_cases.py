@@ -68,6 +68,11 @@ CASES = {
     'healer_blood':  ('healer', ['C751:F4', 'C752:01'], '2D22', 10),
     'healer_poor':   ('healer', ['C76D:50', 'C909:10', 'C90A:00'], '22222222', 10),
     'healer_no':     ('healer', [], '2D2', 10),
+    'healer_raise':  ('healer', [], ['=C957:02', '=C78A:44'] + list('222DD2D22222'), 20),
+    'healer_raise_no': ('healer', [], ['=C957:02', '=C78A:44'] + list('222DD2D2D2'), 10),
+    'healer_raise_poor': ('healer', ['C909:10', 'C90A:00'], ['=C957:02', '=C78A:44'] + list('222DD2D22222'), 10),
+    'healer_blood_no': ('healer', ['C751:F4', 'C752:01'], '2D2D2', 10),
+    'healer_raise_alive': ('healer', [], '222DD2222', 10),
 }
 
 
@@ -87,6 +92,8 @@ class Script:
     def write(self, name):
         self.f += 400                  # let the last thing finish printing
         self.lines.append('%d -' % self.f)
+        at = [int(l.split()[0]) for l in self.lines]
+        assert at == sorted(at), name + ': lines out of order: the game would never read those after them'
         with open(os.path.join(HERE, 'cases', name + '.keys'), 'w', newline='\n') as out:
             out.write('\n'.join(self.lines) + '\n')
 
@@ -121,7 +128,10 @@ def main():
             s.press(k, 30)
         s.f += 90
         for k in steer:
-            s.press(k, 60)
+            if k[0] == '=':
+                s.poke(k[1:])
+            else:
+                s.press(k, 60)
         random_presses(s, rnd, n)
         for _ in range(6):
             s.press('1', 60)
@@ -820,6 +830,63 @@ def main():
                 k = 'D' if r < 0.3 else 'U' if r < 0.45 else '2' if r < 0.95 else '1'
                 s.press(k, rnd.choice((30, 60, 120)))
             s.write(name)
+    # every inn ($96C1, $97B5: the place, its counter's row), the nights the
+    # random numbers make of them; inn 3 has a choice of rooms
+    ROM2 = open(os.path.join(HERE, '..', 'build', 'u4.sms'), 'rb').read()
+    for place in range(16):
+        number = ROM2[0x8000 + 0x1755 + 6 * 16 + place] - 1
+        if number < 0:
+            continue
+        loc, row = place + 2, ROM2[0x8000 + 0x16C1 + place * 8 + 6]
+        for seed in range(10):
+            name = 'inn_%d_%d' % (number, seed)
+            s = Script()
+            cell = 0xD000 + row * 64 + 2 * X
+            for p in ['C9A0:%02X' % loc, 'C953:%02X' % X, 'C985:%02X' % X,
+                      'C954:%02X' % (row + 1), 'C986:%02X' % (row + 1),
+                      '%04X:60' % cell, 'C749:52', 'C74A:%02X' % X,
+                      'C74B:%02X' % (row - 1), 'C74C:52'] + RICH:
+                s.poke(p)
+                s.f += 2
+            s.f += 60
+            for k in '22U2':
+                s.press(k, 60)
+            s.f += 300
+            s.poke('C0B6:%02X' % (seed * 41 & 0xFF))
+            s.poke('C0B7:%02X' % (seed * 113 & 0xFF))
+            s.press('2', 200)          # the welcome
+            s.press('2', 100)          # a room: yes
+            s.press('2', 200)
+            if number == 3:
+                for _ in range(seed % 3):
+                    s.press('D', 40)
+            s.press('2', 200)
+            s.press('2', 200)
+            for _ in range(12):
+                s.press('2', 150)
+            s.f += 400
+            s.write(name)
+    # a ship's cannon: what stands in the line of fire ($8586), 1 to 4 cells on
+    for record in (0, 12):
+        at = 0xC651 + 8 * record
+        for cells in (1, 2, 3, 4):
+            for figure in (0x90, 0x8C, 0x18):
+                s = Script()
+                s.poke('C96D:9F')
+                s.poke('C96E:16')
+                s.press('L', 40)
+                s.press('L', 70)
+                s.f += 200
+                s.press('1', 8)
+                s.poke('C959:10')
+                s.poke('C95A:00')
+                for a, v in ((at, figure), (at + 1, 0x9F), (at + 2, 0x16 - cells), (at + 3, figure)):
+                    s.poke('%04X:%02X' % (a, v))
+                s.f += 100
+                for k in '2D2U2':
+                    s.press(k, 40)
+                s.f += 300
+                s.write('cannon_%d_%d_%02X' % (record, cells, figure))
     # Lord British, as a person poked next to the party (at (2, 15) in Moonglow)
     BRITISH = {
         'lb_first':   [],
@@ -1093,7 +1160,7 @@ def main():
             s.press('L', 40)
             s.press('L', 70)
             s.f += 200
-            s.press('1', 3)            # (during a turn: not while the frame reads the lists)
+            s.press('1', 8)            # (during a turn: not while the frame reads the lists)
             for a, v in ((0xC699, figure), (0xC69A, 0x9F), (0xC69B, 0x16), (0xC69C, figure)):
                 s.poke('%04X:%02X' % (a, v))
             if last:
