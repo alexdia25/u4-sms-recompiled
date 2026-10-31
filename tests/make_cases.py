@@ -69,6 +69,8 @@ CASES = {
     'healer_blood':  ('healer', ['C751:F4', 'C752:01'], '2D22', 10),
     'healer_poor':   ('healer', ['C76D:50', 'C909:10', 'C90A:00'], '22222222', 10),
     'healer_no':     ('healer', [], '2D2', 10),
+    'healer_cure_no': ('healer', ['C76D:50'], '2222D2', 10),
+    'healer_heal_no': ('healer', ['C751:64', 'C752:00'], '222D22D2', 10),
     'healer_raise':  ('healer', [], ['=C957:02', '=C78A:44'] + list('222DD2D22222'), 20),
     'healer_raise_no': ('healer', [], ['=C957:02', '=C78A:44'] + list('222DD2D2D2'), 10),
     'healer_raise_poor': ('healer', ['C909:10', 'C90A:00'], ['=C957:02', '=C78A:44'] + list('222DD2D22222'), 10),
@@ -396,6 +398,7 @@ def main():
         'things_abyss':      (['C951:1D'] + ABYSS, True, ['2', 'D2', 'DD2', 'DDD2']),
         'things_book_first': (['C951:08'] + ABYSS, True, ['2']),
         'things_skull_abyss': (['C951:01'] + ABYSS, True, ['2']),
+        'things_skull_5e': (['C951:01', 'C654:5E', 'C651:5E', 'C652:03', 'C653:03'], False, ['2']),
     }
     for name, (pokes, world, uses) in THINGS.items():
         rnd = random.Random(name)
@@ -515,6 +518,10 @@ def main():
         'spell_winds':     ([], True, 9, '2R2'),
         'spell_negated':   (['C976:4E', 'C76D:50'], False, 2, '22'),
         'spell_dispel':    ([], False, 3, '2R2'),
+        'spell_blink_balloon': (['C959:18', 'C95A:00'], True, 1, '2U2'),
+        'spell_open_balloon': (['C959:18', 'C95A:00'], True, 6, '2'),
+        'spell_gate_balloon': (['C959:18', 'C95A:00'], True, 4, '2DDD2'),
+        'spell_winds_balloon': (['C959:18', 'C95A:00'], True, 9, '2R2'),
         'spell_dispel_44': (['D3C4:44'], False, 3, '2R2'),
         'spell_dispel_47': (['D3C4:47'], False, 3, '2R2'),
         'spell_dispel_48': (['D3C4:48'], False, 3, '2R2'),
@@ -664,6 +671,7 @@ def main():
     DUNGEONS['dungeon_help'] = ('despise', ['C95B:FF'], 'bDDDUUUUD2', 20)  # its button 2: the pages
     DUNGEONS['dungeon_help_all'] = ('despise', ['C95B:FF'], 'b' + 'D' * 11 + 'U' * 11 + '1', 10)
     DUNGEONS['dungeon_door'] = ('despise', ['C95B:FF', 'D023:C0'], 'RR', 20)        # a door east, nothing behind it
+    DUNGEONS['dungeon_fight_abyss'] = ('despise', ['C95B:FF', 'C652:04', 'C653:02', 'C654:90', 'C9A0:19'], '2D2R2', 80)
     # the last room of a level: told where it stands, by the party's column
     DUNGEONS['dungeon_room_f_0'] = ('despise', ['C95B:FF', 'C953:00', 'D021:DF'], 'R', 40)
     DUNGEONS['dungeon_room_f_1'] = ('despise', ['C95B:FF', 'D023:DF'], 'R', 40)
@@ -1148,12 +1156,47 @@ def main():
         s.press('2', 500)              # its answer
         if not name.startswith('ask_n2'):
             s.press('2', 300)          # the question
+        for p in pokes:                # (the record may have set them by now)
+            s.poke(p)
         for k in answer:
             s.press(k, 40)
         s.f += 300
         s.press('2', 400)              # what they say to that
         for k in word:
             s.press(k, 40)
+        s.f += 300
+        for _ in range(4):
+            s.press('2', 200)
+        s.write(name)
+    # the list of words moved past its end and back; a question's other answer
+    # where it counts; a beggar and someone else given money, without the money
+    s = Script()
+    for p in ['C9A0:07', 'C749:24', 'C74A:02', 'C74B:0F', 'C74C:24', 'C750:03']:
+        s.poke(p)
+        s.f += 1
+    s.f += 40
+    for k in '22R2':
+        s.press(k, 60)
+    s.f += 300
+    s.press('2', 120)
+    for k in 'D' * 14 + 'U' * 14:
+        s.press(k, 40)
+    s.write('talk_scroll')
+    for name, kind, gold in (('give_beggar_poor', 0x58, 0), ('give_other', 0x24, 0x10), ('give_other_poor', 0x24, 0)):
+        s = Script()
+        for p in ['C9A0:07', 'C749:%02X' % kind, 'C74A:02', 'C74B:0F', 'C74C:%02X' % kind, 'C750:03',
+                  'C909:%02X' % gold, 'C90A:00']:
+            s.poke(p)
+            s.f += 1
+        s.f += 40
+        for k in '22R2':
+            s.press(k, 60)
+        s.f += 300
+        for k in '2' + 'D' * 6 + '2':  # GIVE
+            s.press(k, 60)
+        s.f += 300
+        for k in 'UU2':
+            s.press(k, 60)
         s.f += 300
         for _ in range(4):
             s.press('2', 200)
