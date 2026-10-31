@@ -604,6 +604,12 @@ def main():
             FIGHTS[name] = ('p15', MAGIC + ['C957:02', 'person+3:%02X' % g], 80 + k, 20)
             AFTER[name] = ['%04X:40' % (0xC842 + 8 * i) for i in range(16)] + ['C0B6:%02X' % (k * 41 & 0xFF), 'C0B7:%02X' % (k * 113 & 0xFF)]
             STEER[name] = '2D2' + 'D' * COMBAT_SPELLS.index('U') + '2' + '2' + 'U2' + '2'
+    # a member stepping on each kind of field
+    for tile in (0x44, 0x45, 0x46, 0x47):
+        name = 'fight_field_%02x' % tile
+        FIGHTS[name] = ('p15', ['C957:02'], 90, 30)
+        AFTER[name] = ['C8B9:05', 'C8BA:05', 'D87A:%02X' % tile, 'D87B:00']
+        STEER[name] = 'RRLR'
     FIGHTS['cspell_awaken'] = ('p15', MAGIC + ['C957:02'], 70, 10)
     AFTER['cspell_awaken'] = ['C78A:53']
     STEER['cspell_awaken'] = '2D2' + '2' + 'D2'
@@ -1401,6 +1407,58 @@ def main():
                 s.f += 1
                 s.press(key, 80)
             s.write('sail_%d_%s' % (wind, key))
+    # the lists of the world full of ships and horses near the party, on it,
+    # and far off; a town's list full when a horse is left there; ships by the Abyss
+    def near(base, figure, at):
+        return ['%04X:%02X' % (base + 8 * i + k, v) for i, (x, y) in enumerate(at)
+                for k, v in ((0, figure), (1, x), (2, y), (3, figure))]
+    ROUND = [(0xD1, 0xE0), (0xCF, 0xE0), (0xD0, 0xE1), (0xD0, 0xDF), (0xD2, 0xE1)]
+    ON_IT = [(0xD0, 0xE0)] * 5
+    for name, base, figure, at, by in (('near_ships', 0xC699, 0x10, ROUND, 'C959:10'), ('near_ships_on', 0xC699, 0x10, ON_IT, 'C959:10'),
+                                       ('near_horses', 0xC6C1, 0x14, ROUND, 'C959:14'), ('near_horses_on', 0xC6C1, 0x14, ON_IT, 'C959:14'),
+                                       ('near_both', 0xC699, 0x10, ROUND, 'C959:14')):
+        s = Script()
+        s.poke('C96D:D0')
+        s.poke('C96E:E0')
+        s.press('L', 40)
+        s.press('L', 70)
+        s.f += 200
+        s.press('1', 8)
+        for p in [by, 'C95A:00'] + near(base, figure, at) + (near(0xC6C1, 0x14, ROUND) if name == 'near_both' else []):
+            s.poke(p)
+        s.f += 100
+        rnd = random.Random(name)
+        for _ in range(120):
+            s.press(rnd.choice('UDLR'), 40)
+        s.write(name)
+    FULL = ['%04X:%02X' % (0xC651 + 8 * i + k, v) for i in range(32) for k, v in ((0, 0x20), (1, 0x10 + i), (2, 0x02), (3, 0x20))]
+    for name, extra in (('town_horse_full', []),
+                        ('town_horse_full_horse', ['C6B4:14']),
+                        ('town_horse_full_3c', ['C6B4:3C'])):
+        s = Script()
+        s.press('1', 8)
+        for p in FULL + ['C959:14', 'C95A:00'] + extra:
+            s.poke(p)
+        s.f += 100
+        for k in 'RR1':
+            s.press(k, 100)
+        s.f += 200
+        s.write(name)
+    for name, at in (('abyss_isle_ships', (0xE0, 0xE0)), ('abyss_isle_ships_far', (0xE7, 0xE0))):
+        s = Script()
+        s.poke('C96D:DB')
+        s.poke('C96E:E0')
+        s.press('L', 40)
+        s.press('L', 70)
+        s.f += 200
+        s.press('1', 8)
+        for p in ['C959:12', 'C95A:00'] + near(0xC6B1, 0x10, [at]):
+            s.poke(p)
+        s.f += 100
+        s.press('R', 200)
+        for k in 'UDLR':
+            s.press(k, 60)
+        s.write(name)
     # the opening words cut short by a button, then the title
     with open(os.path.join(HERE, 'cases', 'opening_skip.keys'), 'w', newline=chr(10)) as f:
         f.write(chr(10).join(('60 1', '66 -', '900 -')) + chr(10))
