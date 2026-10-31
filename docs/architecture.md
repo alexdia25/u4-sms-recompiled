@@ -153,8 +153,8 @@ cell: tile, attribute) that slides by whole 16×16 chunks as the party walks
 
 ## How much is rewritten
 
-With every rewrite on, none of the 337 test cases executes a single translated
-instruction of the original (counted exactly, one flag per instruction). What the
+With every rewrite on, none of the 282 test cases of the last exact count executed a translated
+instruction of the original (one flag per instruction; 55 cases have been added since). What the
 original translation still holds:
 
 - the Status pages and karma list the second controller's buttons open in a
