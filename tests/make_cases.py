@@ -810,6 +810,27 @@ def main():
         for _ in range(4):
             s.press('1', 60)
         s.write(name)
+    # the moongate of the moons new ($A6, $13, both moons kept at 4), from each side
+    NEW = ['C95D:04', 'C95E:80', 'C95F:04', 'C960:80', 'C98C:43', 'C98D:A6', 'C98E:13']
+    for key, x, y in (('R', 0xA5, 0x13), ('L', 0xA7, 0x13), ('D', 0xA6, 0x12), ('U', 0xA6, 0x14)):
+        s = Script()
+        s.poke('C96D:%02X' % x)
+        s.poke('C96E:%02X' % y)
+        s.press('L', 40)
+        s.press('L', 70)
+        s.f += 300
+        for i in range(60):            # (poked all through the step: it moves the moons)
+            for p in NEW:
+                s.poke(p)
+            if i == 14:
+                s.lines.append('%d %s' % (s.f, key))
+            if i == 20:
+                s.lines.append('%d -' % s.f)
+            s.f += 1
+        s.f += 300
+        for k in 'UDLR2122':
+            s.press(k, 60)
+        s.write('moongate_new_' + key)
     # Moonglow's moongate ($E0, $85), stepped onto from the west while open
     for name, moons in (('moongate', []),
                         ('moongate_new', ['C95D:04', 'C95E:80', 'C95F:04', 'C960:80', 'C98D:E0', 'C98E:85'])):
