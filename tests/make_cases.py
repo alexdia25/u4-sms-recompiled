@@ -556,6 +556,11 @@ def main():
     FIGHTS['fight_won'] = ('p15', ['C957:01'], 30, 10)
     FIGHTS['fight_lost'] = ('p28', ['C957:01'], 31, 10)
     STEER['fight_won'] = STEER['fight_lost'] = 'R'
+    for k in range(32):                # a chest under the member on the field: every trap
+        name = 'fight_chest_%d' % k
+        FIGHTS[name] = ('p15', ['C957:03', 'C758:00'], 20 + k, 6)
+        AFTER[name] = ['C8B9:05', 'C8BA:05', 'D878:3C', 'D879:00', 'C0B6:%02X' % (k * 41 & 0xFF), 'C0B7:%02X' % (k * 113 & 0xFF)]
+        STEER[name] = '2DD2'
     for name, (who, pokes, seed, n) in FIGHTS.items():
         rnd = random.Random(name)
         x, y, d, moves, rec = PEOPLE[who]
