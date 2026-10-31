@@ -608,7 +608,7 @@ def main():
     for tile in (0x44, 0x45, 0x46, 0x47):
         name = 'fight_field_%02x' % tile
         FIGHTS[name] = ('p15', ['C957:02'], 90, 30)
-        AFTER[name] = ['C8B9:05', 'C8BA:05', 'D87A:%02X' % tile, 'D87B:00']
+        AFTER[name] = ['C8B9:05', 'C8BA:05', 'C8BE:06', 'C8BF:05', 'D878:%02X' % tile, 'D87A:%02X' % tile, 'D87C:%02X' % tile]
         STEER[name] = 'RRLR'
     FIGHTS['cspell_awaken'] = ('p15', MAGIC + ['C957:02'], 70, 10)
     AFTER['cspell_awaken'] = ['C78A:53']
