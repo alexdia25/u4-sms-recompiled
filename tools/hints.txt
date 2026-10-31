@@ -1296,3 +1296,13 @@ native   02:AF7B native_town_turns_again
 native   03:9D9E native_combat_input_back
 native   03:A43E native_missile_cell
 native   03:B085 native_vision_picture
+native   01:46D0 native_msg_cant
+native   01:646C native_step_in_town
+native   01:4933 native_person_for_thing
+native   03:AB38 native_foe_eats
+native   03:AB54 native_foe_steals
+native   02:A173 native_pub_rumours
+native   02:AB92 native_shop_offer
+native   02:ABE7 native_virtues_menu
+native   02:BC1F native_whirlpool_takes
+native   02:BC54 native_twister_takes

@@ -247,3 +247,301 @@ M(town_turns_again, 0xAF7B, 2, 0)
 M(combat_input_back, 0x9D9E, 3, 0)
 M(missile_cell, 0xA43E, 3, ALL)
 M(vision_picture, 0xB085, 3, ALL)
+
+// $46D0: "Can't!"
+static void msg_cant(void) {
+	ON_FIBER();
+	C(0x40D1);
+	say_inline(0x46D6);
+	I(10);
+}
+
+// $646C: (L, H) = the party's cell + the step; carry when it is on the
+// 32 x 32 map
+static void step_in_town(void) {
+	cpu.a = mem_read(0xC953); I(13);
+	op_add8(mem_read((uint16_t)(cpu.ix + 0x0E)), 0); I(19);
+	cpu.l = cpu.a; I(4);
+	op_sub8(0x20, 0, 0); I(7);
+	if (!(cpu.f & FC)) { I(11); return; }
+	I(5);
+	cpu.a = mem_read(0xC954); I(13);
+	op_add8(mem_read((uint16_t)(cpu.ix + 0x10)), 0); I(19);
+	cpu.h = cpu.a; I(4);
+	op_sub8(0x20, 0, 0); I(7);
+	I(10);
+}
+
+// $4933: a place in the table of people for something new (IY): a free one,
+// else a chest ($3C, from the end), else a ship or horse not under the
+// party, else one at random of the last ones
+static void person_for_thing(void) {
+	push16(BC); I(11); push16(DE); I(11); push16(HL); I(11);
+	SET_HL(rd16(0xC953)); I(16);
+	cpu.a = mem_read(0xC9A0); I(13);
+	op_or(cpu.a); I(4);
+	if (cpu.f & FZ) { I(12); cpu.iy = 0xC691; I(14); cpu.c = 0x18; I(7); }
+	else { I(7); cpu.iy = 0xC651; I(14); cpu.c = 0x20; I(7); I(12); }
+	SET_DE(0x0008); I(10);
+	cpu.b = cpu.c; I(4);
+	op_xor(cpu.a); I(4);
+	int found = 0;
+	do {
+		op_sub8(mem_read((uint16_t)(cpu.iy + 3)), 0, 0); I(19);
+		if (cpu.f & FZ) { I(12); found = 1; break; }
+		I(7);
+		cpu.iy = op_add16(cpu.iy, DE); I(15);
+		I(--cpu.b ? 13 : 8);
+	} while (cpu.b);
+	if (!found) {
+		SET_DE(0xFFF8); I(10);
+		cpu.b = cpu.c; I(4);
+		cpu.a = 0x3C; I(7);
+		do {
+			cpu.iy = op_add16(cpu.iy, DE); I(15);
+			op_sub8(mem_read((uint16_t)(cpu.iy + 3)), 0, 0); I(19);
+			if (cpu.f & FZ) { I(12); found = 1; break; }
+			I(7);
+			I(--cpu.b ? 13 : 8);
+		} while (cpu.b);
+	}
+	if (!found) {
+		SET_DE(0x0008); I(10);
+		cpu.b = cpu.c; I(4);
+		do {
+			cpu.a = mem_read((uint16_t)(cpu.iy + 3)); I(19);
+			op_sub8(0x10, 0, 0); I(7);
+			if (cpu.f & FC) I(12);
+			else {
+				I(7);
+				op_sub8(0x16, 0, 0); I(7);
+				if (!(cpu.f & FC)) I(12);
+				else {
+					I(7);
+					cpu.a = mem_read((uint16_t)(cpu.iy + 1)); I(19);
+					op_sub8(cpu.l, 0, 0); I(4);
+					if (!(cpu.f & FZ)) { I(12); found = 1; break; }
+					I(7);
+					cpu.a = mem_read((uint16_t)(cpu.iy + 2)); I(19);
+					op_sub8(cpu.h, 0, 0); I(4);
+					if (!(cpu.f & FZ)) { I(12); found = 1; break; }
+					I(7);
+				}
+			}
+			cpu.iy = op_add16(cpu.iy, DE); I(15);
+			I(--cpu.b ? 13 : 8);
+		} while (cpu.b);
+	}
+	if (!found) {
+		cpu.a = 0x20; I(7);
+		op_sub8(cpu.c, 0, 1); I(4);
+		cpu.b = cpu.a; I(4);
+		cpu.a = cpu.c; I(4);
+		C(0x2BEB);
+		op_add8(cpu.b, 0); I(4);
+		C(0x48F7);
+	}
+	SET_HL(pop16()); I(10);
+	SET_DE(pop16()); I(10);
+	SET_BC(pop16()); I(10);
+	I(10);
+}
+
+// $AB38 (bank 3): a foe's touch takes 25 food; the status window
+static void foe_eats(void) {
+	ON_FIBER();
+	push16(DE); I(11); push16(HL); I(11);
+	C(0x7F11);
+	SET_HL(rd16(0xC907)); I(16);
+	SET_DE(0x0019); I(10);
+	op_or(cpu.a); I(4);
+	op_sbc16(DE); I(15);
+	if (!(cpu.f & FC)) I(12);
+	else { I(7); SET_HL(0x0000); I(10); }
+	wr16(0xC907, HL); I(16);
+	C(0x7F29);
+	SET_HL(pop16()); I(10);
+	SET_DE(pop16()); I(10);
+	I(10);
+}
+
+// $AB54 (bank 3): one time in four a foe takes up to 63 gold ($7F35)
+static void foe_steals(void) {
+	ON_FIBER();
+	C(0x7ED8);
+	op_and(0x03); I(7);
+	if (!(cpu.f & FZ)) { I(11); return; }
+	I(5);
+	push16(HL); I(11);
+	C(0x7F11);
+	C(0x7ED8);
+	op_and(0x3F); I(7);
+	cpu.l = cpu.a; I(4);
+	cpu.h = 0x00; I(7);
+	C(0x7F35);
+	SET_HL(pop16()); I(10);
+	I(10);
+}
+
+// $A173: the pub's six rumours ($C9B1, from the flags in $C5xx): NZ when any
+static void pub_rumours(void) {
+	static const uint16_t flags[6] = { 0xC535, 0xC51F, 0xC52B, 0xC526, 0xC51A, 0xC529 };
+	SET_HL(0xC9B1); I(10);
+	for (int i = 0; i < 6; i++) {
+		cpu.a = mem_read(flags[i]); I(13);
+		mem_write(HL, cpu.a); I(7);
+		SET_HL(HL + 1); I(6);
+	}
+	SET_HL(0xC9B1); I(10);
+	cpu.b = 0x06; I(7);
+	op_xor(cpu.a); I(4);
+	do {
+		op_or(mem_read(HL)); I(7);
+		SET_HL(HL + 1); I(6);
+		I(--cpu.b ? 13 : 8);
+	} while (cpu.b);
+	I(10);
+}
+
+// $AB92: a shop's offer: half of (price of IX+$1B at the table HL) x IX+$21,
+// 9999 at most, kept at IX+$1F and printed
+static void shop_offer(void) {
+	ON_FIBER();
+	cpu.a = mem_read((uint16_t)(cpu.ix + 0x1B)); I(19);
+	I(11); call_original(0x0020);      // rst $20
+	{ uint16_t t = HL; SET_HL(DE); SET_DE(t); } I(4);
+	cpu.b = mem_read((uint16_t)(cpu.ix + 0x21)); I(19);
+	SET_HL(0x0000); I(10);
+	int over = 0;
+	do {
+		SET_HL(op_add16(HL, DE)); I(11);
+		if (cpu.f & FC) { I(12); over = 1; break; }
+		I(7);
+		I(--cpu.b ? 13 : 8);
+	} while (cpu.b);
+	if (over) { SET_HL(0xFFFF); I(10); }
+	else I(12);
+	cpu.h = op_rot(7, cpu.h); I(8);
+	cpu.l = op_rot(3, cpu.l); I(8);
+	C(0x36DA);                         // cap_9999
+	mem_write((uint16_t)(cpu.ix + 0x1F), cpu.l); I(19);
+	mem_write((uint16_t)(cpu.ix + 0x20), cpu.h); I(19);
+	I(10); native_continue_at(0x5627);
+}
+
+// $ABE7: the seer's menu of the eight virtues
+static void virtues_menu(void) {
+	mem_write((uint16_t)(cpu.ix + 0x1A), 0x00); I(19);
+	C(0x2E1B);
+	SET_DE(0x0213); I(10);
+	SET_BC(0x0897); I(10);
+	do {
+		push16(BC); I(11);
+		push16(DE); I(11);
+		cpu.a = cpu.c; I(4);
+		C(0x340F);                     // item_name
+		C(0x2D69);                     // menu_text
+		SET_DE(pop16()); I(10);
+		SET_BC(pop16()); I(10);
+		cpu.d = op_inc8(cpu.d); I(4);
+		cpu.d = op_inc8(cpu.d); I(4);
+		cpu.c = op_inc8(cpu.c); I(4);
+		I(--cpu.b ? 13 : 8);
+	} while (cpu.b);
+	I(10); native_continue_at(0x2E54);
+}
+
+static void tile_over_party(void) {    // $BC14 (its call counted): the whirl drawn at the party's cell
+	push16(HL); I(11);
+	C(0x129D);
+	SET_HL(pop16()); I(10);
+	wr16(0xD978, HL); I(16);
+	I(10); call_original(0x1A7C);
+}
+
+// $BC1F: a whirlpool takes the party: harm, everyone at that place gone,
+// and on to mode $0F
+static void whirlpool_takes(void) {
+	ON_FIBER();
+	SET_HL(0x008C); I(10);
+	I(17); tile_over_party();
+	C(0x4812);
+	cpu.iy = 0xC651; I(14);
+	SET_HL(rd16(0xC953)); I(16);
+	SET_DE(0x0008); I(10);
+	cpu.b = 0x20; I(7);
+	do {
+		cpu.a = mem_read((uint16_t)(cpu.iy + 1)); I(19);
+		op_sub8(cpu.l, 0, 0); I(4);
+		if (!(cpu.f & FZ)) I(12);
+		else {
+			I(7);
+			cpu.a = mem_read((uint16_t)(cpu.iy + 2)); I(19);
+			op_sub8(cpu.h, 0, 0); I(4);
+			if (!(cpu.f & FZ)) I(12);
+			else {
+				I(7);
+				mem_write((uint16_t)(cpu.iy + 3), 0); I(19);
+				mem_write((uint16_t)(cpu.iy + 0), 0); I(19);
+			}
+		}
+		cpu.iy = op_add16(cpu.iy, DE); I(15);
+		I(--cpu.b ? 13 : 8);
+	} while (cpu.b);
+	cpu.a = 0x0F; I(7);
+	mem_write(0xC600, 0x0F); I(13);
+	I(10); native_continue_at(0x0CD2);
+}
+
+// $BC54: a twister: four times harm, and all but ships at that place gone
+static void twister_takes(void) {
+	ON_FIBER();
+	SET_HL(0x008E); I(10);
+	I(17); tile_over_party();
+	for (int i = 0; i < 4; i++) C(0x4812);
+	cpu.iy = 0xC651; I(14);
+	SET_HL(rd16(0xC953)); I(16);
+	SET_DE(0x0008); I(10);
+	cpu.b = 0x20; I(7);
+	do {
+		cpu.a = mem_read((uint16_t)(cpu.iy + 1)); I(19);
+		op_sub8(cpu.l, 0, 0); I(4);
+		if (!(cpu.f & FZ)) I(12);
+		else {
+			I(7);
+			cpu.a = mem_read((uint16_t)(cpu.iy + 2)); I(19);
+			op_sub8(cpu.h, 0, 0); I(4);
+			if (!(cpu.f & FZ)) I(12);
+			else {
+				I(7);
+				cpu.a = mem_read((uint16_t)(cpu.iy + 3)); I(19);
+				op_sub8(0x10, 0, 0); I(7);
+				int ship = 0;
+				if (cpu.f & FC) I(12);
+				else {
+					I(7);
+					op_sub8(0x14, 0, 0); I(7);
+					ship = (cpu.f & FC) != 0;
+					I(ship ? 12 : 7);
+				}
+				if (!ship) {
+					mem_write((uint16_t)(cpu.iy + 3), 0); I(19);
+					mem_write((uint16_t)(cpu.iy + 0), 0); I(19);
+				}
+			}
+		}
+		cpu.iy = op_add16(cpu.iy, DE); I(15);
+		I(--cpu.b ? 13 : 8);
+	} while (cpu.b);
+	I(10);
+}
+M(msg_cant, 0x46D0, 1, ALL)
+M(step_in_town, 0x646C, 1, OUT_A | OUT_F | OUT_HL)
+M(person_for_thing, 0x4933, 1, OUT_A | OUT_F | OUT_IY)
+M(foe_eats, 0xAB38, 3, ALL)
+M(foe_steals, 0xAB54, 3, ALL)
+M(pub_rumours, 0xA173, 2, OUT_A | OUT_F | OUT_BC | OUT_HL)
+M(shop_offer, 0xAB92, 2, ALL)
+M(virtues_menu, 0xABE7, 2, ALL)
+M(whirlpool_takes, 0xBC1F, 2, 0)
+M(twister_takes, 0xBC54, 2, ALL)
