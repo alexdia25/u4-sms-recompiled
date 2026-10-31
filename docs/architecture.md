@@ -160,5 +160,10 @@ cases or the seeds of `tests/random_play.sh` interprets a single instruction, an
 both fail if one does. With `U4_NATIVE=off` the whole game runs on the interpreter,
 which is the original that everything is compared with.
 
-Original code no test has reached yet may still have no rewrite. Run the cases
-with `U4_NATIVE=off` and `U4_LOG_FALLBACK` to list what they reach.
+At the last count, 975 cases reached all but about 1,000 of the original's real
+instructions. About 820 of those have a rewrite that no test has run yet; 317 of
+them are the sound driver's, which every song and sound (`song_*`, `sounds_*`, with
+and without the FM unit) leave unused, so the game's music data never asks for them.
+About 170 have no rewrite: if one ever ran, the interpreter would run it and count
+it. Another 1,000 or so disassembled "instructions" nothing reaches are text and tables.
+Run the cases with `U4_NATIVE=off` and `U4_LOG_FALLBACK` to list what they reach.

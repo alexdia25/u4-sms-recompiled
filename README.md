@@ -150,7 +150,7 @@ alone runs the game.
 ### Tests
 
 ```sh
-tests/run.sh             # all cases (about 8 minutes)
+tests/run.sh             # all cases (about 30 minutes)
 tests/run.sh food_buy    # one case
 ```
 
