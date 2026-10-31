@@ -1314,3 +1314,11 @@ native   00:3FD0 native_trap_pit
 native   01:5659 native_page_text
 name     01:57C5 help_page
 native   01:57C5 native_help_page
+native   01:5597 native_far_text
+native   01:6C59 native_step_from_de
+native   01:6C07 native_room_from_wall
+native   00:028B native_logo_names
+native   02:ACCC native_world_input_frame
+native   02:ACCF native_world_input
+native   02:AF9A native_town_input_frame
+native   02:AF9D native_town_input

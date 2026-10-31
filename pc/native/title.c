@@ -351,6 +351,65 @@ static void demo_step(void) {
 	}
 }
 
+// $8A97, called at site: the title's bottom lines and picture tiles cleared:
+// the window's copy of the bank $15 name table sent to the screen, a turn,
+// then 28 rows of tiles zeroed and five of the blank pattern at $8AE6; the
+// return kept in the slot (task_enter_1)
+static void title_clear(uint16_t site) {
+	uint16_t back = (uint16_t)(site + 3);
+	cpu.cycles += 17 + 17 + 77 + 7 + 10 + 10 + 10;
+	wr16(cpu.ix + 0x24, back);
+	cpu.a = 0x15;
+	SET_HL(0x833E);
+	SET_DE(0xCD80);
+	SET_BC(0x0280);
+	cpu.cycles += 17; call_original(0x07EC);   // far_ldir
+	cpu.cycles += 10 + 10 + 10;
+	SET_HL(0xCD80);
+	SET_DE(0x3B80);
+	SET_BC(0x0280);
+	cpu.cycles += 17; call_original(0x0463);   // queue the copy
+	cpu.cycles += 17 + 58;
+	SET_HL(0x8AB7);
+	task_wait_turn(0x8AB7);
+	cpu.cycles += 10 + 10 + 7;
+	SET_HL(0x0100);
+	SET_DE(0x0030);
+	cpu.b = 0x1C;
+	do {
+		cpu.cycles += 11 + 10 + 4;
+		push16(BC);
+		SET_BC(0x00F0);
+		op_xor(cpu.a);
+		cpu.cycles += 17; call_original(0x0219);
+		cpu.cycles += 4 + 11 + 4 + 10;
+		{ uint16_t t = HL; SET_HL(DE); SET_DE(t); }
+		SET_HL(op_add16(HL, DE));
+		{ uint16_t t = HL; SET_HL(DE); SET_DE(t); }
+		SET_BC(pop16());
+		cpu.cycles += --cpu.b ? 13 : 8;
+	} while (cpu.b);
+	cpu.cycles += 7;
+	cpu.b = 0x05;
+	do {
+		cpu.cycles += 11 + 11 + 10 + 10;
+		push16(BC);
+		push16(DE);
+		SET_HL(0x8AE6);
+		SET_BC(0x0030);
+		cpu.cycles += 17; call_original(0x024C);
+		cpu.cycles += 10 + 10 + 11 + 4 + 10;
+		SET_HL(pop16());
+		SET_BC(0x0030);
+		SET_HL(op_add16(HL, BC));
+		{ uint16_t t = HL; SET_HL(DE); SET_DE(t); }
+		SET_BC(pop16());
+		cpu.cycles += --cpu.b ? 13 : 8;
+	} while (cpu.b);
+	cpu.cycles += 10 + 42;             // jp task_return_1
+	SET_HL(back);
+}
+
 static void far_copy(uint8_t bank, uint16_t from, uint16_t to, uint16_t n, uint16_t routine, uint16_t site) {
 	cpu.cycles += 7 + 10 + 10 + 10;    // ld a / ld hl / ld de / ld bc
 	cpu.a = bank;
@@ -592,7 +651,7 @@ static void title(void) {
 			mem_write(GAME_MODE, 4);
 			return;
 		}
-		tcall(0x8A97, 0x84FE);         // $84FE: the Options menu
+		title_clear(0x84FE);         // $84FE: the Options menu
 		cpu.cycles += 10 + 16 + 10 + 16 + 10;
 		wr16(0xC608, 0x0030);
 		wr16(0xC60A, 0x0100);
@@ -1010,7 +1069,7 @@ static void new_game(void) {
 	mem_write(SEX, 0x1E);
 	SET_HL(0x9C78);
 	tcall(0x083B, 0x8F17);
-	tcall(0x8A97, 0x8F1A);
+	title_clear(0x8F1A);
 	cpu.cycles += 10;
 	SET_HL(0x915B);
 	tcall(0x7E4E, 0x8F20);
@@ -1198,7 +1257,7 @@ static void new_game(void) {
 		mem_write(GAME_MODE, 9);
 		return;
 	}
-	tcall(0x8A97, 0x9072);             // $9072: he or she
+	title_clear(0x9072);             // $9072: he or she
 	cpu.cycles += 10;
 	SET_HL(0x91B9);
 	tcall(0x7E4E, 0x9078);
@@ -2258,7 +2317,7 @@ static void journey(void) {
 	cpu.cycles += 7;
 	cpu.a = 7;
 	tcall(0x0621, 0x8BFA);             // the music
-	tcall(0x8A97, 0x8BFD);
+	title_clear(0x8BFD);
 	cpu.cycles += 10;
 	SET_HL(0x8E69);
 	tcall(0x7E4E, 0x8C03);             // "Journey Onward"

@@ -788,3 +788,130 @@ static void help_page(void) {
 }
 M(page_text, 0x5659, 1, ALL)
 M(help_page, 0x57C5, 1, ALL)
+
+static void far_text(void) {           // $5597: the text at HL of bank A
+	ON_FIBER();
+	vram_bank_push(0x5597);
+	C(0x5519);
+	vram_bank_pop();
+}
+
+static void step_from_de(void) {       // $6C59: (L, H) = (E, D) one step in direction A, on the level
+	push16(DE); I(11);
+	{ uint16_t t = HL; SET_HL(DE); SET_DE(t); } I(4);
+	C(0x40B9);                         // step_of
+	cpu.a = cpu.e; I(4);
+	op_add8(cpu.l, 0); I(4);
+	op_and(0x0F); I(7);
+	cpu.l = cpu.a; I(4);
+	cpu.a = cpu.d; I(4);
+	op_add8(cpu.h, 0); I(4);
+	op_and(0x0F); I(7);
+	cpu.h = cpu.a; I(4);
+	SET_DE(pop16()); I(10);
+	I(10);
+}
+
+// $6C07: into a room through the wall tile IX+$1A: the party steps past
+// it, the room's number from the tile (in the Abyss by level too), mode $16
+static void room_from_wall(void) {
+	cpu.a = 0x00; I(7);
+	C(0x6C59);
+	C(0x6DB9);
+	op_sub8(mem_read((uint16_t)(cpu.ix + 0x1A)), 0, 0); I(19);
+	if (cpu.f & FZ) I(12);
+	else { I(7); cpu.a = 0x02; I(7); C(0x6C59); }
+	cpu.a = 0x01; I(7);
+	C(0x6C59);
+	C(0x6DB9);
+	op_sub8(mem_read((uint16_t)(cpu.ix + 0x1A)), 0, 0); I(19);
+	if (cpu.f & FZ) I(12);
+	else { I(7); cpu.a = 0x03; I(7); C(0x6C59); }
+	wr16(0xC953, HL); I(16);
+	cpu.a = mem_read(0xC9A0); I(13);
+	op_sub8(0x19, 0, 0); I(7);
+	cpu.b = 0x00; I(7);
+	if (!(cpu.f & FZ)) I(12);
+	else {
+		I(7);
+		cpu.a = mem_read(0xC970); I(13);
+		op_add8(cpu.a, 0); I(4);
+		op_add8(cpu.a, 0); I(4);
+		op_add8(cpu.a, 0); I(4);
+		op_and(0xF0); I(7);
+		cpu.b = cpu.a; I(4);
+	}
+	cpu.a = mem_read((uint16_t)(cpu.ix + 0x1A)); I(19);
+	op_and(0x0F); I(7);
+	op_or(cpu.b); I(4);
+	mem_write(0xC9B8, cpu.a); I(13);   // dungeon_room
+	C(0x3D82);                         // load_dungeon_room
+	cpu.a = 0x02; I(7);
+	mem_write(0xC975, 0x02); I(13);
+	cpu.a = 0x16; I(7);
+	mem_write(0xC600, 0x16); I(13);
+	I(10); native_continue_at(0x0CD2);
+}
+
+// $028B: the logo's name table: at HL, width and height (bytes), the
+// bytes for the cells from DE; byte 2 of a cell from $C0A9 or A
+static void logo_names(void) {
+	mem_write(0xC0A8, cpu.a); I(13);
+	cpu.c = mem_read(HL); I(7);
+	SET_HL(HL + 1); I(6);
+	cpu.b = mem_read(HL); I(7);
+	SET_HL(HL + 1); I(6);
+	do {
+		push16(BC); I(11);
+		I(11); call_original(0x0010);  // rst $10
+		cpu.b = cpu.c; I(4);
+		do {
+			cpu.a = mem_read(0xC0A9); I(13);
+			op_or(cpu.a); I(4);
+			cpu.a = mem_read(HL); I(7);
+			SET_HL(HL + 1); I(6);
+			int skip = 0;
+			if (cpu.f & FZ) I(12);
+			else {
+				I(7);
+				op_or(cpu.a); I(4);
+				if (!(cpu.f & FZ)) I(12);
+				else { I(7); skip = 1; }
+			}
+			if (skip) {
+				cpu.a = io_in((uint16_t)(cpu.a << 8 | 0xBE)); I(11);
+				C(0x0262);
+				cpu.a = io_in((uint16_t)(cpu.a << 8 | 0xBE)); I(11);
+				I(10);
+			} else {
+				io_out((uint16_t)(cpu.a << 8 | 0xBE), cpu.a); I(11);
+				C(0x0262);
+				cpu.a = mem_read(0xC0A8); I(13);
+				io_out((uint16_t)(cpu.a << 8 | 0xBE), cpu.a); I(11);
+			}
+			I(--cpu.b ? 13 : 8);
+		} while (cpu.b);
+		{ uint16_t t = HL; SET_HL(DE); SET_DE(t); } I(4);
+		SET_BC(0x0040); I(10);
+		SET_HL(op_add16(HL, BC)); I(11);
+		{ uint16_t t = HL; SET_HL(DE); SET_DE(t); } I(4);
+		SET_BC(pop16()); I(10);
+		I(--cpu.b ? 13 : 8);
+	} while (cpu.b);
+	I(10);
+}
+
+// the turns' waits for input by the machine's route: a frame, then input_step
+static void world_input_frame(void) { push16(0xACCF); I(17); native_continue_at(0x2FFB); }
+static void world_input(void) { push16(0xACD2); I(17); native_continue_at(0xB08B); }
+static void town_input_frame(void) { push16(0xAF9D); I(17); native_continue_at(0x2FFB); }
+static void town_input(void) { push16(0xAFA0); I(17); native_continue_at(0xB08B); }
+
+M(far_text, 0x5597, 1, ALL)
+M(step_from_de, 0x6C59, 1, OUT_A | OUT_F | OUT_HL)
+M(room_from_wall, 0x6C07, 1, 0)
+M(logo_names, 0x028B, 0, ALL)
+M(world_input_frame, 0xACCC, 2, 0)
+M(world_input, 0xACCF, 2, 0)
+M(town_input_frame, 0xAF9A, 2, 0)
+M(town_input, 0xAF9D, 2, 0)
