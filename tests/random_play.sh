@@ -19,11 +19,16 @@ fi
 seed=$1
 t=$(mktemp -d)
 python tests/random_start.py "$seed" > "$t/k"
-U4_RANDOM=$seed U4_RANDOM_FROM=8640 U4_SETTLE=10 "$EXE" build/u4.pak --headless "$N" --keys "$t/k" > "$t/on" 2>/dev/null
-U4_NATIVE=off U4_RANDOM=$seed U4_RANDOM_FROM=8640 U4_SETTLE=10 "$EXE" build/u4.pak --headless "$N" --keys "$t/k" > "$t/off" 2>/dev/null
-state=$(python tests/same_state.py "$t/off" "$t/on" 2>&1 | tail -1)
+compare() {
+	U4_RANDOM=$seed U4_RANDOM_FROM=9000 U4_SETTLE=10 "$EXE" build/u4.pak --headless "$1" --keys "$t/k" > "$t/on" 2>/dev/null
+	U4_NATIVE=off U4_RANDOM=$seed U4_RANDOM_FROM=9000 U4_SETTLE=10 "$EXE" build/u4.pak --headless "$1" --keys "$t/k" > "$t/off" 2>/dev/null
+	state=$(python tests/same_state.py "$t/off" "$t/on" 2>&1 | tail -1)
+}
+compare "$N"
+# a run can end where the scheduler has no pass to compare at: a little further
+case "$state" in state*) compare $((N + 100)) ;; esac
 if [ -n "$U4_HITS_EXE" ]; then
-	U4_HITS="$U4_HITS_DIR/$seed.h" U4_RANDOM=$seed U4_RANDOM_FROM=8640 "$U4_HITS_EXE" build/u4.pak --headless "$N" --keys "$t/k" > /dev/null 2>&1
+	U4_HITS="$U4_HITS_DIR/$seed.h" U4_RANDOM=$seed U4_RANDOM_FROM=9000 "$U4_HITS_EXE" build/u4.pak --headless "$N" --keys "$t/k" > /dev/null 2>&1
 fi
 rm -rf "$t"
 if [ -z "$state" ]; then echo "ok    $seed"; else echo "FAIL  $seed ($state)"; fi

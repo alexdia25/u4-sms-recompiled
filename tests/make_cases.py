@@ -720,7 +720,7 @@ def main():
     # a chest under the party (at (1, 15) in Moonglow): one of the people
     # (the last record), or the town's own cell ($D3C2: it costs karma); the
     # random numbers steered, for the traps; dexterity 0 so that few are evaded
-    for k in range(16):
+    for k in range(48):
         name = 'chest_%X' % k
         rnd = random.Random(name)
         s = Script()
@@ -734,7 +734,8 @@ def main():
         for _ in range(3):
             s.press('D', 30)
         s.press('2', 60)
-        s.poke('C0B5:%02X' % (k * 41 & 0xFF))
+        s.poke('C0B6:%02X' % (k * 41 & 0xFF))
+        s.poke('C0B7:%02X' % (k * 113 & 0xFF))
         s.press('2', 400)              # the first member
         for _ in range(12):
             r = rnd.random()
