@@ -737,6 +737,22 @@ static void bank_pop(void) {           // reached by jp: its ret is the caller's
 	cpu.a = a;
 }
 
+// $11B4, by jp from $7EE4: the cell at HL becomes tile C, with how that
+// looks ($8100 in bank $10) in the byte after it
+static void cell_set(void) {
+	cpu.cycles += 7;
+	bank_push(0x10);
+	cpu.cycles += 11 + 7 + 7 + 7;
+	cpu.a = mem_read((uint16_t)(0x8100 | cpu.c));
+	mem_write(HL, cpu.c);
+	cpu.cycles += 4 + 7 + 4 + 10;
+	cpu.l = op_inc8(cpu.l);
+	mem_write(HL, cpu.a);
+	cpu.l = op_dec8(cpu.l);
+	bank_pop();
+}
+Native native_cell_set = { "cell_set", 0x11B4, 0, cell_set, OUT_A | OUT_F | OUT_HL, 0, 0 };
+
 // $169D: copy 242 bytes (11 rows of the view) from hl to de, by ldi
 static void copy_view_bytes(uint16_t from, uint16_t to) {
 	cpu.cycles += 10 + 11 * (22 * 16 + 10) + 10;

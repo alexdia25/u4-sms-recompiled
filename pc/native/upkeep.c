@@ -183,7 +183,7 @@ static void ship_wind(void) {          // $B36C
 		if (cpu.f & FZ) {              // the same direction
 			I(12);
 			say_inline(0xB3A0);
-			times = 5;
+			times = 3;
 		} else {
 			I(7);
 			op_add8(0x02, 0); I(7);
@@ -196,10 +196,9 @@ static void ship_wind(void) {          // $B36C
 		}
 	}
 	SET_HL(rd16(0xC99A)); I(16);
-	if (times == 5) {
+	if (times == 3) {
 		cpu.e = cpu.l; I(4);
 		cpu.d = cpu.h; I(4);
-		SET_HL(op_add16(HL, HL)); I(11);
 		SET_HL(op_add16(HL, HL)); I(11);
 		SET_HL(op_add16(HL, DE)); I(11);
 		I(12);

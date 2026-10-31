@@ -219,6 +219,7 @@ static void mode_game(void) {
 }
 
 static void map_task(uint16_t entry) { call(0x0DD7); start_task(entry); jp(0x0DE1); }
+static void mode_sunk(void) { map_task(0xBCA2); }            // $BC96 (mode $0F): the whirlpool took the ship
 static void mode_world(void) { map_task(0xAC8C); }           // $AC74 (mode $11)
 static void mode_town(void) { map_task(0xAF69); }            // $AC80 (mode $12)
 static void mode_dungeon(void) { map_task(0x69E4); }         // $69D8 (mode $13, bank 1)
@@ -251,6 +252,24 @@ static void dungeon_start(void) {
 }
 Native native_dungeon_start = { "dungeon_start", 0x69E4, 1, dungeon_start, 0, 0, 0, .task = 1 };
 
+// $BCA2: the task of mode $0F: the sound stopped, the sinking, the window
+// wiped, and on foot at Lord British's castle ($7F, $4E) in a new world mode
+static void sunk(void) {
+	tcall(0x05E3, 0xBCA2);
+	cpu.cycles += 7;
+	cpu.a = 0x1A;
+	tcall(0x05F1, 0xBCA7);
+	tcall(0x310B, 0xBCAA);
+	cpu.cycles += 10 + 16 + 10 + 16 + 7 + 13 + 10;
+	SET_HL(0x4E7F);
+	wr16(0xC953, 0x4E7F);
+	SET_HL(0x0010);
+	wr16(0xC959, 0x0010);
+	cpu.a = 0x11;
+	mem_write(0xC600, 0x11);
+}
+Native native_sunk = { "sunk", 0xBCA2, 2, sunk, 0, 0, 0, .task = 1 };
+
 #define MODE(name, addr, bank) Native native_##name = { #name, addr, bank, name, 0, .long_calls = 1 };
 MODE(mode_logo, 0x8042, 3)
 MODE(mode_opening, 0x818B, 3)
@@ -268,6 +287,7 @@ MODE(mode_shrine, 0xAE57, 3)
 MODE(mode_ending, 0xB109, 3)
 MODE(mode_credits, 0xB115, 3)
 MODE(mode_game, 0xAC07, 2)
+MODE(mode_sunk, 0xBC96, 2)
 MODE(mode_world, 0xAC74, 2)
 MODE(mode_town, 0xAC80, 2)
 MODE(mode_dungeon, 0x69D8, 1)

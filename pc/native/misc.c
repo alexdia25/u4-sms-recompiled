@@ -815,6 +815,7 @@ static void step_from_de(void) {       // $6C59: (L, H) = (E, D) one step in dir
 // $6C07: into a room through the wall tile IX+$1A: the party steps past
 // it, the room's number from the tile (in the Abyss by level too), mode $16
 static void room_from_wall(void) {
+	ON_FIBER();
 	cpu.a = 0x00; I(7);
 	C(0x6C59);
 	C(0x6DB9);

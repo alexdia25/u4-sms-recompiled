@@ -304,6 +304,7 @@ def main():
         'search_world_1': (True, ['C953:B6', 'C954:36', 'C95D:00', 'C95F:00', 'C967:FF', 'C968:FF']),
         'search_world_2': (True, ['C953:E0', 'C954:85']),
         'search_world_3': (True, ['C953:2D', 'C954:AD']),
+        'search_full':    (True, ['C953:B6', 'C954:36', 'C95D:00', 'C95F:00', 'C967:FF', 'C968:FF'] + ['%04X:62' % (0xC92F + i) for i in range(8)]),
         'search_bell':    (True, ['C953:B0', 'C954:D0']),
         'search_wheel':   (True, ['C953:60', 'C954:D7']),
         'search_skull':   (True, ['C953:C5', 'C954:F5', 'C95D:00', 'C95F:00']),
@@ -582,6 +583,19 @@ def main():
         STEER[name] = '2DD2'
     # Awaken on a member asleep on the field; each spell when the foes have
     # just gone; each with other luck, against foes too strong for some ($17)
+    # won against someone who isn't a monster, out in the world ($C975)
+    for g in (0x10, 0x14, 0x18, 0x24, 0x30, 0x50, 0x58, 0x60, 0x7C, 0x8C):
+        name = 'fight_won_%02x' % g
+        FIGHTS[name] = ('p15', ['C957:01'], 30, 10)
+        AFTER[name] = NOFOES + ['C975:00', 'C97D:%02X' % g]
+        STEER[name] = 'R'
+    # Undead against the undead
+    for g in (0x9C, 0xBC, 0xC4, 0xE4):
+        for k in range(3):
+            name = 'cspell_undead_%02x_%d' % (g, k)
+            FIGHTS[name] = ('p15', MAGIC + ['C957:02', 'person+3:%02X' % g], 80 + k, 20)
+            AFTER[name] = ['%04X:40' % (0xC842 + 8 * i) for i in range(16)] + ['C0B6:%02X' % (k * 41 & 0xFF), 'C0B7:%02X' % (k * 113 & 0xFF)]
+            STEER[name] = '2D2' + 'D' * COMBAT_SPELLS.index('U') + '2' + '2' + 'U2' + '2'
     FIGHTS['cspell_awaken'] = ('p15', MAGIC + ['C957:02'], 70, 10)
     AFTER['cspell_awaken'] = ['C78A:53']
     STEER['cspell_awaken'] = '2D2' + '2' + 'D2'
@@ -649,6 +663,10 @@ def main():
     DUNGEONS['dungeon_help'] = ('despise', ['C95B:FF'], 'bDDDUUUUD2', 20)  # its button 2: the pages
     DUNGEONS['dungeon_help_all'] = ('despise', ['C95B:FF'], 'b' + 'D' * 11 + 'U' * 11 + '1', 10)
     DUNGEONS['dungeon_door'] = ('despise', ['C95B:FF', 'D023:C0'], 'RR', 20)        # a door east, nothing behind it
+    # the last room of a level: told where it stands, by the party's column
+    DUNGEONS['dungeon_room_f_0'] = ('despise', ['C95B:FF', 'C953:00', 'D021:DF'], 'R', 40)
+    DUNGEONS['dungeon_room_f_1'] = ('despise', ['C95B:FF', 'D023:DF'], 'R', 40)
+    DUNGEONS['dungeon_room_f_2'] = ('despise', ['C95B:FF', 'C953:0A', 'D02B:DF'], 'R', 40)
     DUNGEONS['dungeon_room_cell'] = ('despise', ['C95B:FF', 'D023:D1'], 'R', 20)    # a room's cell east, no door
     # the room's foes gone: the party walks out the way it came
     DUNGEONS['dungeon_room_exit'] = ('despise', ['C95B:FF'], 'RRDRR', 0)
@@ -684,6 +702,16 @@ def main():
     for cell, what in ((0x80, 'winds'), (0x84, 'rocks'), (0x88, 'pit'), (0xA0, 'poison'), (0xA2, 'fire'), (0xA3, 'sleep')):
         DUNGEONS['dtrap_' + what] = ('despise', ['C95B:FF', 'D023:%02X' % cell], 'R', 20)   # the cell east of the party
     DUNGEONS['dspell_y_top'] = ('wrong', MAGIC, '2DD222' + 'D' * DUNGEON_SPELLS.index('Y') + '2', 20)
+    # a trigger of the room ($C8E1) stepped on, by one place or the other of
+    # its places in the table; two members out by different sides
+    for i, plate in enumerate(((6, 5), (5, 6))):
+        for targets in ((0, 0, 0, 0), (3, 3, 0, 0), (3, 3, 4, 4)):
+            name = 'dungeon_room_plate_%d_%d' % (i, sum(1 for t in targets if t) // 2)
+            DUNGEONS[name] = ('despise', ['C95B:FF'], 'RRDRR', 0)
+            DUNGEON_AFTER[name] = (100, ['C8B9:05', 'C8BA:05', 'C8E1:44'] +
+                                   ['%04X:%02X' % (0xC8E2 + k, v) for k, v in enumerate(plate + targets)], 'R2222R')
+    DUNGEONS['dungeon_room_two_ways'] = ('despise', ['C95B:FF', 'C957:02'], 'RRDRR', 0)
+    DUNGEON_AFTER['dungeon_room_two_ways'] = (100, NOFOES + ['C8B9:00', 'C8BA:05', 'C8BE:0A', 'C8BF:05'], 'LRLRLRLR')
     # an altar room's altar ($6662): in a room of the Abyss's kind ($C984 the room),
     # the member at the middle, Use, Stone, four stones: the order the room wants,
     # another, one twice
@@ -832,7 +860,7 @@ def main():
     }
     X = 0x08
     for shop, (loc, row) in OTHER_SHOPS.items():
-        for seed in range(3):
+        for seed in range(9):
             name = 'shop_%s_%d' % (shop, seed)
             rnd = random.Random(name)
             s = Script()
@@ -848,6 +876,10 @@ def main():
                     s.poke('%04X:05' % a)
                 for a in range(0xC917, 0xC91F):
                     s.poke('%04X:05' % a)
+                s.f += 2
+            if seed >= 6:              # the words a pub's keeper can be asked about
+                for a in (0xC535, 0xC51F, 0xC52B, 0xC526, 0xC51A, 0xC529):
+                    s.poke('%04X:01' % a)
                 s.f += 2
             s.f += 60
             for k in '22U2':
@@ -1222,6 +1254,46 @@ def main():
     for k in '2' + 'D' * 7 + '2DD2' + 'D' * 7 + 'UU':
         s.press(k, 60)
     s.write('camp_status_items')
+    # what's at the party's cell: a whirlpool, a twister; on foot and by ship
+    for figure in (0x8C, 0x8E):
+        for slot in (0, 3):
+            for ship in (0, 1):
+                s = Script()
+                s.poke('C96D:9F')
+                s.poke('C96E:16')
+                s.press('L', 40)
+                s.press('L', 70)
+                s.f += 200
+                s.press('1', 8)
+                at = 0xC651 + 8 * slot
+                for a, v in ((at, figure), (at + 1, 0x9F), (at + 2, 0x16), (at + 3, figure)):
+                    s.poke('%04X:%02X' % (a, v))
+                if ship:
+                    s.poke('C959:10')
+                    s.poke('C95A:00')
+                s.f += 100
+                for _ in range(8):
+                    s.press('U', 100)
+                s.f += 400
+                s.write('taken_%02X_%d_%d' % (figure, slot, ship))
+    # sailing, by the wind ($C98A, 4 calm): with it, against it, across
+    for wind in range(5):
+        for key in 'UDLR':
+            s = Script()
+            s.poke('C96D:D0')
+            s.poke('C96E:E0')
+            s.press('L', 40)
+            s.press('L', 70)
+            s.f += 200
+            s.press('1', 8)
+            for p in ['C959:10', 'C95A:00']:
+                s.poke(p)
+            s.f += 100
+            for _ in range(4):
+                s.poke('C98A:%02X' % wind)
+                s.f += 1
+                s.press(key, 80)
+            s.write('sail_%d_%s' % (wind, key))
     # the opening words cut short by a button, then the title
     with open(os.path.join(HERE, 'cases', 'opening_skip.keys'), 'w', newline=chr(10)) as f:
         f.write(chr(10).join(('60 1', '66 -', '900 -')) + chr(10))
