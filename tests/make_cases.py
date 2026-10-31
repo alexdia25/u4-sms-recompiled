@@ -55,6 +55,7 @@ CASES = {
     'inn_no':        ('inn', [], '2D2', 10),
     'inn_poor':      ('inn', ['C909:00', 'C90A:00'], '22222222', 10),
     'food_buy':      ('food', [], '222UU22', 20),
+    'food_digits':   ('food', [], '222ULULRRLLR22', 20),
     'food_buy_quick': ('food', [], '222UU22', 20, 0),   # the same, the first steps 10 frames earlier
     'food_more':     ('food', RICH, '222UUU2D2UU2', 20),
     'food_some':     ('food', ['C909:64', 'C90A:00'], '222UUUU222U22', 20),
@@ -1158,7 +1159,7 @@ def main():
             s.press('2', 200)
         s.write(name)
     # the keyword topic of the person who asks a name ($AC): a wrong one, the right one
-    for name, right in (('ask_name_wrong', False), ('ask_name_right', True)):
+    for name, right in (('ask_name_wrong', False), ('ask_name_right', True), ('ask_name_back', False)):
         s = Script()
         for p in ['C9A0:07', 'C749:24', 'C74A:02', 'C74B:0F', 'C74C:24', 'C750:03']:
             s.poke(p)
@@ -1180,6 +1181,9 @@ def main():
         if right:
             for i in range(7):
                 s.poke('%04X:%02X' % (0xC065 + i, WORD[i]))
+        if name == 'ask_name_back':    # letters, and taken back one past the first
+            for k in ['1', '2', '2', 'R', '2', '1', '1', '1', '1', 'R', 'L', 'L', 'L', 'L', 'L']:
+                s.press(k, 40)
         for k in ['R', 'D', 'D', 'D', '2']:   # End
             s.press(k, 40)
         s.f += 200
