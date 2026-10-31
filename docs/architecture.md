@@ -153,9 +153,12 @@ cell: tile, attribute) that slides by whole 16×16 chunks as the party walks
 
 ## How much is rewritten
 
-With every rewrite on, none of the 340 test cases executes a translated instruction
-of the original (counted exactly, one flag per instruction), and no C code jumps to
-original code by address any more. What remains in the translation is what no case
-reaches: about 2,900 instructions in rare branches, many of which have a C version
-that takes over before them, and more text the disassembler took for code. To list
-them, run the cases with `U4_NATIVE=off` and such a counter.
+The PC version has no translated code left: `pc/runtime/run.c` runs the rewrites
+and hands anything else to the interpreter, which counts it (`interpreted` in the
+headless output; `U4_LOG_FALLBACK=file` lists the addresses). None of the test
+cases or the seeds of `tests/random_play.sh` interprets a single instruction, and
+both fail if one does. With `U4_NATIVE=off` the whole game runs on the interpreter,
+which is the original that everything is compared with.
+
+Original code no test has reached yet may still have no rewrite. Run the cases
+with `U4_NATIVE=off` and `U4_LOG_FALLBACK` to list what they reach.

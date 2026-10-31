@@ -73,10 +73,8 @@ python tools/setup.py path/to/Ultima4.sms --pc     # or, after setup: pc/build.s
 pc/out/u4.exe
 ```
 
-`pc/build.sh` regenerates `pc/gen/recomp.c` from the disassembly and compiles
-it, together with the runtime and the C rewrites, into `pc/out/u4.exe`.
-`SDL2.dll` and `u4.pak` are placed next to it. The first build takes a few
-minutes because the generated C is large; later builds reuse its object file.
+`pc/build.sh` compiles the runtime and the C rewrites into `pc/out/u4.exe`, in
+seconds. `SDL2.dll` and `u4.pak` are placed next to it.
 To build the test version without a window or sound, run:
 
 ```sh
@@ -116,14 +114,14 @@ alone runs the game.
   `tools/hints.txt`. In the labels, `fn_BB_AAAA` is a function in bank BB at
   CPU address AAAA, and `loc_` marks a jump target. Data stays out of the
   source as `.INCBIN` lines.
-- **`pc/gen/recomp.c`** (generated, not in git) is a static translation of the
-  ROM's code to C, one block per Z80 instruction. `tools/recomp.py` writes it.
-  It runs on `pc/runtime/`, which provides the CPU state, video, sound, mapper
-  and the SDL2 front end. Every instruction keeps the console's cycle count,
-  so timing matches the original.
-- **`pc/native/`** holds readable C rewrites of the game's routines, which
-  replace the translated originals one by one through `native` lines in
-  `tools/hints.txt`:
+- **`pc/runtime/`** provides the CPU state, video, sound, mapper and the SDL2
+  front end. Every rewrite keeps the console's cycle count, so timing matches
+  the original. `run.c` is the machine's loop: at each address it runs the
+  rewrite there (the table `pc/gen/natives.c`, generated from `tools/hints.txt`);
+  original code that no rewrite covers goes to the interpreter in `z80.c`, which
+  counts it. The tests require that count to be 0.
+- **`pc/native/`** holds readable C rewrites of the game's routines, each tied
+  to its original address by a `native` line in `tools/hints.txt`:
   - the logo at power-on, the opening words, the title screen (the logo, the demo, the Options menu), the interlude after the demo, Journey Onward (the saved games, loading one), naming the Avatar, the story, the gypsy's questions and making the party, the sound test, the end of the game (the Codex's questions) and the credits;
   - text printing and the text window;
   - menus, number entry and yes/no prompts;

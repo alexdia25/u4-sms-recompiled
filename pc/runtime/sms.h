@@ -37,11 +37,11 @@ void sms_pause(void);         // the console's Pause button (NMI)
 int sms_audio(int16_t *out, int max);
 void sms_audio_rate(int rate);
 
-// supplied by gen/recomp.c: run translated code until cpu.cycles >= cpu.budget
+// run.c: run the rewrites (and the interpreter for anything else) until cpu.cycles >= cpu.budget
 // (falls back to the interpreter where there is no translation)
-void recomp_run(void);
-extern uint64_t recomp_fallbacks;
-extern void (*recomp_on_fallback)(uint16_t pc);
+void machine_run(void);
+extern uint64_t machine_interpreted;
+extern void (*machine_on_interpreted)(uint16_t pc);
 
 // machine snapshots for the shadow tester
 typedef struct Snap Snap;

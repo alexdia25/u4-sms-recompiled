@@ -1,9 +1,7 @@
 #!/bin/sh
-# Build the PC version: regenerate the recompiled C, then compile with Zig's clang.
+# Build the PC version with Zig's clang.
 #   pc/build.sh            -> pc/out/u4.exe (+ SDL2.dll, u4.sms copied next to it)
 #   pc/build.sh headless   -> pc/out/u4_headless.exe (no SDL, for tests)
-# The generated recomp.c is large (one function, ~100k lines) and takes a few
-# minutes to compile; its object file is reused while the C is unchanged.
 set -e
 cd "$(dirname "$0")/.."
 # Zig: $ZIG, else $TOOLS/zig/zig-*/zig, else zig on PATH.
@@ -18,15 +16,11 @@ if [ -z "$SDL" ]; then
 fi
 ROM=${ROM:-build/u4.sms}
 [ -f "$ROM" ] || ./build.sh
-python tools/recomp.py "$ROM" coverage/cov.bin pc/gen/recomp.c
+python tools/natives_table.py pc/gen/natives.c
 mkdir -p pc/out
 python tools/make_assets.py "$ROM" pc/out/u4.pak --layout-header pc/gen/pack_layout.c   # region list for the exe's importer
 CFLAGS="-O1 -std=gnu11 -Wno-unused-label -Wno-gnu-label-as-value -target x86_64-windows-gnu"
-if [ ! -f pc/out/recomp.o ] || [ pc/gen/recomp.c -nt pc/out/recomp.o ] || [ pc/runtime/z80.h -nt pc/out/recomp.o ]; then
-  echo "compiling pc/gen/recomp.c (a few minutes)..."
-  "$ZIG" cc $CFLAGS -c pc/gen/recomp.c -o pc/out/recomp.o
-fi
-SRC="pc/runtime/main.c pc/runtime/sms.c pc/runtime/z80.c pc/runtime/native.c pc/runtime/assets.c pc/runtime/import.c pc/gen/pack_layout.c $(ls pc/native/*.c) pc/out/recomp.o"
+SRC="pc/runtime/main.c pc/runtime/sms.c pc/runtime/z80.c pc/runtime/native.c pc/runtime/run.c pc/runtime/assets.c pc/runtime/import.c pc/gen/pack_layout.c pc/gen/natives.c $(ls pc/native/*.c)"
 if [ "$1" = headless ]; then
   "$ZIG" cc $CFLAGS -DU4_HEADLESS_ONLY $SRC -o pc/out/u4_headless.exe
 else

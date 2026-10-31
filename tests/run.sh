@@ -12,6 +12,8 @@
 #      original on the same machine state; there must be no mismatch
 #   3. the C tasks (which shadow mode can't check) must be entered at the
 #      same cycles as the original code they replace (tests/entry_times.py)
+#   4. with every rewrite on, no instruction of the original may run: none
+#      left to the interpreter
 # Prints one line per case and exits with 1 if any failed.
 cd "$(dirname "$0")/.."
 EXE=pc/out/u4_headless.exe
@@ -31,11 +33,12 @@ check() {
 	run "$n" "$k" "$t/on.out" "$t/on"
 	U4_NATIVE=off run "$n" "$k" "$t/off.out" "$t/off"
 	state=$(python tests/same_state.py "$t/off.out" "$t/on.out" 2>&1 | tail -1)
+	left=$(grep -o 'interpreted [0-9]*' "$t/on.out" | head -1 | cut -d' ' -f2)   # original instructions run
 	bad=$(U4_NATIVE=shadow U4_SHADOW_CYCLES=1 "$EXE" build/u4.pak --headless "$n" --keys "$k" 2>&1 | grep -c "differs\|never returned\|^native:")
 	late=$(python tests/entry_times.py "$t/off" "$t/on" 2>&1 | tail -1)
 	rm -rf "$t"
-	if [ -z "$state" ] && [ "$bad" = 0 ] && [ -z "$late" ]; then echo "ok    $1"
-	else echo "FAIL  $1 (${state:+$state, }$bad shadow mismatches${late:+; $late})"; fi
+	if [ -z "$state" ] && [ "$bad" = 0 ] && [ -z "$late" ] && [ "$left" = 0 ]; then echo "ok    $1"
+	else echo "FAIL  $1 (${state:+$state, }$bad shadow mismatches, $left instructions interpreted${late:+; $late})"; fi
 }
 
 if [ -n "$1" ]; then check "$1"; exit; fi

@@ -173,7 +173,7 @@ static int headless(int frames, const char *shot, const char *keys) {
 	uint32_t h = 2166136261u;
 	for (int i = 0; i < 0x2000; i++) h = (h ^ sms.ram[i]) * 16777619u;
 	printf("frames %d pc %04X ram-hash %08X state-hash %08X interpreted %llu\n", frames, cpu.pc, h,
-		state_hash(), (unsigned long long)recomp_fallbacks);
+		state_hash(), (unsigned long long)machine_interpreted);
 	// U4_SETTLE=n: n more frames with no input, printing the state at each
 	// pass of the task scheduler (native.c). A frame can end while a
 	// rewritten routine has done at once work the original is half way
@@ -241,7 +241,7 @@ int main(int argc, char **argv) {
 	sms_init(image, size);
 	load_save(pack_path);
 	if (state && sms_load_state(state)) { fprintf(stderr, "cannot load state %s\n", state); return 1; }
-	if (getenv("U4_LOG_FALLBACK")) recomp_on_fallback = log_fallback;
+	if (getenv("U4_LOG_FALLBACK")) machine_on_interpreted = log_fallback;
 	if (getenv("U4_PC_PROFILE")) { pc_samples = calloc(32, sizeof *pc_samples); sms_on_line = sample_pc; }
 	if (frames >= 0) {
 		int r = headless(frames, shot, keys);

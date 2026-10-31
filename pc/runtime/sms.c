@@ -269,7 +269,7 @@ void sms_run_frame(void) {
 		vdp.line = line;
 		line_end += CYCLES_PER_LINE;
 		cpu.budget = line_end;
-		recomp_run();
+		machine_run();
 		if (sms_on_line) sms_on_line();
 		vdp_end_line(line);
 		cpu.irq_line = (uint8_t)vdp_irq();

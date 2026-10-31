@@ -91,4 +91,8 @@ void native_reset(void);
 
 extern int native_settle;      // > 0: print the state at each scheduler pass (tests)
 
+typedef struct NativeEntry { uint8_t bank; uint16_t addr; Native *native; } NativeEntry;
+extern const NativeEntry native_table[];   // pc/gen/natives.c
+extern const int native_table_size;
+
 #endif
