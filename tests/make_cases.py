@@ -101,6 +101,9 @@ def random_presses(s, rnd, n, menu=True):
         s.press(k, rnd.choice((20, 40, 80)))
 
 
+WORD = list(open(os.path.join(HERE, '..', 'build', 'u4.sms'), 'rb').read()[0x734B:0x7352])
+
+
 def main():
     os.makedirs(os.path.join(HERE, 'cases'), exist_ok=True)
     for name, case in CASES.items():
@@ -931,6 +934,35 @@ def main():
         for k in word:
             s.press(k, 40)
         s.f += 300
+        for _ in range(4):
+            s.press('2', 200)
+        s.write(name)
+    # the keyword topic of the person who asks a name ($AC): a wrong one, the right one
+    for name, right in (('ask_name_wrong', False), ('ask_name_right', True)):
+        s = Script()
+        for p in ['C9A0:07', 'C749:24', 'C74A:02', 'C74B:0F', 'C74C:24', 'C750:03']:
+            s.poke(p)
+            s.f += 1
+        s.f += 40
+        for k in '22R2':
+            s.press(k, 60)
+        s.f += 300
+        for p in ['C309:AC', 'C595:01', 'C9AB:00']:
+            s.poke(p)
+            s.f += 1
+        s.press('2', 120)              # past the greeting
+        for _ in range(7):             # the keyword is the eighth word
+            s.press('D', 40)
+        s.press('2', 500)              # its answer
+        s.press('2', 300)              # then the letters
+        for k in ['2', 'R', 'R', 'D', '2', 'D', '2']:
+            s.press(k, 40)
+        if right:
+            for i in range(7):
+                s.poke('%04X:%02X' % (0xC065 + i, WORD[i]))
+        for k in ['R', 'D', 'D', 'D', '2']:   # End
+            s.press(k, 40)
+        s.f += 200
         for _ in range(4):
             s.press('2', 200)
         s.write(name)
