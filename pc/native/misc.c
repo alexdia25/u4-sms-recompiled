@@ -620,3 +620,171 @@ M(bridge_trolls, 0x3F3D, 0, 0)
 M(trap_winds, 0x3FA7, 0, ALL)
 M(trap_rocks, 0x3FBB, 0, 0)
 M(trap_pit, 0x3FD0, 0, 0)
+
+// The picture text of the help pages controller 2 opens in a dungeon: letters
+// 6 pixels wide on the 4-plane tiles of the view, read back from VRAM,
+// merged and written again, with the 8 pixel columns 2 tiles tall.
+// $5670: character A at ($C60E, $C60F), in 6-pixel cells
+static void page_letter(void) {
+	op_sub8(0x20, 0, 1); I(7);
+	op_add8(cpu.a, 0); I(4);
+	cpu.l = cpu.a; I(4);
+	cpu.h = 0x00; I(7);
+	cpu.e = cpu.l; I(4);
+	cpu.d = cpu.h; I(4);
+	SET_HL(op_add16(HL, HL)); I(11);
+	SET_HL(op_add16(HL, DE)); I(11);
+	SET_DE(0xBD92); I(10);
+	SET_HL(op_add16(HL, DE)); I(11);
+	cpu.a = mem_read(0xDFFF); I(13);
+	push16((uint16_t)(cpu.a << 8 | cpu.f)); I(11);
+	cpu.a = 0x16; I(7);
+	mem_write(0xFFFF, cpu.a); I(13);
+	cpu.a = mem_read(0xC60E); I(13);
+	op_add8(cpu.a, 0); I(4);
+	cpu.b = cpu.a; I(4);
+	op_add8(cpu.a, 0); I(4);
+	op_add8(cpu.b, 0); I(4);
+	cpu.b = cpu.a; I(4);
+	op_and(0x07); I(7);
+	cpu.c = cpu.a; I(4);
+	cpu.c = op_inc8(cpu.c); I(4);
+	cpu.a = cpu.b; I(4);
+	op_exx(); I(4);
+	op_and(0xF8); I(7);
+	op_rrca(); I(4);
+	op_rrca(); I(4);
+	cpu.e = cpu.a; I(4);
+	cpu.d = 0x00; I(7);
+	SET_HL(0x543E); I(10);
+	SET_HL(op_add16(HL, DE)); I(11);
+	cpu.e = mem_read(HL); I(7);
+	SET_HL(HL + 1); I(6);
+	cpu.d = mem_read(HL); I(7);
+	cpu.a = mem_read(0xC60F); I(13);
+	op_add8(cpu.a, 0); I(4);
+	cpu.b = cpu.a; I(4);
+	op_add8(cpu.a, 0); I(4);
+	op_add8(cpu.b, 0); I(4);
+	cpu.l = cpu.a; I(4);
+	cpu.h = 0x00; I(7);
+	SET_HL(op_add16(HL, HL)); I(11);
+	SET_HL(op_add16(HL, HL)); I(11);
+	SET_HL(op_add16(HL, DE)); I(11);
+	push16(HL); I(11);
+	I(11); call_original(0x0008);      // rst $08: read from HL
+	{ uint16_t t = HL; SET_HL(DE); SET_DE(t); } I(4);
+	SET_HL(0xC1C0); I(10);
+	SET_BC(0x18BE); I(10);
+	do {
+		op_block(4, 2); I(16);
+		if (!(cpu.f & FZ)) I(12); else { I(7); break; }
+	} while (1);
+	SET_HL(0x0220); I(10);
+	SET_HL(op_add16(HL, DE)); I(11);
+	I(11); call_original(0x0008);
+	SET_HL(0xC1D8); I(10);
+	cpu.b = 0x18; I(7);
+	do {
+		op_block(4, 2); I(16);
+		if (!(cpu.f & FZ)) I(12); else { I(7); break; }
+	} while (1);
+	SET_DE(pop16()); I(10);
+	I(11); call_original(0x0010);      // rst $10: write at DE
+	push16(DE); I(11);
+	op_exx(); I(4);
+	push16(cpu.iy); I(15);
+	cpu.iy = 0xC1C0; I(14);
+	cpu.d = 0x00; I(7);
+	cpu.a = 0x06; I(7);
+	do {
+		op_ex_af(); I(4);
+		cpu.a = mem_read(cpu.iy); I(19);
+		io_out((uint16_t)(cpu.a << 8 | 0xBE), cpu.a); I(11);
+		cpu.a = mem_read(HL); I(7);
+		SET_HL(HL + 1); I(6);
+		cpu.e = cpu.d; I(4);
+		cpu.b = cpu.c; I(4);
+		cpu.b = op_dec8(cpu.b); I(4);
+		if (cpu.f & FZ) I(12);
+		else {
+			I(7);
+			op_or(cpu.a); I(4);
+			do {
+				op_rra(); I(4);
+				cpu.e = op_rot(3, cpu.e); I(8);
+				I(--cpu.b ? 13 : 8);
+			} while (cpu.b);
+		}
+		op_or(mem_read((uint16_t)(cpu.iy + 1))); I(19);
+		io_out((uint16_t)(cpu.a << 8 | 0xBE), cpu.a); I(11);
+		cpu.a = cpu.e; I(4);
+		op_or(mem_read((uint16_t)(cpu.iy + 0x19))); I(19);
+		mem_write((uint16_t)(cpu.iy + 0x19), cpu.a); I(19);
+		cpu.a = mem_read((uint16_t)(cpu.iy + 2)); I(19);
+		io_out((uint16_t)(cpu.a << 8 | 0xBE), cpu.a); I(11);
+		cpu.a = mem_read((uint16_t)(cpu.iy + 3)); I(19);
+		io_out((uint16_t)(cpu.a << 8 | 0xBE), cpu.a); I(11);
+		cpu.e = 0x04; I(7);
+		cpu.iy = op_add16(cpu.iy, DE); I(15);
+		op_ex_af(); I(4);
+		cpu.a = op_dec8(cpu.a); I(4);
+		if (!(cpu.f & FZ)) I(12); else { I(7); break; }
+	} while (1);
+	cpu.iy = pop16(); I(14);
+	SET_DE(pop16()); I(10);
+	SET_HL(0x0220); I(10);
+	SET_HL(op_add16(HL, DE)); I(11);
+	{ uint16_t t = HL; SET_HL(DE); SET_DE(t); } I(4);
+	I(11); call_original(0x0010);
+	SET_HL(0xC1D8); I(10);
+	SET_BC(0x18BE); I(10);
+	do {
+		op_block(4, 3); I(16);
+		if (!(cpu.f & FZ)) I(12); else { I(7); break; }
+	} while (1);
+	SET_HL(0xC60E); I(10);
+	mem_write(HL, op_inc8(mem_read(HL))); I(11);
+	{ uint16_t af = pop16(); cpu.a = af >> 8; cpu.f = (uint8_t)af; } I(10);
+	mem_write(0xFFFF, cpu.a); I(13);
+	I(10);
+}
+
+// $5659: at HL, lines of (x, y, letters, 0), ended by $FF
+static void page_text(void) {
+	for (;;) {
+		cpu.e = mem_read(HL); I(7);
+		SET_HL(HL + 1); I(6);
+		cpu.e = op_inc8(cpu.e); I(4);
+		if (cpu.f & FZ) { I(11); return; }
+		I(5);
+		cpu.e = op_dec8(cpu.e); I(4);
+		cpu.d = mem_read(HL); I(7);
+		SET_HL(HL + 1); I(6);
+		wr16(0xC60E, DE); I(20);
+		for (;;) {
+			cpu.a = mem_read(HL); I(7);
+			SET_HL(HL + 1); I(6);
+			op_or(cpu.a); I(4);
+			if (cpu.f & FZ) { I(12); break; }
+			I(7);
+			push16(HL); I(11);
+			I(17); page_letter();
+			SET_HL(pop16()); I(10);
+			I(12);
+		}
+	}
+}
+
+// $57C5: help page IX+$1A (of bank $16, the table at $B1CE)
+static void help_page(void) {
+	cpu.a = 0x16; I(7);
+	vram_bank_push(0x57C7);
+	cpu.a = mem_read((uint16_t)(cpu.ix + 0x1A)); I(19);
+	SET_HL(0xB1CE); I(10);
+	I(11); call_original(0x0020);      // rst $20
+	I(17); page_text();
+	vram_bank_pop();
+}
+M(page_text, 0x5659, 1, ALL)
+M(help_page, 0x57C5, 1, ALL)

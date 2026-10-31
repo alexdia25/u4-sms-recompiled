@@ -8,7 +8,7 @@
 //                                        run N frames without a window (testing)
 //   options: --mute (no sound), --quit-after N (frames), --state s.bin,
 //            --verify-pack rom.sms (compare the pack's rebuilt image with a ROM)
-// Keys: arrows = D-pad, Z = button 1, X = button 2, Enter = Pause, Esc = quit.
+// Keys: arrows = D-pad, Z = button 1, X = button 2, C and V = controller 2's buttons, Enter = Pause, Esc = quit.
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -64,7 +64,7 @@ static void write_ppm(const char *path) {
 	fclose(f);
 }
 
-// --keys script: lines "<frame> <buttons>" (buttons from U D L R 1 2, or - for none,
+// --keys script: lines "<frame> <buttons>" (buttons from U D L R 1 2, a b for joypad 2's, or - for none,
 // P for Pause), applied from that frame on; "<frame> =C9AB:FF" writes RAM
 // U4_PC_PROFILE=file: where the machine is at each line's end, as "bank:addr
 // count" (PARK_PC and up: rewritten code spending its time), to see which
@@ -132,13 +132,14 @@ static int headless(int frames, const char *shot, const char *keys) {
 				if (fscanf(k, "%d %31s", &next_frame, btn) != 2) next_frame = -1;
 				continue;
 			}
-			sms.pad1 = 0;
+			sms.pad1 = sms.pad2 = 0;
 			sms.reset = 0;
 			for (char *c = btn; *c; c++) {
 				switch (*c) {
 				case 'U': sms.pad1 |= PAD_UP; break; case 'D': sms.pad1 |= PAD_DOWN; break;
 				case 'L': sms.pad1 |= PAD_LEFT; break; case 'R': sms.pad1 |= PAD_RIGHT; break;
 				case '1': sms.pad1 |= PAD_1; break; case '2': sms.pad1 |= PAD_2; break;
+				case 'a': sms.pad2 |= PAD_1; break; case 'b': sms.pad2 |= PAD_2; break;   // joypad 2
 				case 'P': sms_pause(); break;
 				case 'X': sms.reset = 1; break;   // the Reset button
 				}
@@ -267,9 +268,12 @@ int main(int argc, char **argv) {
 	want.freq = 44100; want.format = AUDIO_S16SYS; want.channels = 1; want.samples = 1024;
 	SDL_AudioDeviceID audio = mute ? 0 : SDL_OpenAudioDevice(NULL, 0, &want, &have, 0);
 	if (audio) { sms_audio_rate(have.freq); SDL_PauseAudioDevice(audio, 0); }
-	SDL_GameController *pad = NULL;
+	SDL_GameController *pad = NULL, *pad_2 = NULL;   // the first two gamepads: controllers 1 and 2
 	for (int i = 0; i < SDL_NumJoysticks(); i++)
-		if (SDL_IsGameController(i)) { pad = SDL_GameControllerOpen(i); break; }
+		if (SDL_IsGameController(i)) {
+			if (!pad) pad = SDL_GameControllerOpen(i);
+			else { pad_2 = SDL_GameControllerOpen(i); break; }
+		}
 
 	int running = 1;
 	uint64_t freq = SDL_GetPerformanceFrequency(), next = SDL_GetPerformanceCounter();
@@ -300,6 +304,20 @@ int main(int argc, char **argv) {
 			if (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_B)) p |= PAD_2;
 		}
 		sms.pad1 = p;
+		uint8_t p2 = (ks[SDL_SCANCODE_C] ? PAD_1 : 0) | (ks[SDL_SCANCODE_V] ? PAD_2 : 0);   // the dungeon's karma and help
+		if (pad) {                     // with one gamepad, X and Y are controller 2's buttons
+			if (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_X)) p2 |= PAD_1;
+			if (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_Y)) p2 |= PAD_2;
+		}
+		if (pad_2) {
+			if (SDL_GameControllerGetButton(pad_2, SDL_CONTROLLER_BUTTON_DPAD_UP)) p2 |= PAD_UP;
+			if (SDL_GameControllerGetButton(pad_2, SDL_CONTROLLER_BUTTON_DPAD_DOWN)) p2 |= PAD_DOWN;
+			if (SDL_GameControllerGetButton(pad_2, SDL_CONTROLLER_BUTTON_DPAD_LEFT)) p2 |= PAD_LEFT;
+			if (SDL_GameControllerGetButton(pad_2, SDL_CONTROLLER_BUTTON_DPAD_RIGHT)) p2 |= PAD_RIGHT;
+			if (SDL_GameControllerGetButton(pad_2, SDL_CONTROLLER_BUTTON_A)) p2 |= PAD_1;
+			if (SDL_GameControllerGetButton(pad_2, SDL_CONTROLLER_BUTTON_B)) p2 |= PAD_2;
+		}
+		sms.pad2 = p2;
 		sms_run_frame();
 		if (audio && SDL_GetQueuedAudioSize(audio) < (Uint32)have.freq / 10 * 2) {
 			int16_t buf[2048];

@@ -92,10 +92,12 @@ That gives `pc/out/u4_headless.exe`.
 | Arrows | D-pad |
 | Z | button 1 |
 | X | button 2 |
+| C, V | controller 2's buttons (in a dungeon: the karma list, the help pages) |
 | Enter | Pause |
 | Esc | quit |
 
-A gamepad also works. The game's battery save is kept in `u4.sav` next to the exe.
+A gamepad also works (A and B are buttons 1 and 2, X and Y controller 2's); a
+second gamepad is controller 2. The game's battery save is kept in `u4.sav` next to the exe.
 
 ### Making a release for players
 

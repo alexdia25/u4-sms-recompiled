@@ -599,6 +599,9 @@ def main():
     DUNGEONS['dungeon_room'] = ('despise', ['C95B:FF'], 'RRDRR', 60)       # through a door into a room
     DUNGEONS['dungeon_attack'] = ('despise', ['C95B:FF'], '2D2D2' + '2D2R2', 30)   # at nothing, twice
     DUNGEONS['dungeon_fight'] = ('despise', ['C95B:FF', 'C652:04', 'C653:02', 'C654:90'], '2D2R2', 80)   # an orc east of the party
+    DUNGEONS['dungeon_karma'] = ('despise', ['C95B:FF'], 'a', 20)          # controller 2's button 1
+    DUNGEONS['dungeon_help'] = ('despise', ['C95B:FF'], 'bDDDUUUUD2', 20)  # its button 2: the pages
+    DUNGEONS['dungeon_help_all'] = ('despise', ['C95B:FF'], 'b' + 'D' * 11 + 'U' * 11 + '1', 10)
     DUNGEONS['dungeon_door'] = ('despise', ['C95B:FF', 'D023:C0'], 'RR', 20)        # a door east, nothing behind it
     DUNGEONS['dungeon_room_cell'] = ('despise', ['C95B:FF', 'D023:D1'], 'R', 20)    # a room's cell east, no door
     # the room's foes gone: the party walks out the way it came

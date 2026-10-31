@@ -20,6 +20,7 @@ typedef struct SMS {
 	uint8_t mapper[4];   // $FFFC..$FFFF
 	uint8_t ioctrl;
 	uint8_t pad1;        // pressed buttons
+	uint8_t pad2;        // the second joypad's, the same bits
 	uint8_t reset;       // the Reset button held
 	uint32_t frame;
 	uint32_t rgb[SCREEN_W * SCREEN_H];   // last finished frame, 0x00RRGGBB

@@ -212,9 +212,10 @@ uint8_t io_in(uint16_t port) {
 	case 0x41: return 0;
 	case 0x80: return vdp_read_data();
 	case 0x81: { uint8_t v = vdp_read_status(); cpu.irq_line = (uint8_t)vdp_irq(); return v; }
-	case 0xC0: return (uint8_t)~sms.pad1;
+	case 0xC0: return (uint8_t)~(sms.pad1 | (sms.pad2 & 0x03) << 6);   // bits 6, 7: joypad 2 up, down
 	case 0xC1: {
 		uint8_t v = sms.reset ? 0xEF : 0xFF;   // bit 4: Reset
+		v &= (uint8_t)~(sms.pad2 >> 2 & 0x0F);  // bits 0-3: joypad 2 left, right, 1, 2
 		// TH pins read back what the I/O control port drives
 		if (!(sms.ioctrl & 0x02)) v = (v & ~0x40) | ((sms.ioctrl & 0x20) << 1);
 		if (!(sms.ioctrl & 0x08)) v = (v & ~0x80) | (sms.ioctrl & 0x80);

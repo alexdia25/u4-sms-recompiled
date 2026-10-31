@@ -38,10 +38,103 @@ static void tcall(uint16_t addr, uint16_t site) {
 	task_call(addr, (uint16_t)(site + 3));
 }
 
-// $5726, each frame of the dungeon's input: button 2 alone ($20) opens the
-// party's stats ($5777, a page at a time), button 1 alone ($10) lists the
-// karma of the eight virtues ($5730); both wait, so they run as the
-// original's, and return to $6A42
+static void yield_to(uint16_t resume) {
+	cpu.cycles += 17 + 58;
+	SET_HL(resume);
+	task_wait_turn(resume);
+}
+
+// $5777: controller 2's button 2: ten help pages, up and down on controller
+// 1 ($57C5), a button leaves; the return kept in the slot (task_enter_1)
+static void help_pages(void) {
+	cpu.cycles += 17 + 77 + 19;
+	wr16(SLOT + 0x24, 0x6A42);
+	mem_write(SLOT + 0x1A, 0);
+	for (;;) {
+		call(0x2740);                  // clear_window
+		yield_to(0x5784);
+		call(0x57C5);                  // help_page
+		int page = -1;
+		for (;;) {
+			call(0x335C);              // cursor
+			yield_to(0x578D);
+			cpu.cycles += 13 + 8;
+			uint8_t pressed = mem_read(JOY_PRESSED);
+			cpu.a = pressed;
+			if (pressed & 0x20) { cpu.cycles += 12; break; }
+			cpu.cycles += 7 + 8;
+			if (pressed & 0x10) { cpu.cycles += 12; break; }
+			cpu.cycles += 7 + 8;
+			uint8_t now = mem_read(SLOT + 0x1A);
+			if (pressed & 0x01) {
+				cpu.cycles += 12 + 19 + 4 + 10;
+				page = now ? now - 1 : 9;
+				if (!now) cpu.cycles += 7;
+				break;
+			}
+			cpu.cycles += 7 + 8;
+			if (!(pressed & 0x02)) { cpu.cycles += 12; continue; }
+			cpu.cycles += 7 + 19 + 4 + 7;
+			if (now + 1 < 0x0A) { cpu.cycles += 12; page = now + 1; }
+			else { cpu.cycles += 7 + 4 + 12; page = 0; }
+			break;
+		}
+		if (page < 0) break;
+		cpu.cycles += 19 + 12;
+		cpu.a = (uint8_t)page;
+		mem_write(SLOT + 0x1A, cpu.a);
+	}
+	call(0x276D);                      // forget_screen
+	call(0x129D);
+	yield_to(0x57C2);
+	cpu.cycles += 10 + 42;             // jp task_return_1
+	SET_HL(0x6A42);
+}
+
+// $575E: virtue A's karma and name
+static void karma_line(uint8_t virtue) {
+	cpu.cycles += 17 + 11 + 10 + 11 + 20 + 7 + 10 + 4 + 7 + 10;
+	cpu.a = virtue;
+	push16((uint16_t)(cpu.a << 8 | cpu.f));
+	SET_HL(0x0000);
+	cpu.l = mem_read((uint16_t)(0xC90B + virtue));
+	SET_BC(0x0230);
+	call(0x55CF);                      // print_number
+	cpu.cycles += 7 + 17;
+	text_char(':');
+	cpu.cycles += 10 + 7 + 10;
+	cpu.a = (uint8_t)(pop16() >> 8);
+	op_add8(0x97, 0);
+	call_original(0x5516);             // jp print_item_name
+}
+
+// $5730: controller 2's button 1: the eight virtues' karma, two columns
+static void karma_list(void) {
+	cpu.cycles += 19 + 19;
+	mem_write(SLOT + 0x1A, 0);
+	mem_write(SLOT + 0x16, 4);
+	for (;;) {
+		newline();
+		cpu.cycles += 19;
+		karma_line(mem_read(SLOT + 0x1A));
+		cpu.cycles += 7 + 13 + 19 + 7;
+		cpu.a = 0x10;
+		mem_write(0xC639, 0x10);       // text_col
+		karma_line((uint8_t)(mem_read(SLOT + 0x1A) + 4));
+		cpu.cycles += 23 + 23;
+		mem_write(SLOT + 0x1A, (uint8_t)(mem_read(SLOT + 0x1A) + 1));
+		uint8_t left = op_dec8(mem_read(SLOT + 0x16));
+		mem_write(SLOT + 0x16, left);
+		if (!left) { cpu.cycles += 7; break; }
+		cpu.cycles += 12;
+	}
+	newline();
+	cpu.cycles += 7 + 10 + 17 - 17;
+	text_char(0x7F);
+}
+
+// $5726, each frame of the dungeon's input: controller 2 alone: its
+// button 2 ($20) the help pages, its button 1 ($10) the karma list
 static void stats_buttons(void) {
 	cpu.cycles += 17;
 	call(0x064C);                      // read_pads_both
@@ -49,7 +142,7 @@ static void stats_buttons(void) {
 	if (cpu.a == 0x20) {
 		op_sub8(0x20, 0, 0);
 		cpu.cycles += 12;
-		task_call(0x5777, 0x6A42);
+		help_pages();
 		return;
 	}
 	op_sub8(0x20, 0, 0);
@@ -57,7 +150,7 @@ static void stats_buttons(void) {
 	op_sub8(0x10, 0, 0);
 	if (cpu.a != 0x10) { cpu.cycles += 11; return; }
 	cpu.cycles += 5;
-	task_call(0x5730, 0x6A42);
+	karma_list();
 }
 
 // $6AEA: the dungeon's end of the turn: everyone dead is the end

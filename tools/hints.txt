@@ -1311,3 +1311,6 @@ native   00:3F3D native_bridge_trolls
 native   00:3FA7 native_trap_winds
 native   00:3FBB native_trap_rocks
 native   00:3FD0 native_trap_pit
+native   01:5659 native_page_text
+name     01:57C5 help_page
+native   01:57C5 native_help_page
