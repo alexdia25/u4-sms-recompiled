@@ -138,7 +138,65 @@ static void abyss_isle(void) {
 		op_sub8(need[i].v, 0, 0); I(7);
 		if (ret_if(!(cpu.f & FZ))) return;
 	}
-	native_continue_at(0xAEEC);
+	cpu.iy = 0xC651; I(14);            // $AEEC: the eight on the isle
+	SET_DE(0x0008); I(10);
+	SET_HL(0xAF3F); I(10);
+	cpu.b = 0x08; I(7);
+	do {
+		mem_write((uint16_t)(cpu.iy + 3), 0x80); I(19);
+		cpu.a = mem_read(HL); I(7);
+		SET_HL(HL + 1); I(6);
+		mem_write((uint16_t)(cpu.iy + 1), cpu.a); I(19);
+		cpu.a = mem_read(HL); I(7);
+		SET_HL(HL + 1); I(6);
+		mem_write((uint16_t)(cpu.iy + 2), cpu.a); I(19);
+		cpu.a = mem_read(HL); I(7);
+		SET_HL(HL + 1); I(6);
+		mem_write((uint16_t)(cpu.iy + 0), cpu.a); I(19);
+		cpu.iy = op_add16(cpu.iy, DE); I(15);
+		I(--cpu.b ? 13 : 8);
+	} while (cpu.b);
+	cpu.b = 0x18; I(7);
+	do {                               // ships in the isle's bay ($DE-$E6, $DC-$E4) gone
+		cpu.a = mem_read((uint16_t)(cpu.iy + 1)); I(19);
+		op_sub8(0xDE, 0, 0); I(7);
+		int stay = (cpu.f & FC) != 0;
+		I(stay ? 12 : 7);
+		if (!stay) {
+			op_sub8(0xE7, 0, 0); I(7);
+			stay = !(cpu.f & FC);
+			I(stay ? 12 : 7);
+		}
+		if (!stay) {
+			cpu.a = mem_read((uint16_t)(cpu.iy + 2)); I(19);
+			op_sub8(0xDC, 0, 0); I(7);
+			stay = (cpu.f & FC) != 0;
+			I(stay ? 12 : 7);
+		}
+		if (!stay) {
+			op_sub8(0xE5, 0, 0); I(7);
+			stay = !(cpu.f & FC);
+			I(stay ? 12 : 7);
+		}
+		if (!stay) {
+			cpu.a = mem_read((uint16_t)(cpu.iy + 3)); I(19);
+			op_sub8(0x10, 0, 0); I(7);
+			stay = (cpu.f & FC) != 0;
+			I(stay ? 12 : 7);
+		}
+		if (!stay) {
+			op_sub8(0x14, 0, 0); I(7);
+			stay = !(cpu.f & FC);
+			I(stay ? 12 : 7);
+		}
+		if (!stay) {
+			mem_write((uint16_t)(cpu.iy + 3), 0); I(19);
+			mem_write((uint16_t)(cpu.iy + 0), 0); I(19);
+		}
+		cpu.iy = op_add16(cpu.iy, DE); I(15);
+		I(--cpu.b ? 13 : 8);
+	} while (cpu.b);
+	I(10);
 }
 
 static int world_event_here(void) {    // a moongate, or a place's entrance, under the party
@@ -189,8 +247,7 @@ static void place_name(uint8_t base) {   // add a,base / call print_item_name / 
 // shrines ($ADFF). Then $AE39: the sound stopped, the window wiped, the
 // people kept, the new game mode, and on (not back to the turn) into the
 // place's map ($0E6C) or the dungeon ($3D78); no way in: location 0 ($AE5B).
-static void enter_place(void) {
-	uint16_t to = switch_on(0xAD6C);
+static void enter_place_at(uint16_t to) {
 	uint16_t welcome = 0;
 	uint8_t mode;
 	switch (to) {
@@ -281,6 +338,8 @@ no_way:                                // $AE5B
 	I(10);
 }
 
+static void enter_place(void) { enter_place_at(switch_on(0xAD6C)); }
+
 static void world_step(void) {         // $ACDC
 	// shadow mode: what follows a moongate or an entrance waits for frames
 	if (!native_on_fiber() && world_event_here()) { native_decline(); return; }
@@ -329,7 +388,7 @@ static void world_step(void) {         // $ACDC
 			SET_HL(rd16(PARTY_X)); I(16);
 			wr16(0xC96D, HL); I(16);
 			I(10);
-			native_continue_at(0xADFF);
+			enter_place_at(0xADFF);    // the shrine of the moons' gate
 			return;
 		}
 		cpu.a = mem_read(0xC95F); I(13);   // $AD28: the other moon's gate

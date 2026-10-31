@@ -582,3 +582,41 @@ static void british_topics(void) {
 	vram_bank_pop();
 }
 M(british_topics, 0x36A3, 0, ALL)
+
+// $3F3D: on a bridge, "Bridge Trolls!": a fight (the people's slot kept)
+static void bridge_trolls(void) {
+	ON_FIBER();
+	say_inline(0x3F40);
+	cpu.a = 0xA4; I(7);
+	mem_write(0xC97D, 0xA4); I(13);
+	SET_HL(rd16(0xC971)); I(16);
+	wr16(0xC953, HL); I(16);
+	wr16(0xC97A, HL); I(16);
+	cpu.a = 0x17; I(7);
+	mem_write(0xC97C, 0x17); I(13);
+	I(10); native_continue_at(0x3B9F);
+}
+
+// the dungeon's traps: $3FA7 "Winds!" (the torch out), $3FBB "Falling
+// Rocks!" and $3FD0 "Pit!" (harm)
+static void trap_winds(void) {
+	ON_FIBER();
+	say_inline(0x3FAA);
+	op_xor(cpu.a); I(4);
+	mem_write(0xC95B, cpu.a); I(13);
+	I(10);
+}
+static void trap_rocks(void) {
+	ON_FIBER();
+	say_inline(0x3FBE);
+	I(12); I(10); native_continue_at(0x4812);
+}
+static void trap_pit(void) {
+	ON_FIBER();
+	say_inline(0x3FD3);
+	I(10); native_continue_at(0x4812);
+}
+M(bridge_trolls, 0x3F3D, 0, 0)
+M(trap_winds, 0x3FA7, 0, ALL)
+M(trap_rocks, 0x3FBB, 0, 0)
+M(trap_pit, 0x3FD0, 0, 0)

@@ -623,6 +623,8 @@ def main():
         # the cell under the party becomes one, and the party searches
         DUNGEONS['dsearch_' + what] = ('despise', ['C95B:FF', 'C751:20', 'C76D:50' if cell == 0x93 else 'C751:20',
                                                     'D022:%02X' % cell, 'C990:%02X' % cell], SEARCH6 + '2', 10)
+    for cell, what in ((0x80, 'winds'), (0x84, 'rocks'), (0x88, 'pit'), (0xA0, 'poison'), (0xA2, 'fire'), (0xA3, 'sleep')):
+        DUNGEONS['dtrap_' + what] = ('despise', ['C95B:FF', 'D023:%02X' % cell], 'R', 20)   # the cell east of the party
     DUNGEONS['dspell_y_top'] = ('wrong', MAGIC, '2DD222' + 'D' * DUNGEON_SPELLS.index('Y') + '2', 20)
     for name, (d, pokes, steer, n) in DUNGEONS.items():
         rnd = random.Random(name)
@@ -675,11 +677,12 @@ def main():
             s.press('1', 60)
         s.write(name)
     # Moonglow's moongate ($E0, $85), stepped onto from the west while open
-    for name, moons in (('moongate', []),):
+    for name, moons in (('moongate', []),
+                        ('moongate_new', ['C95D:04', 'C95E:80', 'C95F:04', 'C960:80', 'C98D:A6', 'C98E:13'])):
         rnd = random.Random(name)
         s = Script()
-        s.poke('C96D:DF')
-        s.poke('C96E:85')
+        s.poke('C96D:%s' % ('A5' if moons else 'DF'))   # west of the gate of the moon's phase
+        s.poke('C96E:%s' % ('13' if moons else '85'))
         s.press('L', 40)
         s.press('L', 70)
         s.f += 300
@@ -800,6 +803,34 @@ def main():
             r = rnd.random()
             k = 'D' if r < 0.3 else 'U' if r < 0.4 else '2' if r < 0.93 else '1'
             s.press(k, rnd.choice((30, 60, 120)))
+        s.write(name)
+    # the Abyss's isle: stepping east onto ($DC, $E0) puts its people there
+    rnd = random.Random('abyss_isle')
+    s = Script()
+    s.poke('C96D:DB')
+    s.poke('C96E:E0')
+    s.press('L', 40)
+    s.press('L', 70)
+    s.f += 300
+    s.poke('C959:12')              # by ship, facing east
+    s.poke('C95A:00')
+    s.press('R', 200)
+    for _ in range(20):
+        s.press(rnd.choice('UDLR12'), rnd.choice((30, 60)))
+    s.write('abyss_isle')
+    # a bridge under the party on the world: one pass in eight, trolls
+    for k in range(8):
+        name = 'trolls_%d' % k
+        rnd = random.Random(name)
+        s = Script()
+        for key in 'LLLLLL':
+            s.press(key, 30)
+        for _ in range(6):
+            s.poke('C990:17')
+            s.poke('C0B5:%02X' % (k * 33 & 0xFF))
+            s.press('1', 60)
+        for _ in range(16):
+            s.press(rnd.choice('UDLR12'), rnd.choice((30, 60, 120)))
         s.write(name)
     # the shrine of honesty (location $1A at $E9, $42): stepped in from the
     # south; the virtue, the cycles, the mantra (AHM) for each cycle

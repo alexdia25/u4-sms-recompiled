@@ -1307,3 +1307,7 @@ native   02:ABE7 native_virtues_menu
 native   02:BC1F native_whirlpool_takes
 native   02:BC54 native_twister_takes
 native   00:36A3 native_british_topics
+native   00:3F3D native_bridge_trolls
+native   00:3FA7 native_trap_winds
+native   00:3FBB native_trap_rocks
+native   00:3FD0 native_trap_pit
