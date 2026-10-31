@@ -78,16 +78,12 @@ Native native_divide_16 = { "divide_16", 0x2B3F, 0, nat_divide_16, OUT_A | OUT_D
 
 // ---------------------------------------------------------- numbers --
 // print_number ($55CF): print HL in B digits at the text cursor, leading
-// zeros as character C (the last digit always shows). The native does the
-// cases that stay on one line; the rest goes to the original.
-static int number_fits(int chars) {
-	return cpu.c >= 0x20 && mem_read(CURSOR) + chars < 0x1F;
-}
-
+// zeros as character C (the last digit always shows).
 static void print_digit_place(uint16_t *hl, uint16_t place) {   // $5606
-	uint8_t d = 0;
-	while (*hl >= place) { *hl -= place; d++; }
-	cpu.cycles += 17 + 4 + 31 * (d + 1) - 5 + 11 + 4 + 7;
+	int steps = 0;
+	while (*hl >= place) { *hl -= place; steps++; }
+	uint8_t d = (uint8_t)steps;        // the digit is 8 bits: a number too big wraps it
+	cpu.cycles += 17 + 4 + 31 * (steps + 1) - 5 + 11 + 4 + 7;
 	if (d) {
 		mem_write(NUM_STARTED, d);
 		cpu.cycles += 13 + 7 + 10;
@@ -107,7 +103,7 @@ static void print_number(void) {
 	mem_write(NUM_STARTED, 0);
 	cpu.cycles += 11 + 11 + 4 + 13 + 4 + 13;
 	static const uint16_t places[4] = { 10000, 1000, 100, 10 };
-	int digits = cpu.b;
+	int digits = cpu.b >= 1 && cpu.b <= 4 ? cpu.b : 5;   // (dec b never reaching 0: all five)
 	int skip = 5 - digits;             // places not printed
 	cpu.cycles += (digits < 5 ? digits - 1 : 4) * (4 + 7);   // dec b / jr z not taken
 	if (digits < 5) cpu.cycles += 4 + 12;                  // and the one that jumps
@@ -122,17 +118,13 @@ static void print_number(void) {
 	SET_BC(bc); SET_HL(hl);
 }
 
-static void nat_print_number(void) {
-	if (cpu.b < 1 || cpu.b > 5 || !number_fits(cpu.b)) { native_decline(); return; }
-	print_number();
-}
-Native native_print_number = { "print_number", 0x55CF, 1, nat_print_number, OUT_A, 0, 0 };
+static void nat_print_number(void) { print_number(); }
+Native native_print_number = { "print_number", 0x55CF, 1, nat_print_number, OUT_A, 0, 0, .blocking = 1 };
 
 // print_number_auto ($5627): print HL with as many digits as it needs
 static void nat_print_number_auto(void) {
 	uint16_t v = HL;
 	uint8_t digits = v >= 10000 ? 5 : v >= 1000 ? 4 : v >= 100 ? 3 : v >= 10 ? 2 : 1;
-	if (mem_read(CURSOR) + digits >= 0x1F) { native_decline(); return; }
 	uint16_t bc = BC, de = DE;
 	cpu.c = 0;
 	cpu.cycles += 11 + 11 + 4 + 10;
@@ -149,7 +141,7 @@ static void nat_print_number_auto(void) {
 	cpu.cycles += 10 + 10 + 10;
 	SET_BC(bc); SET_DE(de);
 }
-Native native_print_number_auto = { "print_number_auto", 0x5627, 1, nat_print_number_auto, OUT_A, 0, 0 };
+Native native_print_number_auto = { "print_number_auto", 0x5627, 1, nat_print_number_auto, OUT_A, 0, 0, .blocking = 1 };
 
 // --------------------------------------------------------------- gold --
 // show_gold ($43DA) / show_food ($43F6): the 4-digit counter in the top line
