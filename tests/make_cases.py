@@ -890,7 +890,10 @@ def main():
         'ask_yes_karma': ('', ['C9AA:01', 'C96B:FF', 'C96C:FF'], '2', ''),
         'ask_no_karma':  ('', ['C9AA:01'], 'D2', ''),
         'ask_again':     ('', ['C9AA:01', 'C96B:00', 'C96C:00'], '2', ''),
-        'ask_yes_r':     ('', [], 'R2', ''),
+        'ask_n2':        ('', [], 'D2', ''),
+        'ask_n2_karma':  ('', ['C9AA:01', 'C96B:FF', 'C96C:FF'], 'D2', ''),
+        'ask_n2_again':  ('', ['C9AA:01', 'C96B:00', 'C96C:00'], 'D2', ''),
+        'ask_n2_word':   ('', ['C309:18'], 'D2', 'DD2'),
         'ask_yes_r_karma': ('', ['C9AA:01', 'C96B:FF', 'C96C:FF'], 'R2', ''),
         'ask_yes_r_again': ('', ['C9AA:01', 'C96B:00', 'C96C:00'], 'R2', ''),
     }
@@ -914,7 +917,8 @@ def main():
         for _ in range(3):             # JOB is the fourth word
             s.press('D', 40)
         s.press('2', 500)              # its answer
-        s.press('2', 300)              # the question
+        if not name.startswith('ask_n2'):
+            s.press('2', 300)          # the question
         for k in answer:
             s.press(k, 40)
         s.f += 300
