@@ -150,3 +150,18 @@ graphic (two 8-pixel columns of mask + 4 planes) into unique VRAM tiles each tim
 the view moves. The map itself sits in a 32×32-cell window at $D000 (2 bytes per
 cell: tile, attribute) that slides by whole 16×16 chunks as the party walks
 (`step_east` … `step_north`, `recenter_map_view`).
+
+## How much is rewritten
+
+With every rewrite on, none of the 337 test cases executes a single translated
+instruction of the original (counted exactly, one flag per instruction). What the
+original translation still holds:
+
+- the Status pages and karma list the second controller's buttons open in a
+  dungeon (`$5730`, `$5777`), which the key scripts can't press;
+- a dungeon room's entry through a side door (`$6C07`), the opening logo's name
+  table loader (`$028B`) and the story's scroll set-up (`$8A97`);
+- branches no case reaches. Run the cases with `U4_NATIVE=off` and an instruction
+  counter to list them: about 3,400 instructions when this was written, many of
+  them with a C version that is simply not exercised, and some are text the
+  disassembler took for code.
