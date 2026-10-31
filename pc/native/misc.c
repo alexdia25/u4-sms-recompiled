@@ -915,3 +915,34 @@ M(world_input_frame, 0xACCC, 2, 0)
 M(world_input, 0xACCF, 2, 0)
 M(town_input_frame, 0xAF9A, 2, 0)
 M(town_input, 0xAF9D, 2, 0)
+
+// $ABB7, $ABBE: how many kinds of weapon (15) or armour (7) the party owns
+// (the bare hands and skin at the start aren't counted): IX+$1B, Z if none
+static void kinds_owned(void) {
+	op_xor(cpu.a); I(4);
+	cpu.c = cpu.a; I(4);
+	do {
+		SET_HL(HL + 1); I(6);
+		op_sub8(mem_read(HL), 0, 0); I(7);
+		if (cpu.f & FZ) I(12);
+		else { I(7); cpu.c = op_inc8(cpu.c); I(4); }
+		I(--cpu.b ? 13 : 8);
+	} while (cpu.b);
+	mem_write((uint16_t)(cpu.ix + 0x1B), cpu.c); I(19);
+	cpu.a = cpu.c; I(4);
+	op_or(cpu.a); I(4);
+	I(10);
+}
+static void weapons_owned(void) {
+	SET_HL(0xC91F); I(10);
+	cpu.b = 0x0F; I(7);
+	I(12);
+	kinds_owned();
+}
+static void armour_owned(void) {
+	SET_HL(0xC917); I(10);
+	cpu.b = 0x07; I(7);
+	kinds_owned();
+}
+M(weapons_owned, 0xABB7, 2, ALL)
+M(armour_owned, 0xABBE, 2, ALL)

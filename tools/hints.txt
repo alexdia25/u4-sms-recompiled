@@ -1322,3 +1322,5 @@ native   02:ACCC native_world_input_frame
 native   02:ACCF native_world_input
 native   02:AF9A native_town_input_frame
 native   02:AF9D native_town_input
+native   02:ABB7 native_weapons_owned
+native   02:ABBE native_armour_owned
