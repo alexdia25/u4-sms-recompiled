@@ -890,6 +890,66 @@ def main():
                 k = 'D' if r < 0.3 else 'U' if r < 0.45 else '2' if r < 0.95 else '1'
                 s.press(k, rnd.choice((30, 60, 120)))
             s.write(name)
+    # the shops worked by hand: selling some, all, more than there are; the
+    # pub's food, with money and without, and its grog, a tip, the keeper's words
+    def at_counter(shop, pokes):
+        loc, row = OTHER_SHOPS[shop]
+        s = Script()
+        for p in ['C9A0:%02X' % loc, 'C953:%02X' % X, 'C985:%02X' % X,
+                  'C954:%02X' % (row + 1), 'C986:%02X' % (row + 1),
+                  '%04X:60' % (0xD000 + row * 64 + 2 * X), 'C749:52', 'C74A:%02X' % X,
+                  'C74B:%02X' % (row - 1), 'C74C:52'] + pokes:
+            s.poke(p)
+            s.f += 2
+        s.f += 60
+        for k in '22U2':
+            s.press(k, 60)
+        s.f += 300
+        return s
+    OWNED = ['%04X:05' % a for a in list(range(0xC91F, 0xC92F)) + list(range(0xC917, 0xC91F))]
+    for shop in ('weapons', 'weapons2', 'armour', 'armour2'):
+        for row in (0, 3):
+            for count in (0, 1, 2, 5, 6):
+                s = at_counter(shop, RICH + OWNED)
+                for k in ['2', 'D', '2', 'D'] [:3] + ['D'] * row + ['2'] + ['U'] * count + ['2', '2', '2', '2', 'D', '2', '2', '1', '1']:
+                    s.press(k, 120)
+                s.f += 300
+                s.write('sell_%s_%d_%d' % (shop, row, count))
+    WORDS = ['%04X:01' % a for a in (0xC535, 0xC51F, 0xC52B, 0xC526, 0xC51A, 0xC529)]
+    PUBS = {
+        'pub_food':      (RICH, '2' + '2' + 'U' + '2'),
+        'pub_food_some': (['C909:30', 'C90A:00'], '2' + '2' + 'UUUU' + 'R' + 'U' + '2'),
+        'pub_food_none': (POOR, '2' + '2' + 'U' + '2'),
+        'pub_grog_poor': (POOR, '2' + 'D2' + 'UUU' + '2'),
+        'pub_grog_1':    (RICH, '2' + 'D2' + 'U' + '2'),
+        'pub_grog_2':    (RICH, '2' + 'D2' + 'UU' + '2'),
+        'pub_grog_3':    (RICH, '2' + 'D2' + 'UUU' + '2' + '2222'),
+        'pub_grog_9':    (RICH, '2' + 'D2' + 'U' * 9 + '2' + '2222'),
+    }
+    for word in range(6):
+        PUBS['pub_words_%d' % word] = (RICH + WORDS, '2' + 'D2' + 'UUU' + '2' + '2' + 'D' * word + '2' + '2222')
+    for name, (pokes, keys) in PUBS.items():
+        s = at_counter('pub', pokes)
+        for k in keys:
+            s.press(k, 120)
+        s.f += 400
+        s.write(name)
+    # the pause button, in the world, a town and a fight
+    for name, leave in (('pause_town', False), ('pause_world', True)):
+        s = Script()
+        if leave:
+            s.press('L', 40)
+            s.press('L', 70)
+        s.f += 100
+        s.press('P', 60)
+        s.f += 200
+        s.press('U', 40)
+        s.press('P', 60)
+        s.press('P', 60)
+        s.press('P', 60)
+        for k in 'RLRL':
+            s.press(k, 40)
+        s.write(name)
     # every inn ($96C1, $97B5: the place, its counter's row), the nights the
     # random numbers make of them; inn 3 has a choice of rooms
     ROM2 = open(os.path.join(HERE, '..', 'build', 'u4.sms'), 'rb').read()
@@ -1323,6 +1383,23 @@ def main():
     # the sound, then Exit
     TITLES['sound_test'] = create('D' + 'R' * 5 + '2' + 'L' * 4 + '2' + 'R' * 6 + '2' + 'L' * 7 + '2' + 'U' + 'RRR2' + 'U' + 'LLLL2'
                                   + '-' * 12 + 'D2' + '-' * 4 + '1UUL' + 'LLR2' + '-' * 4 + 'D2', end=600)
+    # every song played through and every sound, as they are and on the FM
+    # unit ($C002, poked before the game looks at it: 1 sound, 4 rhythm too)
+    INTO_TEST = 'D' + 'R' * 5 + '2' + 'L' * 4 + '2' + 'R' * 6 + '2' + 'L' * 7 + '2' + 'U' + 'RRR2' + 'U' + 'LLLL2' + '-' * 12
+    def sound_case(name, unit, keys, last):
+        out = [(str(f), '=C002:%02X' % unit) for f in range(1, 9)] if unit else []
+        out += create(INTO_TEST, end=0)[:-1]
+        f = 1400 + 24 * len(INTO_TEST) + 200
+        for k, wait in keys:
+            out.append((str(f), k))
+            f += wait
+        out.append((str(f + last), '-'))
+        TITLES[name] = out
+    for unit in (0, 1, 4):
+        for row in range(1, 10):
+            sound_case('song_%d_%d' % (row, unit), unit, [('D', 24)] * (row - 1) + [('2', 3000)], 0)
+        sound_case('sounds_%d' % unit, unit, [('D', 24)] * 9 + [('D', 24)] +
+                   [('2', 200), ('R', 24)] * 23, 100)
     # the gypsy answered the other way: B every time, and A and B in turn
     # (the start script answers A); the draws differ with the timing
     for name, pick in (('gypsy_b', lambda i: 'D'), ('gypsy_mixed', lambda i: 'DU'[i % 2])):

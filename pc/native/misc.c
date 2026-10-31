@@ -19,6 +19,17 @@ static void first_jump(void) {         // $0000: di / im 1 / jp reset
 }
 static void after_reset(void) { I(10); native_continue_at(0x0CA6); }   // $0063
 
+// $0066: the pause button's interrupt: noted for the main loop
+static void pause_pressed(void) {
+	push16((uint16_t)(cpu.a << 8 | cpu.f)); I(11);
+	cpu.a = 0xFF; I(7);
+	mem_write(0xC003, 0xFF); I(13);
+	uint16_t af = pop16();
+	cpu.a = af >> 8; cpu.f = (uint8_t)af; I(10);
+	cpu.iff1 = cpu.iff2;
+	cpu.cycles += 14;                  // retn
+}
+
 // $0CB4: a game's start: the stack reset, a mode's first start, mode 1
 static void cold_end(void) {
 	cpu.iff1 = cpu.iff2 = 0; I(4);
@@ -225,6 +236,7 @@ static void vision_picture(void) {
 #define M(name, addr, bank, out) Native native_##name = { #name, addr, bank, name, out, .long_calls = 1 };
 M(first_jump, 0x0000, 0, 0)
 M(after_reset, 0x0063, 0, 0)
+M(pause_pressed, 0x0066, 0, 0)
 M(cold_start, 0x0CA6, 0, 0)
 M(cold_end, 0x0CB4, 0, 0)
 M(pad_port_setup, 0x063D, 0, OUT_A)
