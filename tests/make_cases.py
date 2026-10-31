@@ -637,6 +637,27 @@ def main():
     for cell, what in ((0x80, 'winds'), (0x84, 'rocks'), (0x88, 'pit'), (0xA0, 'poison'), (0xA2, 'fire'), (0xA3, 'sleep')):
         DUNGEONS['dtrap_' + what] = ('despise', ['C95B:FF', 'D023:%02X' % cell], 'R', 20)   # the cell east of the party
     DUNGEONS['dspell_y_top'] = ('wrong', MAGIC, '2DD222' + 'D' * DUNGEON_SPELLS.index('Y') + '2', 20)
+    # an altar room's altar ($6662): in a room of the Abyss's kind ($C984 the room),
+    # the member at the middle, Use, Stone, four stones: the order the room wants,
+    # another, one twice
+    ROM = open(os.path.join(HERE, '..', 'build', 'u4.sms'), 'rb').read()
+    for room in range(3):
+        want = ROM[0x66F1 + room]
+        rows = [i for i in range(8) if want & 1 << i]
+        wrong = [i for i in range(8) if not want & 1 << i][:4]
+        for what, picks in (('right', rows), ('wrong', wrong), ('twice', rows[:1] * 2)):
+            name = 'altar_room_%d_%s' % (room, what)
+            DUNGEONS[name] = ('despise', ['C95B:FF'], 'RRDRR', 0)
+            keys = '2DDDD2D2---'
+            at = 0
+            for r in picks:              # the cursor stays where it was
+                keys += 'D' * (r - at) + '2--'
+                at = r
+            DUNGEON_AFTER[name] = (300, NOFOES[1:] + ['C984:%02X' % room, 'C8B9:05', 'C8BA:05', 'C955:FF'], keys)
+    # the right stones, the last three taken as read: the first stone's bit is 1
+    DUNGEONS['altar_room_key'] = ('despise', ['C95B:FF'], 'RRDRR', 0)
+    DUNGEON_AFTER['altar_room_key'] = (300, NOFOES[1:] + ['C984:00', 'C8B9:05', 'C8BA:05', 'C955:FF', 'C951:00'],
+                                       list('2DDDD2D2---') + ['=C316:01', '=C317:%02X' % (ROM[0x66F1] & 0xFE), '2', '-', '-', '2'])
     for name, (d, pokes, steer, n) in DUNGEONS.items():
         rnd = random.Random(name)
         x, y = DUNGEON_DOOR[d]
@@ -657,7 +678,10 @@ def main():
             for p in pokes:
                 s.poke(p)
             for k in keys:
-                s.press(k, 40)
+                if k[0] == '=':
+                    s.poke(k[1:])
+                else:
+                    s.press(k, 40)
         for _ in range(n):
             r = rnd.random()
             k = rnd.choice('UDLR') if r < 0.6 else '2' if r < 0.9 else '1'
