@@ -772,6 +772,35 @@ def main():
                 k = 'D' if r < 0.3 else 'U' if r < 0.45 else '2' if r < 0.95 else '1'
                 s.press(k, rnd.choice((30, 60, 120)))
             s.write(name)
+    # Lord British, as a person poked next to the party (at (2, 15) in Moonglow)
+    BRITISH = {
+        'lb_first':   [],
+        'lb_greeted': ['C963:FF'],
+        'lb_dead':    ['C963:FF', 'C76D:44'],
+        'lb_two':     ['C963:FF', 'C957:02'],
+        'lb_party':   ['C963:FF', 'C957:03'],
+        'lb_levels':  ['C963:FF', 'C957:03', 'C755:10', 'C756:27', 'C772:F4', 'C773:01', 'C766:30'],
+        'lb_topics':  ['C963:FF', 'C5E0:01', 'C5E1:02', 'C5E2:03', 'C5E3:04', 'C5E4:05', 'C5E5:06',
+                       'C5E6:07', 'C5E7:08', 'C5E8:09', 'C5E9:0A', 'C5EA:0B', 'C5EB:0C', 'C5EC:0D'],
+        'lb_advice':  ['C963:FF', 'C5E0:06', 'C5E1:05', 'C5E2:06', 'C8FD:FF', 'C8FE:FF', 'C957:03', 'C956:FF'],
+        'lb_advice2': ['C963:FF', 'C5E0:06', 'C5E1:06', 'C8FD:FF', 'C8FE:FF', 'C957:03', 'C956:FF', 'C90B:00',
+                       'C955:C0'] + ['C9%02X:00' % a for a in range(0x0C, 0x13)] + ['C951:1C'],
+    }
+    for name, pokes in BRITISH.items():
+        rnd = random.Random(name)
+        s = Script()
+        for p in ['C749:5E', 'C74A:02', 'C74B:0F', 'C74C:5E', 'C750:01'] + pokes:
+            s.poke(p)
+            s.f += 1
+        s.f += 40
+        for k in '22R2':
+            s.press(k, 60)
+        s.f += 500
+        for _ in range(90):
+            r = rnd.random()
+            k = 'D' if r < 0.3 else 'U' if r < 0.4 else '2' if r < 0.93 else '1'
+            s.press(k, rnd.choice((30, 60, 120)))
+        s.write(name)
     # the shrine of honesty (location $1A at $E9, $42): stepped in from the
     # south; the virtue, the cycles, the mantra (AHM) for each cycle
     AHM = ['2', 'R', 'R', 'D', '2', 'D', '2', 'R', 'D', 'D', 'D', '2']   # on the letter grid, then End

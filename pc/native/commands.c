@@ -185,7 +185,7 @@ static void talk_command(void) {
 	cpu.cycles += 19 + 4 + 10;
 	if (mem_read(cpu.iy + 7) == 0) { command_end_at(0x810D); return; }   // nothing to say
 	cpu.cycles += 19 + 7 + 10;
-	if (mem_read(cpu.iy + 3) == 0x5E) { native_continue_at(0x812B); return; }   // Lord British
+	if (mem_read(cpu.iy + 3) == 0x5E) { lord_british(); return; }
 	go(0x6DCE);
 }
 Native native_talk_command = { "talk_command", 0x8091, 2, talk_command, 0, 0, 0, .task = 1 };

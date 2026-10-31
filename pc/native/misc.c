@@ -545,3 +545,40 @@ M(shop_offer, 0xAB92, 2, ALL)
 M(virtues_menu, 0xABE7, 2, ALL)
 M(whirlpool_takes, 0xBC1F, 2, 0)
 M(twister_takes, 0xBC54, 2, ALL)
+
+// $36A3: Lord British's topics in the menu window, eight at most from
+// IX+$1B, their names by the table at $8162 of bank $1A; the cursor on
+// IX+$1C
+static void british_topics(void) {
+	cpu.a = 0x1A; I(7);
+	vram_bank_push(0x36A5);
+	C(0x2E1B);                         // menu_window_clear
+	SET_DE(0xCAA6); I(10);
+	cpu.c = mem_read((uint16_t)(cpu.ix + 0x1B)); I(19);
+	cpu.b = 0x08; I(7);
+	do {
+		cpu.a = cpu.c; I(4);
+		SET_HL(0xC5E0); I(10);
+		I(11); call_original(0x0028);  // rst $28
+		op_or(cpu.a); I(4);
+		if (cpu.f & FZ) { I(12); break; }
+		I(7);
+		SET_HL(0x8162); I(10);
+		I(11); call_original(0x0020);  // rst $20
+		push16(DE); I(11);
+		C(0x2D6C);                     // text_chars
+		SET_DE(pop16()); I(10);
+		SET_HL(0x0080); I(10);
+		SET_HL(op_add16(HL, DE)); I(11);
+		{ uint16_t t = HL; SET_HL(DE); SET_DE(t); } I(4);
+		cpu.c = op_inc8(cpu.c); I(4);
+		I(--cpu.b ? 13 : 8);
+	} while (cpu.b);
+	cpu.a = mem_read((uint16_t)(cpu.ix + 0x1C)); I(19);
+	op_add8(cpu.a, 0); I(4);
+	cpu.a = op_inc8(cpu.a); I(4);
+	C(0x49D5);                         // cursor_on
+	C(0x2E54);                         // menu_window_show
+	vram_bank_pop();
+}
+M(british_topics, 0x36A3, 0, ALL)

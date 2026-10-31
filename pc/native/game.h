@@ -46,4 +46,7 @@ void class_magic_most(uint8_t class_);   // A = the most magic of the class, fro
 // commands.c
 void command_end_at(uint16_t entry);   // jp $8077/$807C/$8081/$8084/$810D: a command's end, from a C task
 
+// lord_british.c
+void lord_british(void);              // the talk with him, from the Talk command's task
+
 #endif
