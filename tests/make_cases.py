@@ -615,6 +615,15 @@ def main():
     # the room's foes gone: the party walks out the way it came
     DUNGEONS['dungeon_room_exit'] = ('despise', ['C95B:FF'], 'RRDRR', 0)
     DUNGEON_AFTER = {'dungeon_room_exit': (100, NOFOES, 'L' * 12)}
+    # out by each side, walking off the field, or by a room's exit to another place
+    for way, key in (('up', 'U'), ('right', 'R'), ('down', 'D'), ('left', 'L')):
+        DUNGEONS['dungeon_room_side_' + way] = ('despise', ['C95B:FF'], 'RRDRR', 0)
+        at = {'U': ['C8B9:05', 'C8BA:00'], 'D': ['C8B9:05', 'C8BA:0A']}.get(key, [])   # walls: start at the edge
+        DUNGEON_AFTER['dungeon_room_side_' + way] = (100, NOFOES + at, key * 12)
+        for room in (0, 1, 2):            # the table has three
+            name = 'dungeon_room_way_%s_%d' % (way, room)
+            DUNGEONS[name] = ('despise', ['C95B:FF'], 'RRDRR', 0)
+            DUNGEON_AFTER[name] = (100, NOFOES + at + ['C984:%02X' % room], key * 12)
     for k in (0, 2, 6, 7):             # the last altar: wrong colours, the end of the game, cancelled
         DUNGEONS['abyss_altar_%d' % k] = ('despise', ['C95B:FF', 'C9A0:19', 'C990:B0', 'C970:07', 'D722:B0', 'C955:80'],
                                           '2DDDD2D2' + '-' * 3 + 'D' * k + '2' + '-' * 3 + '2', 10)
