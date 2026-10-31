@@ -123,8 +123,8 @@ static int topic_join(void) {
 			cpu.cycles += 7 + 19 + 13 + 19 + 7;
 			mem_write(TOWN_VIRTUE, town);
 			if (mem_read(0xC76C) != town) { cpu.cycles += 5; refuse = 0; }
-		} else cpu.cycles += 5;
-	} else cpu.cycles += 5;
+		} else cpu.cycles += 12;
+	} else cpu.cycles += 12;
 	if (refuse) {                      // $6FB5
 		call(0x71B1);
 		say_last(0x7216);

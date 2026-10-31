@@ -854,6 +854,32 @@ def main():
         lines.append('%d -' % last)
         with open(os.path.join(HERE, 'cases', name + '.keys'), 'w', newline=chr(10)) as out:
             out.write(chr(10).join(lines) + chr(10))
+    # joining: the first person (the record's +7) of location 7, whose town is
+    # the virtue of class 1, poked next to the party
+    JOINS = {
+        'join_ok':        ['C90C:63', 'C75B:08'],
+        'join_won':       ['C90C:00', 'C75B:08'],
+        'join_low_karma': ['C90C:10', 'C75B:08'],
+        'join_level':     ['C90C:63', 'C75B:01'],
+        'join_own_town':  ['C90C:63', 'C75B:08', 'C76C:01'],
+        'join_not_first': ['C90C:63', 'C75B:08', 'C750:02'],
+    }
+    for name, pokes in JOINS.items():
+        s = Script()
+        for p in ['C9A0:07', 'C749:24', 'C74A:02', 'C74B:0F', 'C74C:24', 'C750:01'] + pokes:
+            s.poke(p)
+            s.f += 1
+        s.f += 40
+        for k in '22R2':
+            s.press(k, 60)
+        s.f += 300
+        s.press('2', 120)              # past the greeting
+        for _ in range(5):             # JOIN is the sixth word
+            s.press('D', 40)
+        s.press('2', 400)
+        for _ in range(3):
+            s.press('2', 200)
+        s.write(name)
     # the shrine of honesty (location $1A at $E9, $42): stepped in from the
     # south; the virtue, the cycles, the mantra (AHM) for each cycle
     AHM = ['2', 'R', 'R', 'D', '2', 'D', '2', 'R', 'D', 'D', 'D', '2']   # on the letter grid, then End
