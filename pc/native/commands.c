@@ -19,7 +19,7 @@ static void yield_at(uint16_t site);
 static void done(void) { cpu.cycles += 10; command_end_at(0x8084); }       // jp $8084
 static void go(uint16_t addr) {      // jp addr
 	cpu.cycles += 10;
-	if ((addr >= 0x8077 && addr <= 0x8084) || addr == 0x810D) command_end_at(addr);
+	if ((addr >= 0x8072 && addr <= 0x8084) || addr == 0x810D) command_end_at(addr);
 	else native_continue_at(addr);
 }
 
@@ -783,7 +783,7 @@ static void rest(void) {
 	uint8_t where = mem_read(MAP_KIND);
 	if (where != 0) {
 		cpu.cycles += 7 + 10;
-		if (where != 2) { native_continue_at(0x8072); return; }   // not in a town
+		if (where != 2) { command_end_at(0x8072); return; }   // not in a town
 	} else cpu.cycles += 5;
 	cpu.cycles += 13 + 7 + 7;
 	if (mem_read(0xC959) != 0x1F) {    // not on a horse or ship
@@ -1262,7 +1262,7 @@ static uint8_t map_mode(void) {
 
 // $89E7: a torch lights a dungeon for a while
 static void use_torch(void) {
-	if (map_mode() != 2) { native_continue_at(0x8072); return; }
+	if (map_mode() != 2) { command_end_at(0x8072); return; }
 	cpu.cycles += 10 + 11 + 13 + 7 + 7;
 	mem_write(0xC913, mem_read(0xC913) - 1);
 	unsigned light = mem_read(0xC95B) + 0xC8;
@@ -1356,7 +1356,7 @@ static void unlock(void) {
 
 // $8A31: a key opens the locked doors next to the party (towns only)
 static void use_key(void) {
-	if (map_mode() != 1) { native_continue_at(0x8072); return; }
+	if (map_mode() != 1) { command_end_at(0x8072); return; }
 	cpu.cycles += 7;
 	cpu.c = 1;
 	static const int8_t dx[4] = { 1, -1, 0, 0 }, dy[4] = { 0, 0, 1, -1 };
@@ -1368,7 +1368,7 @@ static void use_key(void) {
 		unlock();
 	}
 	cpu.cycles += 4 + 10;
-	if (--cpu.c == 0) { native_continue_at(0x8072); return; }   // no door
+	if (--cpu.c == 0) { command_end_at(0x8072); return; }   // no door
 	cpu.cycles += 10 + 11;
 	mem_write(0xC915, mem_read(0xC915) - 1);
 	say_inline(0x8A62);                // "Jimmy lock!"
@@ -1390,7 +1390,7 @@ static void say_coordinate(uint8_t a) {
 
 // $8A88: the sextant tells where the party is (not in dungeons)
 static void use_sextant(void) {
-	if (map_mode() >= 2) { native_continue_at(0x8072); return; }
+	if (map_mode() >= 2) { command_end_at(0x8072); return; }
 	say_inline(0x8A93);                // "Location is ... Latitude: "
 	cpu.cycles += 13;
 	say_coordinate(mem_read(PARTY_XY + 1));
@@ -3414,12 +3414,13 @@ static void run_spell(uint8_t spell) {
 	}
 }
 
-// the commands' ends ($8077 the balloon's ($473F), $807C pass ($46F1),
+// the commands' ends ($8072 not here ($46DF), $8077 the balloon's ($473F), $807C pass ($46F1),
 // $8081 cancelled ($472D), $810D "Funny, no response!", $8084 done): the
 // status window drawn, a frame, the pads afresh ($06D4), back to the turn
 // (task_return_1)
 void command_end_at(uint16_t entry) {
 	switch (entry) {
+	case 0x8072: tcall(0x46DF, 0x8072); cpu.cycles += 12; break;
 	case 0x8077: tcall(0x473F, 0x8077); cpu.cycles += 12; break;
 	case 0x807C: tcall(0x46F1, 0x807C); cpu.cycles += 12; break;
 	case 0x8081: tcall(0x472D, 0x8081); break;
