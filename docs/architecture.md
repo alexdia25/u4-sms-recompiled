@@ -160,7 +160,7 @@ cases or the seeds of `tests/random_play.sh` interprets a single instruction, an
 both fail if one does. With `U4_NATIVE=off` the whole game runs on the interpreter,
 which is the original that everything is compared with.
 
-At the last count, 1,074 cases left 1,801 disassembled "instructions" unreached.
+At the last count, 1,088 cases left 1,801 disassembled "instructions" unreached.
 Nothing leads to 1,107 of them, by a branch from code that ran: they are text,
 tables and routines nothing calls, though a table could still point at some. The
 other 694 are branches the tests have not taken. 321 of those are the sound

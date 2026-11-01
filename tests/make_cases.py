@@ -980,6 +980,7 @@ def main():
     }
     for word in range(6):
         PUBS['pub_words_%d' % word] = (RICH + WORDS, '2' + 'D2' + 'UUU' + '2' + '2' + 'D' * word + '2' + '2222')
+        PUBS['pub_paid_%d' % word] = (RICH + WORDS, '2' + 'D2' + 'UUU' + '2' + '2' + 'D' * word + '2' + 'RUUUUU2' + '2' + ('RUUUUU2' + '2') * 4 + '2222')
     for name, (pokes, keys) in PUBS.items():
         s = at_counter('pub', pokes)
         for k in keys:
@@ -1452,6 +1453,8 @@ def main():
     ROUND = [(0xD1, 0xE0), (0xCF, 0xE0), (0xD0, 0xE1), (0xD0, 0xDF), (0xD2, 0xE1)]
     ON_IT = [(0xD0, 0xE0)] * 5
     for name, base, figure, at, by in (('near_ships', 0xC699, 0x10, ROUND, 'C959:10'), ('near_ships_on', 0xC699, 0x10, ON_IT, 'C959:10'),
+                                       ('near_ships_six', 0xC699, 0x10, ROUND + [(0xD3, 0xE0)], 'C959:10'),
+                                       ('near_ships_sunk', 0xC699, 0x10, ON_IT, 'C961:05'),
                                        ('near_horses', 0xC6C1, 0x14, ROUND, 'C959:14'), ('near_horses_on', 0xC6C1, 0x14, ON_IT, 'C959:14'),
                                        ('near_both', 0xC699, 0x10, ROUND, 'C959:14')):
         s = Script()
@@ -1461,11 +1464,14 @@ def main():
         s.press('L', 70)
         s.f += 200
         s.press('1', 8)
-        for p in [by, 'C95A:00'] + near(base, figure, at) + (near(0xC6C1, 0x14, ROUND) if name == 'near_both' else []):
+        for p in ([by] if by != 'C961:05' else ['C959:10', 'C961:05', 'C962:00']) + ['C95A:00'] + near(base, figure, at) + (near(0xC6C1, 0x14, ROUND) if name == 'near_both' else []):
             s.poke(p)
         s.f += 100
-        rnd = random.Random(name)
+        rnd = random.Random(name[:13])
         for _ in range(120):
+            if name == 'near_ships_sunk':
+                s.poke('C961:05')
+                s.f += 1
             s.press(rnd.choice('UDLR'), 40)
         s.write(name)
     FULL = ['%04X:%02X' % (0xC651 + 8 * i + k, v) for i in range(32) for k, v in ((0, 0x20), (1, 0x10 + i), (2, 0x02), (3, 0x20))]
@@ -1508,6 +1514,15 @@ def main():
             s.press(k, 80)
         s.f += 200
         s.write(name)
+    # bought with hands full: the count stays at 99
+    FULLUP = ['%04X:63' % a for a in list(range(0xC91F, 0xC92F)) + list(range(0xC917, 0xC91F)) + list(range(0xC92F, 0xC937))]
+    for shop in ('weapons', 'armour', 'guild'):
+        for row in (0, 2):
+            s = at_counter(shop, RICH + FULLUP)
+            for k in ['2', '2', '2', '2'] + ['D'] * row + ['2', '2', 'U', 'U', '2', '2', '2', '2', '2', 'D', '2', '1', '1']:
+                s.press(k, 120)
+            s.f += 300
+            s.write('buy_full_%s_%d' % (shop, row))
     # the seer on a virtue already won ($C90B on), each row
     for row in (0, 3, 7):
         s = at_counter('seer', ['%04X:00' % (0xC90B + i) for i in range(8)])
