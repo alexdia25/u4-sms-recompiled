@@ -106,6 +106,17 @@ static uint32_t state_hash(void) {
 	return g;
 }
 
+// "=ADDR:VAL/LINE" pokes RAM at the end of that line of the frame instead
+// of before it: in the middle of the game's pass, after the vertical blank
+static struct { int line; uint16_t addr; uint8_t val; } line_pokes[300];
+static int n_line_pokes, frame_line;
+static void on_line(void) {
+	if (pc_samples) sample_pc();
+	for (int i = 0; i < n_line_pokes; i++)
+		if (line_pokes[i].line == frame_line) mem_write(line_pokes[i].addr, line_pokes[i].val);
+	frame_line++;
+}
+
 static int headless(int frames, const char *shot, const char *keys) {
 	FILE *k = keys ? fopen(keys, "r") : NULL;
 	int next_frame = -1;
@@ -125,8 +136,17 @@ static int headless(int frames, const char *shot, const char *keys) {
 				hold = 3 + (int)((random_seed >> 12) % 20);
 			}
 		}
+		n_line_pokes = frame_line = 0;
 		while (next_frame == f) {
 			unsigned addr, val;
+			int line;
+			if (sscanf(btn, "=%x:%x/%d", &addr, &val, &line) == 3 && n_line_pokes < 300) {
+				line_pokes[n_line_pokes].line = line;
+				line_pokes[n_line_pokes].addr = (uint16_t)addr;
+				line_pokes[n_line_pokes++].val = (uint8_t)val;
+				if (fscanf(k, "%d %31s", &next_frame, btn) != 2) next_frame = -1;
+				continue;
+			}
 			if (sscanf(btn, "=%x:%x", &addr, &val) == 2) {   // "=ADDR:VAL" pokes RAM (for tests)
 				mem_write((uint16_t)addr, (uint8_t)val);
 				if (fscanf(k, "%d %31s", &next_frame, btn) != 2) next_frame = -1;
@@ -242,7 +262,8 @@ int main(int argc, char **argv) {
 	load_save(pack_path);
 	if (state && sms_load_state(state)) { fprintf(stderr, "cannot load state %s\n", state); return 1; }
 	if (getenv("U4_LOG_FALLBACK")) machine_on_interpreted = log_fallback;
-	if (getenv("U4_PC_PROFILE")) { pc_samples = calloc(32, sizeof *pc_samples); sms_on_line = sample_pc; }
+	if (getenv("U4_PC_PROFILE")) pc_samples = calloc(32, sizeof *pc_samples);
+	sms_on_line = on_line;
 	if (frames >= 0) {
 		int r = headless(frames, shot, keys);
 		native_report();

@@ -24,8 +24,14 @@ static const uint16_t bank_switch_scratch[] = { BANK_SCRATCH, BANK_SCRATCH + 1 }
 // ------------------------------------------------------------- queue --
 // queue_text_copy ($0499): copy B rows of C cells from the text shadow at DE
 // to the same place in the VDP's name table, next vertical blank. When the
-// queue is full the original waits a frame; the native leaves that case to it.
+// queue is full it waits for vertical blanks until there is room (on a fiber
+// only: in shadow mode the callers leave that case to the original).
 static void queue_text_copy(void) {
+	while (mem_read(VRAM_QUEUED) >= 0x20) {
+		cpu.cycles += 13 + 7 + 10 + 17;   // ld a,($C063) / cp $20 / jp c / call wait_vblank
+		call_original(0x041C);
+		cpu.cycles += 10;                  // jp queue_text_copy
+	}
 	uint8_t n = mem_read(VRAM_QUEUED);
 	uint16_t at = (uint16_t)(VRAM_QUEUE + n * 8);
 	mem_write(VRAM_QUEUED, n + 1);
@@ -45,8 +51,15 @@ static void queue_text_copy(void) {
 	cpu.cycles += 179;
 }
 
+// shadow mode (no fiber): a wait for room can't run here; the original does it
+static int cannot_wait_for(int n) {
+	if (native_on_fiber() || mem_read(VRAM_QUEUED) + n <= 0x20) return 0;
+	native_decline();
+	return 1;
+}
+
 static void nat_queue_text_copy(void) {
-	if (mem_read(VRAM_QUEUED) >= 0x20) { native_decline(); return; }
+	if (cannot_wait_for(1)) return;
 	queue_text_copy();
 }
 Native native_queue_text_copy = { "queue_text_copy", 0x0499, 0, nat_queue_text_copy,
@@ -186,20 +199,21 @@ Native native_menu_text_at = { "menu_text_at", 0x2D65, 0, nat_menu_text_at, OUT_
 static void highlight(int on) {
 	uint16_t hl = HL;
 	uint8_t b = cpu.b, c = cpu.c;
+	int rows = b ? b : 256, cells = c ? c : 256;   // djnz: 0 is 256
 	cell_address();
 	uint16_t cell = DE;
 	cpu.cycles += 33 + 4 + 10;
 	uint16_t row = cell;
-	for (int r = 0; r < b; r++) {
+	for (int r = 0; r < rows; r++) {
 		uint16_t p = row;
-		for (int i = 0; i < c; i++) {
+		for (int i = 0; i < cells; i++) {
 			p = (uint16_t)((p & 0xFF00) | (uint8_t)(p + 1));   // inc l
 			uint8_t v = mem_read(p);
 			mem_write(p, on ? (v | 0x08) : (v & ~0x08));
 			p = (uint16_t)((p & 0xFF00) | (uint8_t)(p + 1));
 		}
 		row += 0x40;
-		cpu.cycles += 65 + 36 * c;
+		cpu.cycles += 65 + 36 * cells;
 	}
 	cpu.cycles -= 5;
 	cpu.cycles += 10 + 10 + 17;
@@ -209,15 +223,8 @@ static void highlight(int on) {
 	cpu.cycles += 10 + 10;
 	SET_HL(hl);
 }
-static int queue_room(int n) { return mem_read(VRAM_QUEUED) + n <= 0x20; }
-static void nat_highlight_off(void) {
-	if (!cpu.b || !cpu.c || !queue_room(1)) { native_decline(); return; }
-	highlight(0);
-}
-static void nat_highlight_on(void) {
-	if (!cpu.b || !cpu.c || !queue_room(1)) { native_decline(); return; }
-	highlight(1);
-}
+static void nat_highlight_off(void) { if (!cannot_wait_for(1)) highlight(0); }
+static void nat_highlight_on(void) { if (!cannot_wait_for(1)) highlight(1); }
 Native native_highlight_off = { "highlight_off", 0x2DC4, 0, nat_highlight_off, OUT_A | OUT_F | OUT_BC | OUT_DE, 0, 0 };
 Native native_highlight_on = { "highlight_on", 0x2DE3, 0, nat_highlight_on, OUT_A | OUT_F | OUT_BC | OUT_DE, 0, 0 };
 
@@ -235,14 +242,8 @@ static void menu_cursor(uint8_t line, int on) {
 	cpu.cycles += 10 + 10 + 10;
 	SET_BC(bc); SET_DE(de);
 }
-static void nat_cursor_on(void) {
-	if (!queue_room(1)) { native_decline(); return; }
-	menu_cursor(cpu.a, 1);
-}
-static void nat_cursor_off(void) {
-	if (!queue_room(1)) { native_decline(); return; }
-	menu_cursor(cpu.a, 0);
-}
+static void nat_cursor_on(void) { if (!cannot_wait_for(1)) menu_cursor(cpu.a, 1); }
+static void nat_cursor_off(void) { if (!cannot_wait_for(1)) menu_cursor(cpu.a, 0); }
 Native native_cursor_on = { "cursor_on", 0x49D5, 1, nat_cursor_on, OUT_A | OUT_F, 0, 0 };
 Native native_cursor_off = { "cursor_off", 0x49E0, 1, nat_cursor_off, OUT_A | OUT_F, 0, 0 };
 
@@ -281,8 +282,8 @@ static void menu_move(int8_t step) {          // $4A25 / $4A45, then $4A2D
 }
 
 static void menu_step(int wrap) {
-	int rows_room = queue_room(2);
-	if (!rows_room || cpu.c == 0) { native_decline(); return; }
+	if (cpu.c == 0) { native_decline(); return; }   // a menu of no lines: the original divides by 0
+	if (cannot_wait_for(2)) return;
 	cpu.cycles += wrap ? 10 : 10 + 12;
 	uint8_t key = mem_read(0xC0B0) & 0x7F;
 	cpu.cycles += 13 + 7 + 17;
@@ -446,11 +447,7 @@ Native native_buy_or_sell = { "buy_or_sell", 0xAB4B, 2, nat_buy_or_sell, OUT_A |
 Native native_two_choices = { "two_choices", 0xAB4E, 2, nat_two_choices, OUT_A | OUT_DE | OUT_HL, 0, 0 };
 
 // ------------------------------------------------------- more of the same --
-static int queue_full(void) {
-	if (mem_read(VRAM_QUEUED) < 0x20) return 0;
-	native_decline();                  // the original waits a frame for room
-	return 1;
-}
+static int queue_full(void) { return cannot_wait_for(1); }
 
 // text_line ($2DA7, by jp): the text at HL (to a 0) at column E, row D,
 // queued for the VDP as one row of its length

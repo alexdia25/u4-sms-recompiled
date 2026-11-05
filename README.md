@@ -182,7 +182,8 @@ pc/out/u4_headless.exe build/u4.pak --headless 8632 --keys script.keys
 ```
 
 Here `script.keys` holds lines of the form `<frame> <buttons>`, with buttons
-from `UDLR12`, `P` (Pause), `X` (Reset) or `-` for none. A line `<frame> =C9AB:FF` writes RAM instead.
+from `UDLR12`, `P` (Pause), `X` (Reset) or `-` for none. A line `<frame> =C9AB:FF` writes RAM instead, before the frame, and
+`<frame> =C9AB:FF/250` at the end of that line of the frame.
 `U4_RANDOM=seed` plays random input. `tools/cycles.py` lists original code
 with its cycle counts.
 

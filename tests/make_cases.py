@@ -1606,6 +1606,18 @@ def main():
     import shutil
     for f in sorted(os.listdir(os.path.join(HERE, 'endings'))):
         shutil.copy(os.path.join(HERE, 'endings', f), os.path.join(HERE, 'cases', f))
+    # the queue of copies for the next vertical blank found full ($C063 =
+    # $20, poked at line 250, after the interrupt has emptied it): a text
+    # copy and a menu's step each wait a frame for room
+    for name, base, at in (('queue_full_text', 'shop_armour2_0', 13197),
+                           ('queue_full_text_2', 'cmd_ready_weapon', 11263),
+                           ('queue_full_menu', 'ready_swap', 10562),
+                           ('queue_full_menu_2', 'shop_armour2_0', 13375)):
+        with open(os.path.join(HERE, 'cases', base + '.keys')) as f:
+            lines = f.read().splitlines() + ['%d =C063:20/250' % at]
+        lines.sort(key=lambda l: int(l.split()[0]))
+        with open(os.path.join(HERE, 'cases', name + '.keys'), 'w', newline=chr(10)) as out:
+            out.write(chr(10).join(lines) + chr(10))
     for seed in range(2):              # anything at all
         rnd = random.Random('play%d' % seed)
         s = Script()
