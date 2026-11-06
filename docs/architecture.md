@@ -168,4 +168,8 @@ driver's, which every song and sound (`song_*`, `sounds_*`, with and without the
 unit) leave unused, so the game's music data never asks for them. The other 371 are
 rare cases of the game; most have a rewrite no test has run yet, and any that has
 none would go to the interpreter and be counted.
+Since then 14 more cases (1,102) have reached 67 of those rare instructions, which
+leaves about 304. Four of the new cases fill the queue of copies for the vertical
+blank in the middle of a pass (a poke at a line, `=C063:20/250`), where the text
+window now waits for room in C instead of leaving that to the original.
 Run the cases with `U4_NATIVE=off` and `U4_LOG_FALLBACK` to list what they reach.
