@@ -233,6 +233,7 @@ def main():
         'cmd_cancel':      (3, '1'),
         'camp_rest':       (7, '22'),
         'camp_order':      (7, '2D2'),
+        'camp_order_two':  (7, '2D2D2'),        # the second and third swapped
         'camp_status':     (7, '2DD22222'),
         'camp_save':       (7, '2DDD2222'),
         'ready_swap':      (5, '2' + '2' + 'D2' + '2'),        # a dagger readied, the hands' put away
@@ -244,7 +245,7 @@ def main():
     for name, (downs, presses) in COMMANDS.items():
         rnd = random.Random(name)
         s = Script()
-        if name in ('camp_order', 'camp_status_keys'):
+        if name in ('camp_order', 'camp_order_two', 'camp_status_keys'):
             s.poke('C957:03')          # three in the party, to swap
         for p in {'ready_swap': ['C921:01'], 'ready_not_allowed': ['C924:01'],
                   'ready_armour_not_allowed': ['C91A:01'], 'ready_cancel': ['C921:01']}.get(name, []):
@@ -981,6 +982,8 @@ def main():
     for word in range(6):
         PUBS['pub_words_%d' % word] = (RICH + WORDS, '2' + 'D2' + 'UUU' + '2' + '2' + 'D' * word + '2' + '2222')
         PUBS['pub_paid_%d' % word] = (RICH + WORDS, '2' + 'D2' + 'UUU' + '2' + '2' + 'D' * word + '2' + 'RUUUUU2' + '2' + ('RUUUUU2' + '2') * 4 + '2222')
+    # a tip of 99 for the pub's own word (the second): its secret told
+    PUBS['pub_secret'] = (RICH + WORDS, '2' + 'D2' + 'UUU' + '2' + '2' + 'D' + '2' + 'U' * 9 + 'R' + 'U' * 9 + '2' + '2' * 6)
     for name, (pokes, keys) in PUBS.items():
         s = at_counter('pub', pokes)
         for k in keys:
@@ -1175,6 +1178,11 @@ def main():
         'ask_n2_karma':  ('', ['C9AA:01', 'C96B:FF', 'C96C:FF'], 'D2', ''),
         'ask_n2_again':  ('', ['C9AA:01', 'C96B:00', 'C96C:00'], 'D2', ''),
         'ask_n2_word':   ('', ['C309:18'], 'D2', 'DD2'),
+        # (the answers above come before the question's last button, so they
+        # all answer yes; these get to the YES / NO)
+        'ask_answer_no':       ('', [], '2D2', ''),
+        'ask_answer_no_karma': ('', ['C9AA:01', 'C96B:FF', 'C96C:FF'], '2D2', ''),
+        'ask_answer_no_again': ('', ['C9AA:01', 'C96B:00', 'C96C:00'], '2D2', ''),
         'ask_yes_r_karma': ('', ['C9AA:01', 'C96B:FF', 'C96C:FF'], 'R2', ''),
         'ask_yes_r_again': ('', ['C9AA:01', 'C96B:00', 'C96C:00'], 'R2', ''),
     }
@@ -1511,6 +1519,22 @@ def main():
             s.poke(p)
         s.f += 100
         for k in keys:
+            s.press(k, 80)
+        s.f += 200
+        s.write(name)
+    # walking into the waters before the Abyss ($AEA0): a ship comes
+    for name, ship in (('abyss_waters', 'C959:1F'),):
+        s = Script()
+        s.poke('C96D:E8')
+        s.poke('C96E:D8')
+        s.press('L', 40)
+        s.press('L', 70)
+        s.f += 200
+        s.press('1', 8)
+        for p in [ship, 'C95A:00']:
+            s.poke(p)
+        s.f += 100
+        for k in 'UUDDLLRRUU':
             s.press(k, 80)
         s.f += 200
         s.write(name)
