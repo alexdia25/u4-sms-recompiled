@@ -594,7 +594,8 @@ def main():
     # Awaken on a member asleep on the field; each spell when the foes have
     # just gone; each with other luck, against foes too strong for some ($17)
     # won against someone who isn't a monster, out in the world ($C975)
-    for g in (0x10, 0x14, 0x18, 0x24, 0x30, 0x50, 0x58, 0x60, 0x7C, 0x8C):
+    # ($80, pirates: their ship is left to the party, $BA0B)
+    for g in (0x10, 0x14, 0x18, 0x24, 0x30, 0x50, 0x58, 0x60, 0x7C, 0x80, 0x8C):
         name = 'fight_won_%02x' % g
         FIGHTS[name] = ('p15', ['C957:01'], 30, 10)
         AFTER[name] = NOFOES + ['C975:00', 'C97D:%02X' % g]
@@ -616,6 +617,13 @@ def main():
     for g in range(0x90, 0x100, 4):
         for k in (0, 1):
             FIGHTS['foe_all_%02x_%d' % (g, k)] = (('p15', 'p28')[k], ['C957:03', 'person+3:%02X' % g], 100 + k, 200)
+    # a thief ($C8) next to a member takes gold ($AB5A); lava shot ($E8)
+    # that reaches the end of its flight and is left on the field ($A8CA)
+    FIGHTS['foe_thief'] = ('p19', ['C957:03', 'person+3:C8'], 102, 200)
+    FIGHTS['shot_lava_left_64'] = ('p31', ['C957:01', 'person+3:E8'], 64, 300)   # (the name seeds the presses)
+    # foes striking under Protection ($C976 = 'P', as the spell leaves it):
+    # half their blows turned ($A767)
+    FIGHTS['fight_protected'] = ('p13', ['C957:04', 'C976:50'], 5, 300)
     FIGHTS['cspell_awaken'] = ('p15', MAGIC + ['C957:02'], 70, 10)
     AFTER['cspell_awaken'] = ['C78A:53']
     STEER['cspell_awaken'] = '2D2' + '2' + 'D2'
@@ -758,6 +766,9 @@ def main():
     DUNGEONS['altar_room_key'] = ('despise', ['C95B:FF'], 'RRDRR', 0)
     DUNGEON_AFTER['altar_room_key'] = (300, NOFOES[1:] + ['C984:00', 'C8B9:05', 'C8BA:05', 'C955:FF', 'C951:00'],
                                        list('2DDDD2D2---') + ['=C316:01', '=C317:%02X' % (ROM[0x66F1] & 0xFE), '2', '-', '-', '2'])
+    # a torch lit in a dungeon ($89EF), and with the light near its most ($89FA)
+    DUNGEONS['dungeon_torch'] = ('despise', ['C95B:00', 'C913:03'], '2DDDD222', 6)
+    DUNGEONS['dungeon_torch_bright'] = ('despise', ['C95B:80', 'C913:03'], '2DDDD222', 6)
     for name, (d, pokes, steer, n) in DUNGEONS.items():
         rnd = random.Random(name)
         x, y = DUNGEON_DOOR[d]
@@ -899,6 +910,19 @@ def main():
             r = rnd.random()
             s.press('2' if r < 0.6 else rnd.choice('UDLR'), rnd.choice((20, 30, 60)))
         s.write(name)
+    # chest 4's trap set off with the party on a ship ($C959): the hull takes
+    # it instead ($485B), and at 5 the ship sinks ($4869)
+    with open(os.path.join(HERE, 'cases', 'chest_4.keys')) as f:
+        lines = f.read().split(chr(10))[:-1]
+    at = [l for l in lines if l.endswith('=C758:00')][0].split()[0]
+    for name, hull in (('chest_on_ship', 0x32), ('chest_on_ship_sinks', 0x05)):
+        out = []
+        for l in lines:
+            out.append(l)
+            if l.endswith('=C758:00'):
+                out += ['%s =C959:10' % at, '%s =C961:%02X' % (at, hull), '%s =C962:00' % at]
+        with open(os.path.join(HERE, 'cases', name + '.keys'), 'w', newline=chr(10)) as f:
+            f.write(chr(10).join(out) + chr(10))
     # the shops Moonglow hasn't, tried there: the party put below an open cell
     # made a counter ($60) on the shop's row, a person (the last record, tile
     # $52) behind it, and the location poked for the table at $96C1
@@ -985,6 +1009,7 @@ def main():
         'pub_grog_2':    (RICH, '2' + 'D2' + 'UU' + '2'),
         'pub_grog_3':    (RICH, '2' + 'D2' + 'UUU' + '2' + '2222'),
         'pub_grog_9':    (RICH, '2' + 'D2' + 'U' * 9 + '2' + '2222'),
+        'pub_grog_4':    (RICH, '2' + ('D2' + 'UU2' + '2') * 4 + '2222'),   # a fourth grog: no more ($A034)
         'pub_tip_more':  (['C909:05', 'C90A:00'] + WORDS, '2' + 'D2' + 'UUU' + '2' + '2' + 'UUUU' + '2' + '22'),
         'pub_tips':      (RICH, '2' + ('D2' + 'U' + '2' + '2') * 6 + '22'),
     }
@@ -1072,6 +1097,26 @@ def main():
                     s.press(k, 40)
                 s.f += 300
                 s.write('cannon_%d_%d_%02X' % (record, cells, figure))
+    # a pirate ship ($80) next to the party, which attacks: the party on its
+    # own ship (the fight at sea, $3AF9) and on foot (from the shore, $3B16)
+    for name, ship in (('pirates_at_sea', True), ('pirates_ashore', False)):
+        s = Script()
+        s.poke('C96D:9F')
+        s.poke('C96E:16')
+        s.press('L', 40)
+        s.press('L', 70)
+        s.f += 200
+        s.press('1', 8)
+        if ship:
+            s.poke('C959:10')
+        s.poke('C95A:00')
+        for a, v in ((0xC651, 0x80), (0xC652, 0x9F), (0xC653, 0x15), (0xC654, 0x80)):
+            s.poke('%04X:%02X' % (a, v))
+        s.f += 100
+        for k in '2D2U2':
+            s.press(k, 40)
+        s.f += 3300
+        s.write(name)
     # Lord British, as a person poked next to the party (at (2, 15) in Moonglow)
     BRITISH = {
         'lb_first':   [],
@@ -1199,6 +1244,10 @@ def main():
         for pick in (0, 3):
             ASKS['ask_word_%X_%d' % (i, pick)] = ('', ['C309:%02X' % kind], '2', 'D' * pick + '2')
             ASKS['ask_word_no_%X_%d' % (i, pick)] = ('', ['C309:%02X' % kind], 'D2', 'D' * pick + '2')
+    # (the words above come before the eight are shown, so all pick the first;
+    # one more button gets to them) the right word ($7189), for each kind
+    for i, (kind, right) in enumerate(((0x18, 3), (0x8D, 4), (0x99, 7), (0xA3, 6), (0xCE, 2), (0xD7, 6))):
+        ASKS['ask_word_right_%X' % i] = ('', ['C309:%02X' % kind], '22', 'D' * right + '2')
     for name, (_, pokes, answer, word) in ASKS.items():
         s = Script()
         for p in ['C9A0:07', 'C749:24', 'C74A:02', 'C74B:0F', 'C74C:24', 'C750:03']:
@@ -1639,6 +1688,22 @@ def main():
     import shutil
     for f in sorted(os.listdir(os.path.join(HERE, 'endings'))):
         shutil.copy(os.path.join(HERE, 'endings', f), os.path.join(HERE, 'cases', f))
+    # won in a game kept in save slot 0 ($C0CD, $FF in the script): the slot
+    # is marked as won ($B2D4)
+    with open(os.path.join(HERE, 'endings', 'ending_win.keys')) as f:
+        lines = f.read().split(chr(10))[:-1] + ['15000 =C0CD:00']
+    lines.sort(key=lambda l: int(l.split()[0]))
+    with open(os.path.join(HERE, 'cases', 'ending_win_slot.keys'), 'w', newline=chr(10)) as out:
+        out.write(chr(10).join(lines) + chr(10))
+    # the end of the game reached with the Avatar dead and one more member
+    # alive: the Avatar is brought back for the Codex ($B14B)
+    with open(os.path.join(HERE, 'cases', 'abyss_altar_2.keys')) as f:
+        lines = f.read().split(chr(10))[:-1]
+    at = [l for l in lines if l.endswith('=C955:80')][0].split()[0]
+    lines += ['%s =C957:02' % at, '%s =C76D:44' % at]
+    lines.sort(key=lambda l: int(l.split()[0]))
+    with open(os.path.join(HERE, 'cases', 'abyss_altar_2_dead.keys'), 'w', newline=chr(10)) as out:
+        out.write(chr(10).join(lines) + chr(10))
     # the queue of copies for the next vertical blank found full ($C063 =
     # $20, poked at line 250, after the interrupt has emptied it): a text
     # copy and a menu's step each wait a frame for room
