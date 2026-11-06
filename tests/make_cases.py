@@ -966,6 +966,15 @@ def main():
                     s.press(k, 120)
                 s.f += 300
                 s.write('sell_%s_%d_%d' % (shop, row, count))
+    # selling the only one of a kind: no "how many", the offer for one
+    ONE = ['%04X:01' % a for a in list(range(0xC91F, 0xC92F)) + list(range(0xC917, 0xC91F))]
+    for shop in ('weapons', 'armour'):
+        for answer in ('2', 'D2'):
+            s = at_counter(shop, RICH + ONE)
+            for k in ['2', 'D', '2', '2'] + list(answer) + ['2', '2', '1', '1']:
+                s.press(k, 120)
+            s.f += 300
+            s.write('sell_%s_one%s' % (shop, '_no' if answer == 'D2' else ''))
     WORDS = ['%04X:01' % a for a in (0xC535, 0xC51F, 0xC52B, 0xC526, 0xC51A, 0xC529)]
     PUBS = {
         'pub_food':      (RICH, '2' + '2' + 'U' + '2'),
