@@ -172,4 +172,11 @@ Since then 14 more cases (1,102) have reached 67 of those rare instructions, whi
 leaves about 304. Four of the new cases fill the queue of copies for the vertical
 blank in the middle of a pass (a poke at a line, `=C063:20/250`), where the text
 window now waits for room in C instead of leaving that to the original.
+Then 19 more (1,120) reached 87 more, which leaves about 217: pirates (their attack
+at sea and from the shore, their ship left to the party), a thief, lava left on the
+field, a chest's trap on a ship (the hull hit, the ship sunk), the right word for each
+of the six people who ask one, a game won from a save slot, the Codex reached with
+the Avatar dead, a fourth grog, a torch lit in a dungeon, and blows under Protection.
+Of what is left, the wait taken on a Japanese console ($00C4) needs that console's
+ports, and nothing in the code jumps to the warm restart at $0CC4.
 Run the cases with `U4_NATIVE=off` and `U4_LOG_FALLBACK` to list what they reach.
